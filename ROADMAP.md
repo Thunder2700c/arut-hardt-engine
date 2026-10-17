@@ -46,12 +46,14 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 - [ ] Select one practical primary backend and at most one maintained alternative once the evidence is clear.
 - [ ] Add a project setting for backend choice only after real adapters exist.
 - [ ] Enrich C++ vehicle dynamics with tire slip, combined grip, wheel speed, drivetrain, gearbox, differential, separate brakes, ABS/TCS and steering response.
-- [ ] Add character movement, ragdoll/physical bones, material-based interaction and selective breakable props.
+- [x] Add first-pass native character movement and passive ragdoll hand-off source (not yet compiled/runtime-verified).
+- [ ] Add animation-to-ragdoll blending/recovery, richer character physical-bone rigs, material-based interaction and selective breakable props.
 
 **Gate:** the selected backend builds on target platforms and serves the standard body/collision/query APIs.
 
 ## Phase 4 — Original editor workflows and templates
-- [ ] Create C++-ready starter projects with default input actions, character and Car3D templates.
+- [x] Add a C++ character/ragdoll starter project with default input actions and mobile touch controls (not yet run).
+- [ ] Add a Car3D starter scene with chassis mesh/collider and car-control defaults.
 - [ ] Make scene/component creation, mesh/material assignment, physics tuning and Android packaging discoverable without command-line work.
 - [ ] Add native CPU/GPU frame-time, physics-cost, memory and quality-profile diagnostics.
 - [ ] Provide helpful errors for missing native libraries/resources.
