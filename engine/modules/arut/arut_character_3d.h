@@ -35,12 +35,12 @@ private:
     real_t touch_look_sensitivity = 0.005;
 
     bool use_input_actions = true;
-    StringName move_left_action = "ui_left";
-    StringName move_right_action = "ui_right";
-    StringName move_forward_action = "ui_up";
-    StringName move_backward_action = "ui_down";
-    StringName jump_action = "ui_accept";
-    StringName sprint_action = "sprint";
+    StringName move_left_action = "arut_move_left";
+    StringName move_right_action = "arut_move_right";
+    StringName move_forward_action = "arut_move_forward";
+    StringName move_backward_action = "arut_move_backward";
+    StringName jump_action = "arut_jump";
+    StringName sprint_action = "arut_sprint";
 
     Vector2 move_input;
     bool jump_requested = false;
