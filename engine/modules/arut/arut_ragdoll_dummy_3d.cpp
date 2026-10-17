@@ -10,7 +10,7 @@
 #include "scene/resources/3d/capsule_shape_3d.h"
 #include "scene/resources/3d/primitive_meshes.h"
 #include "scene/resources/3d/sphere_shape_3d.h"
-#include "scene/resources/3d/standard_material_3d.h"
+#include "scene/resources/material.h"
 
 void ArutRagdollDummy3D::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_start_simulating", "enabled"), &ArutRagdollDummy3D::set_start_simulating);
@@ -62,7 +62,13 @@ real_t ArutRagdollDummy3D::get_angular_damping() const {
     return angular_damping;
 }
 
-void ArutRagdollDummy3D::_ready() {
+void ArutRagdollDummy3D::_notification(int p_what) {
+    if (p_what == NOTIFICATION_READY) {
+        _on_ready();
+    }
+}
+
+void ArutRagdollDummy3D::_on_ready() {
     if (!generated) {
         _build_ragdoll();
     }
