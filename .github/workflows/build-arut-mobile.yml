@@ -1,0 +1,150 @@
+name: Build ARUT Mobile (Android ARM64)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-editor:
+    name: Godot-based Android ARM64 editor
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout engine configuration
+        uses: actions/checkout@v6
+
+      - name: Checkout matching Godot source
+        uses: actions/checkout@v6
+        with:
+          repository: godotengine/godot
+          ref: 4.7-stable
+          path: godot
+          submodules: recursive
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Install SCons
+        run: python -m pip install scons==4.10.1
+
+      - name: Restore SCons cache
+        uses: actions/cache@v4
+        with:
+          path: godot/.scons_cache
+          key: arut-mobile-godot-4.7-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            arut-mobile-godot-4.7-${{ runner.os }}-
+
+      - name: Install Android Swappy dependency
+        working-directory: godot
+        run: python misc/scripts/install_swappy_android.py
+
+      - name: Validate and apply ARUT-HARDT engine patches
+        shell: bash
+        run: |
+          shopt -s nullglob
+          patches=(engine/patches/*.patch)
+          for patch in "${patches[@]}"; do
+            echo "Validating ${patch}"
+            git -C godot apply --check "$GITHUB_WORKSPACE/${patch}"
+            git -C godot apply "$GITHUB_WORKSPACE/${patch}"
+          done
+
+      - name: Compile Android ARM64 editor
+        working-directory: godot
+        run: |
+          scons platform=android target=editor arch=arm64 production=yes dev_mode=yes module_text_server_fb_enabled=yes swappy=yes cache_path=.scons_cache/ redirect_build_objects=no
+
+      - name: Package Android editor
+        working-directory: godot/platform/android/java
+        run: ./gradlew generateGodotEditor
+
+      - name: Upload ARUT Mobile editor artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: arut-mobile-editor-android-arm64
+          path: godot/bin/android_editor_builds/
+          if-no-files-found: error
+          retention-days: 14
+
+  native-extension:
+    name: Native C++ extension and smoke-test project
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout engine project
+        uses: actions/checkout@v6
+
+      - name: Checkout godot-cpp
+        uses: actions/checkout@v6
+        with:
+          repository: godotengine/godot-cpp
+          ref: 2bb1acf6f8ae1ce96ac7b9ba3a10b499c59c49ec
+          path: native/arut_native/godot-cpp
+          submodules: recursive
+
+      - name: Set up Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28b
+          link-to-sdk: true
+
+      - name: Set up Python and SCons
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Install SCons
+        run: python -m pip install scons==4.10.1
+
+      - name: Build debug and release Android ARM64 libraries
+        working-directory: native/arut_native
+        run: |
+          scons platform=android target=template_debug arch=arm64 precision=single api_version=4.7
+          scons platform=android target=template_release arch=arm64 precision=single api_version=4.7
+
+      - name: Assemble isolated smoke-test project
+        shell: bash
+        run: |
+          mkdir -p tests/native_smoke/addons/arut_native/bin/android
+          cp native/arut_native/arut_native.gdextension.in tests/native_smoke/addons/arut_native/arut_native.gdextension
+          cp native/arut_native/package/addons/arut_native/bin/android/libarut_native.android.template_debug.arm64.so tests/native_smoke/addons/arut_native/bin/android/
+          cp native/arut_native/package/addons/arut_native/bin/android/libarut_native.android.template_release.arm64.so tests/native_smoke/addons/arut_native/bin/android/
+          cd tests/native_smoke
+          zip -r "$GITHUB_WORKSPACE/arut-native-smoke-test-android-arm64.zip" .
+
+      - name: Upload native smoke-test project
+        uses: actions/upload-artifact@v6
+        with:
+          name: arut-native-smoke-test-android-arm64
+          path: arut-native-smoke-test-android-arm64.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  renderer-demo:
+    name: Package isolated anime-material demo
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout engine project
+        uses: actions/checkout@v6
+      - name: Package renderer demo
+        run: |
+          cd renderer/demo
+          zip -r "$GITHUB_WORKSPACE/arut-anime-surface-demo.zip" .
+      - name: Upload renderer demo project
+        uses: actions/upload-artifact@v6
+        with:
+          name: arut-anime-surface-demo
+          path: arut-anime-surface-demo.zip
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+import os
+from SCons.Script import Environment, Glob, SConscript
+
+local_env = Environment(tools=["default"], PLATFORM="")
+env = SConscript("godot-cpp/SConstruct", {"api_version": "4.7", "env": local_env})
+env.Append(CPPPATH=["src/"])
+sources = Glob("src/*.cpp")
+
+suffix = env["suffix"].replace(".dev", "").replace(".universal", "")
+library_name = env.subst("$SHLIBPREFIX") + "arut_native" + suffix + env.subst("$SHLIBSUFFIX")
+output_dir = os.path.join("package", "addons", "arut_native", "bin", env["platform"])
+os.makedirs(output_dir, exist_ok=True)
+library = env.SharedLibrary(os.path.join(output_dir, library_name), source=sources)
+Default(library)

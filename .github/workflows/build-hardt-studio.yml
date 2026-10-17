@@ -1,0 +1,110 @@
+name: Build HARDT Studio (Linux x86_64)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop-editor:
+    name: Godot-based desktop editor
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout engine configuration
+        uses: actions/checkout@v6
+
+      - name: Checkout matching Godot source
+        uses: actions/checkout@v6
+        with:
+          repository: godotengine/godot
+          ref: 4.7-stable
+          path: godot
+          submodules: recursive
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libx11-dev libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev libgl1-mesa-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libfontconfig-dev libwayland-dev wayland-protocols libxkbcommon-dev
+
+      - name: Set up Python and SCons
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Install SCons
+        run: python -m pip install scons==4.10.1
+
+      - name: Restore SCons cache
+        uses: actions/cache@v4
+        with:
+          path: godot/.scons_cache
+          key: hardt-studio-godot-4.7-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            hardt-studio-godot-4.7-${{ runner.os }}-
+
+      - name: Validate and apply ARUT-HARDT engine patches
+        shell: bash
+        run: |
+          shopt -s nullglob
+          patches=(engine/patches/*.patch)
+          for patch in "${patches[@]}"; do
+            git -C godot apply --check "$GITHUB_WORKSPACE/${patch}"
+            git -C godot apply "$GITHUB_WORKSPACE/${patch}"
+          done
+
+      - name: Compile Linux x86_64 editor
+        working-directory: godot
+        run: |
+          scons platform=linuxbsd target=editor arch=x86_64 production=yes dev_mode=yes cache_path=.scons_cache/ redirect_build_objects=no
+
+      - name: Upload HARDT Studio editor executable
+        uses: actions/upload-artifact@v6
+        with:
+          name: hardt-studio-linux-x86_64
+          path: godot/bin/godot.linuxbsd.editor.x86_64
+          if-no-files-found: error
+          retention-days: 14
+
+  native-extension:
+    name: Build HARDT Studio native C++ extension (Linux x86_64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout engine project
+        uses: actions/checkout@v6
+      - name: Checkout godot-cpp
+        uses: actions/checkout@v6
+        with:
+          repository: godotengine/godot-cpp
+          ref: 2bb1acf6f8ae1ce96ac7b9ba3a10b499c59c49ec
+          path: native/arut_native/godot-cpp
+          submodules: recursive
+      - name: Set up Python and SCons
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - name: Install SCons
+        run: python -m pip install scons==4.10.1
+      - name: Build Linux x86_64 libraries
+        working-directory: native/arut_native
+        run: |
+          scons platform=linux target=template_debug arch=x86_64 precision=single api_version=4.7
+          scons platform=linux target=template_release arch=x86_64 precision=single api_version=4.7
+      - name: Package native extension
+        working-directory: native/arut_native
+        run: |
+          mkdir -p package/addons/arut_native
+          cp arut_native.gdextension.in package/addons/arut_native/arut_native.gdextension
+          test -f package/addons/arut_native/bin/linux/libarut_native.linux.template_debug.x86_64.so
+          test -f package/addons/arut_native/bin/linux/libarut_native.linux.template_release.x86_64.so
+          cd package
+          zip -r "$GITHUB_WORKSPACE/hardt-native-extension-linux-x86_64.zip" addons/arut_native
+      - name: Upload native C++ extension
+        uses: actions/upload-artifact@v6
+        with:
+          name: hardt-native-extension-linux-x86_64
+          path: hardt-native-extension-linux-x86_64.zip
+          if-no-files-found: error
+          retention-days: 14
