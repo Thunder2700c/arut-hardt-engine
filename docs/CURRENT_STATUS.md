@@ -30,7 +30,7 @@ Keep PEAK separate. Do not merge into PEAK or change its main branch as a side e
 - Manual CI workflows for Android ARM64 editor/native extension and Linux x86_64 editor.
 - Pinned intended upstreams: Godot `4.7-stable`; godot-cpp commit `2bb1acf6f8ae1ce96ac7b9ba3a10b499c59c49ec`.
 - `engine/modules/arut/` contains built-in native C++ source for `ArutCar3D`, `ArutCharacter3D`, `ArutRagdollDummy3D` and `ArutRenderProfile3D`.
-- `engine/patches/` contains source patches for initial ARUT theme/window/project-manager identity and About/welcome text. Branding assets are in `engine/branding/`.
+- `engine/patches/` contains source patches for ARUT theme/window/project-manager/About identity plus `0003-arut-runtime-identity.patch`, which changes the generated product name and Android run-window label. Branding assets are in `engine/branding/`.
 - `templates/arut_character_lab/` contains a lab scene; the current character visual is still a procedural dummy, not a rigged animated mannequin.
 - `docs/OPEN_SOURCE_STACK.md` records the renderer, physics, vehicle, asset and motion-matching shortlist.
 - `docs/ANIMATION_SYSTEM_ARCHITECTURE.md` describes a GASP-inspired animation system and C++ port strategy.
@@ -40,10 +40,10 @@ Keep PEAK separate. Do not merge into PEAK or change its main branch as a side e
 
 - Successful Android ARM64 workflow run: [39024274125](https://github.com/Thunder2700c/arut-hardt-engine/actions/runs/39024274125), source commit `158ea1efb2c897d52adb8f676376f59bbfc7aec5` (2026-10-17).
 - At that commit, patch checks, launcher icon step as it existed at the time, C++ preflight, five ARUT module object builds, full Android editor compile, Gradle packaging and upload passed. The native GDExtension build/packaging jobs also passed.
-- The branch now contains later branding/icon workflow changes and the CC0 robot asset plan after that tested source commit. Those newer changes have **not** been verified by a later CI run yet.
+- Latest branch commit `a342f26` adds the runtime identity patch, assigns `templates/arut_character_lab/icon.png` as that project's icon, and points its `project.godot` setting to it. The adaptive/legacy launcher-icon generator was also changed after the last successful build to write the shared Android library resources. **None of these newer source/workflow changes has yet been verified by a later CI run.**
 - The user's `[ARUT] SMOKE TEST PASSED` runtime message confirms the separate C++ GDExtension smoke-test project loaded. It does not prove the built-in Car3D, Character3D, ragdoll, or RenderProfile behavior in the editor or in a character lab scene.
 - The app icon, adaptive icon, project/game icon and exported game icon are separate resource paths. Successful generation/copy steps do not replace a device-side visual verification.
-- Remaining Godot-branded surfaces still need a full source search. In particular, the upstream version banner is configured from Godot's version metadata, and the Android play-window string still contains Godot wording in the pinned upstream source. Product UI can be renamed while preserving the required Godot license/copyright notices in About/docs.
+- A new source patch changes `version.py`'s human-facing name to `ARUT-HARDT Engine` while intentionally keeping `short_name = "godot"`, and changes the Android editor run-window label to `ARUT Run window`. This is **source-written, not yet built or visually verified**. Perform a wider source search for other product-facing strings; preserve Godot attribution and licence notices in About/docs.
 - `ArutCar3D`, `ArutCharacter3D`, `ArutRagdollDummy3D` and `ArutRenderProfile3D` were source-compiled at the successful commit; their in-scene behavior, node-browser visibility and phone runtime behavior remain unverified.
 
 ## Selected engineering direction
@@ -57,7 +57,7 @@ Keep PEAK separate. Do not merge into PEAK or change its main branch as a side e
 
 ## Next actions
 
-1. Finish the branding pass: search remaining Godot-facing version/app/play-window strings and distinguish editor icon from project/exported-game icon. Then batch-build once rather than rerunning on every small edit.
+1. Run the Android ARM64 editor workflow on the current branch after the launcher/adaptive-icon and runtime-identity changes. Inspect the resulting APK/log and verify its launcher icon and run-window label before saying branding is fixed; distinguish the editor app icon from project/exported-game icons.
 2. Add the compact CC0 animated robot asset to the character lab and validate GLB/FBX import, Skeleton3D hierarchy and clip names. Preserve the asset license/source in the manifest.
 3. Build the real white ARUT mannequin scene using a consistent humanoid rig and a curated set of CC0 locomotion clips; drive it from the existing C++ Character3D movement rather than leaving the generated primitives as the primary visual.
 4. Add a conventional C++-first AnimationTree controller for idle/start/stop/walk/run/sprint/strafe/turn/jump/fall/land.
