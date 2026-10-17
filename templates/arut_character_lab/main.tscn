@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=8 format=3]
 
 [sub_resource type="Environment" id="Environment_main"]
 background_mode = 1
@@ -29,9 +29,6 @@ size = Vector3(0.7, 0.7, 0.7)
 [sub_resource type="StandardMaterial3D" id="Material_crate"]
 albedo_color = Color(0.8, 0.32, 0.12, 1)
 roughness = 0.8
-
-[sub_resource type="BoxShape3D" id="Shape_ramp"]
-size = Vector3(5, 0.3, 2)
 
 [node name="ARUTCharacterLab" type="Node3D"]
 
@@ -85,10 +82,3 @@ shape = SubResource("Shape_crate")
 mesh = SubResource("Mesh_crate")
 surface_material_override/0 = SubResource("Material_crate")
 
-[node name="RagdollDropZone" type="StaticBody3D" parent="."]
-position = Vector3(0, 0.6, -4.0)
-collision_layer = 1
-collision_mask = 1
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="RagdollDropZone"]
-shape = SubResource("Shape_ramp")
