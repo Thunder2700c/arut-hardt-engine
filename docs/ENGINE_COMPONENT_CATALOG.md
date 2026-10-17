@@ -56,3 +56,12 @@ The first `engine/modules/arut/ArutCar3D` source has been added to the engine re
 ## ArutCharacter3D first-pass source
 
 A built-in C++ `ArutCharacter3D` class has also been added to the ARUT module. It exposes walk/sprint speed, ground acceleration/friction, air acceleration/control, jump velocity, gravity and action mappings; native setter methods allow touch input and AI integration without GDScript. This source is not yet compiled or runtime-verified. Camera rig, animation, input buffering, crouch, ledge handling and polished slope/step defaults remain future work.
+
+
+## Additional native component source (2026-10-17)
+
+- `ArutCharacter3D` now generates a simple colored mannequin from primitive meshes if the user has not supplied a visual child; it creates a default capsule collider and third-person camera by default. It also has WASD/arrow, jump, sprint and a basic phone-touch control arrangement.
+- `ArutRagdollDummy3D` is a passive 11-body articulated ragdoll assembled with standard rigid bodies and cone-twist joints. The character can switch to it with R or a top-right phone tap, and the camera follows the dropping pelvis.
+- `ArutRenderProfile3D` is a scene node that applies named viewport quality profiles on ready. It exposes FSR/render scale, AA options, occlusion-culling toggle, mesh LOD threshold, shadow-atlas size, texture mipmap bias, debanding and FSR sharpness.
+
+These are first-pass source implementations and have not been compiled or runtime-tested. The ragdoll currently uses the active Godot PhysicsServer backend; no independent ARUT physics solver is integrated.
