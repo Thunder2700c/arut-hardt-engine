@@ -1,4 +1,6 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="PackedScene" path="res://arut_test_mannequin.tscn" id="8_mannequin"]
 
 [sub_resource type="Environment" id="Environment_main"]
 background_mode = 1
@@ -66,12 +68,17 @@ movement_air_control = 0.35
 movement_ground_friction = 16.0
 movement_jump_velocity = 4.5
 movement_gravity = 9.8
-character_create_default_dummy = true
+character_create_default_dummy = false
 character_create_default_collision = true
 character_create_default_camera = true
 character_enable_ragdoll = true
 character_enable_mobile_touch_controls = true
 character_camera_distance = 4.0
+animation_enabled = true
+animation_player_path = NodePath("ArutTestMannequin/Model/AnimationPlayer")
+animation_visual_root_path = NodePath("ArutTestMannequin")
+
+[node name="ArutTestMannequin" parent="ArutCharacter3D" instance=ExtResource("8_mannequin")]
 
 [node name="RagdollTestCrate" type="RigidBody3D" parent="."]
 position = Vector3(1.2, 1.0, -1.8)
