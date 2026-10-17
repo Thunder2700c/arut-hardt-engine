@@ -38,7 +38,7 @@ diff --git a/editor/project_manager/project_manager.cpp b/editor/project_manager
  
  			const String line1 = TTR("You don't have any projects yet.");
  			const String line2 = TTR("Get started by creating a new one,\nimporting one that exists, or by downloading a project template from the Asset Store!");
-@@ -1445,8 +1445,8 @@
+@@ -1445,7 +1445,7 @@
  
  		title_bar_logo = memnew(Button);
  		title_bar_logo->set_flat(true);
