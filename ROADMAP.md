@@ -23,7 +23,7 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 - [ ] Add C++ interactable/rigid-body and physical-prop helpers.
 - [ ] Add physics/vehicle diagnostics: contacts, speed, wheel compression and frame-time telemetry.
 - [x] Add the source-build overlay for first-class native C++ module classes so every project using the custom editor can create them.
-- [ ] Compile the module and verify the classes appear in the editor's Create Node dialog.
+- [x] Compile the ARUT built-in C++ module in the Android ARM64 editor workflow (2026-10-17, commit 158ea1e). [ ] Verify ARUT classes appear in Create Node and validate runtime behavior.
 
 **Gate:** core components are searchable in the node browser and configurable without writing GDScript.
 
@@ -52,6 +52,10 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 **Gate:** the selected backend builds on target platforms and serves the standard body/collision/query APIs.
 
 ## Phase 4 — Original editor workflows and templates
+- [ ] Ship an ARUT Test Mannequin: neutral matte-white humanoid, proper Skeleton3D, idle/walk/run/jump animations and capsule collision.
+- [ ] Add a C++-native animation state/mapping workflow with sensible locomotion defaults and editable Inspector properties.
+- [ ] Include an immediately runnable vehicle lab with an actual chassis/wheels, collision, mobile controls, reset, and car telemetry.
+- [ ] Curate a small CC0 character/animation pack; do not bundle complete multi-hundred-megabyte source packs into the engine APK.
 - [x] Add a C++ character/ragdoll starter project with default input actions and mobile touch controls (not yet run).
 - [ ] Add a Car3D starter scene with chassis mesh/collider and car-control defaults.
 - [ ] Make scene/component creation, mesh/material assignment, physics tuning and Android packaging discoverable without command-line work.

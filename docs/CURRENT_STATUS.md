@@ -32,7 +32,12 @@ The engine-only foundation has its own history. Do not continue work in the old 
 - `engine/patches/0001-arut-editor-identity.patch` defines the initial ARUT-HARDT theme preset and window/project-manager identity. `0002-arut-about-and-project-manager.patch` brands the About dialog/welcome copy while preserving Godot attribution. The build overlays original mark, About logo, title-bar wordmark and custom node icons into the editor source.
 
 ## Build truth
-The permanent repository's Android and Linux workflows have not been verified by a successful run in this branch. The earlier installed editor APK came from the previous PEAK workflow; it does not prove this repo's workflows or native code compiled. The renderer shader remains a prototype. Native Car3D, Character3D, RagdollDummy3D and RenderProfile3D source now exists in `engine/modules/arut/`, but none has been compiled or runtime-verified. The Android workflow packages the `arut-character-ragdoll-lab` project as a separate artifact.
+- Successful Android ARM64 workflow run: [39024274125](https://github.com/Thunder2700c/arut-hardt-engine/actions/runs/39024274125), source commit `158ea1efb2c897d52adb8f676376f59bbfc7aec5` (2026-10-17).
+- That run passed the ARUT patch checks, icon-generation step as it existed at that commit, preflight, five ARUT C++ module object builds, full Android editor compile, Gradle packaging and artifact upload. The native GDExtension build and packaging jobs also passed.
+- This confirms the source at that commit can compile/package in CI. It does not confirm that the built-in classes behave correctly in a scene, are discoverable in the node picker, or that the custom launcher icon rendered correctly on a device.
+- The launcher-icon pipeline fix and the runtime-branding patch added in the next commit are new changes; they require a new manual Android workflow run before claiming they work in an APK.
+- The renderer shader is still a prototype. The C++ Car3D, Character3D, RagdollDummy3D and RenderProfile3D systems need runtime/behavior validation.
+- Research decisions are recorded in `docs/OPEN_SOURCE_STACK.md`.
 
 ## Physics findings
 - The starter ragdoll uses the active Godot `PhysicsServer3D` through standard rigid bodies and joints; this is not a separate ARUT physics solver.
@@ -44,9 +49,9 @@ The permanent repository's Android and Linux workflows have not been verified by
 - Next physics milestone is evaluating the existing PhysX backend and designing native, backend-aware ARUT components—not blindly embedding another solver.
 
 ## Next actions
-1. Add the first interaction/physical-prop C++ component and improve the built-in Car3D setup flow.
-2. Continue editor source work beyond the initial identity/theme patch: inspect node icons, add ARUT-specific editor categories and make common Inspector sections more approachable.
-3. Inspect the WIP PhysX backend revision and Android build path; decide based on evidence rather than defaults.
+1. Add the neutral white ARUT Test Mannequin with a real humanoid skeleton and default locomotion clips; curate CC0 animation assets.
+2. Run the new Android branding/icon workflow once, then verify version banner, launcher icon, project-manager identity and play-window label from the resulting APK.
+3. Evaluate Jolt versus Godot Physics using car, character and ragdoll regression scenes; keep PhysX as research until its exact Android build/license path is verified.
 4. Keep renderer development as a separate track instead of letting it crowd out components/editor work.
 5. After this first coherent component + identity batch is complete, run internal CI to catch native/API errors; do not ask the user to install/test the engine yet.
 

@@ -72,7 +72,7 @@ jobs:
           cp engine/branding/ArutRagdollDummy3D.svg godot/editor/icons/ArutRagdollDummy3D.svg
           cp engine/branding/ArutRenderProfile3D.svg godot/editor/icons/ArutRenderProfile3D.svg
 
-      - name: Apply ARUT Mobile APK launcher icon
+      - name: Apply ARUT Mobile legacy and adaptive launcher icons
         shell: bash
         run: |
           set -euo pipefail
@@ -94,7 +94,10 @@ jobs:
                   raise SystemExit("ARUT Mobile app icon must be square and at least 512x512 pixels.")
               image = source.convert("RGBA")
 
-          resource_root = Path("godot/platform/android/java/editor/src/main/res")
+          # The editor manifest resolves @mipmap/themed_icon from the shared Android
+          # library resources. Keep density fallbacks there, and replace the API 26+
+          # adaptive-icon XML too; otherwise Android may keep showing Godot's artwork.
+          resource_root = Path("godot/platform/android/java/lib/src/main/res")
           density_sizes = {
               "mipmap-ldpi": 36,
               "mipmap-mdpi": 48,
@@ -103,12 +106,41 @@ jobs:
               "mipmap-xxhdpi": 144,
               "mipmap-xxxhdpi": 192,
           }
+          adaptive_foreground_sizes = {
+              "mipmap-ldpi": 81,
+              "mipmap-mdpi": 108,
+              "mipmap-hdpi": 162,
+              "mipmap-xhdpi": 216,
+              "mipmap-xxhdpi": 324,
+              "mipmap-xxxhdpi": 432,
+          }
           for directory, size in density_sizes.items():
               target_dir = resource_root / directory
               target_dir.mkdir(parents=True, exist_ok=True)
               resized = image.resize((size, size), Image.Resampling.LANCZOS)
-              resized.save(target_dir / "themed_icon.png", format="PNG", optimize=True)
-              print(f"Generated {target_dir / 'themed_icon.png'} ({size}x{size})")
+              output = target_dir / "themed_icon.png"
+              resized.save(output, format="PNG", optimize=True)
+              print(f"Generated legacy launcher icon {output} ({size}x{size})")
+
+          for directory, size in adaptive_foreground_sizes.items():
+              target_dir = resource_root / directory
+              target_dir.mkdir(parents=True, exist_ok=True)
+              resized = image.resize((size, size), Image.Resampling.LANCZOS)
+              output = target_dir / "arut_icon_foreground.png"
+              resized.save(output, format="PNG", optimize=True)
+              print(f"Generated adaptive launcher foreground {output} ({size}x{size})")
+
+          adaptive_icon = resource_root / "mipmap-anydpi-v26" / "themed_icon.xml"
+          adaptive_icon.parent.mkdir(parents=True, exist_ok=True)
+          adaptive_icon.write_text(
+              '<?xml version="1.0" encoding="utf-8"?>\\n'
+              '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\\n'
+              '    <background android:drawable="@android:color/black"/>\\n'
+              '    <foreground android:drawable="@mipmap/arut_icon_foreground"/>\\n'
+              '</adaptive-icon>\\n',
+              encoding="utf-8",
+          )
+          print(f"Generated ARUT adaptive launcher icon {adaptive_icon}")
           PY
 
       - name: Add built-in ARUT C++ module
