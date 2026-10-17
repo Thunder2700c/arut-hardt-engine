@@ -71,7 +71,7 @@ A substantial C++ multibody/multiphysics toolkit useful for high-fidelity vehicl
 4. Design ARUT components against standard Godot body/force/query APIs wherever possible. Declare backend requirements for specialised features.
 5. Run internal cloud builds at sensible integration milestones; do not ask the user to install an APK after every feature.
 
-## Planned native C++ Car3D node
+## Native C++ Car3D node: first-pass source and planned evolution
 - Appears in the Create Node dialog under an ARUT Vehicles category.
 - Creates/manages its basic four wheel probes and suspension setup.
 - Exposes wheelbase/track, radius, suspension travel/stiffness/damping, steering, drive layout, engine force/torque, service brake, handbrake, tire grip and control actions in the Inspector.
