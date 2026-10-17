@@ -337,8 +337,8 @@ void ArutCharacter3D::_start_ragdoll() {
     if (scene != nullptr && ragdoll_dummy->get_parent() != scene) {
         ragdoll_dummy->reparent(scene, true);
     }
-    ragdoll_dummy->set_initial_velocity(inherited_velocity);
     ragdoll_dummy->set_ragdoll_active(true);
+    ragdoll_dummy->set_initial_velocity(inherited_velocity);
 
     if (default_visual_root != nullptr) {
         default_visual_root->set_visible(false);
