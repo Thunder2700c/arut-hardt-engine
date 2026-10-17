@@ -563,7 +563,7 @@ ambient_light_color = Color(0.66, 0.76, 0.9, 1)
 ambient_light_energy = 0.72
 tonemap_mode = 2
 
-[node name="GrassDemo" type="Node3D"]
+[node name="ArutGrassFoliageRendererPrototype" type="Node3D"]
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("GrassEnvironment")
