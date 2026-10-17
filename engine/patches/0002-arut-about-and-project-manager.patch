@@ -1,0 +1,27 @@
+diff --git a/editor/gui/editor_about.cpp b/editor/gui/editor_about.cpp
+--- a/editor/gui/editor_about.cpp
++++ b/editor/gui/editor_about.cpp
+@@ -57,7 +57,8 @@
+ 		case NOTIFICATION_TRANSLATION_CHANGED: {
+ 			_about_text_label->set_text(
++					TTR("ARUT-HARDT Engine is based on Godot Engine.") + "\n" +
+ 					String(U"© 2014-present ") + TTR("Godot Engine contributors") + ".\n" +
+ 					String(U"© 2007-2014 Juan Linietsky, Ariel Manzur.\n"));
+ 
+@@ -211,7 +212,7 @@
+ }
+ 
+ EditorAbout::EditorAbout() {
+-	set_title(TTRC("Thanks from the Godot community!"));
++	set_title(TTRC("About ARUT-HARDT Engine"));
+ 	set_hide_on_ok(true);
+ 
+ 	VBoxContainer *vbc = memnew(VBoxContainer);
+diff --git a/editor/project_manager/project_manager.cpp b/editor/project_manager/project_manager.cpp
+--- a/editor/project_manager/project_manager.cpp
++++ b/editor/project_manager/project_manager.cpp
+@@ -121,7 +121,7 @@
+ 			const String line1 = TTR("You don't have any projects yet.");
+-			const String line2 = TTR("Get started by creating a new one,\nimporting one that exists, or by downloading a project template from the Asset Store!");
++			const String line2 = TTR("Create a project, import an existing one, or start from an ARUT-HARDT template.");
+ 			empty_list_message->set_text(vformat("[center][b]%s[/b] %s[/center]", line1, line2));
