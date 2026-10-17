@@ -133,11 +133,13 @@ jobs:
           adaptive_icon = resource_root / "mipmap-anydpi-v26" / "themed_icon.xml"
           adaptive_icon.parent.mkdir(parents=True, exist_ok=True)
           adaptive_icon.write_text(
-              '<?xml version="1.0" encoding="utf-8"?>\\n'
-              '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\\n'
-              '    <background android:drawable="@android:color/black"/>\\n'
-              '    <foreground android:drawable="@mipmap/arut_icon_foreground"/>\\n'
-              '</adaptive-icon>\\n',
+              "\n".join([
+                  '<?xml version="1.0" encoding="utf-8"?>',
+                  '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">',
+                  '    <background android:drawable="@android:color/black"/>',
+                  '    <foreground android:drawable="@mipmap/arut_icon_foreground"/>',
+                  '</adaptive-icon>',
+              ]) + "\n",
               encoding="utf-8",
           )
           print(f"Generated ARUT adaptive launcher icon {adaptive_icon}")
