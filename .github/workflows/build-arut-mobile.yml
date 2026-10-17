@@ -72,6 +72,45 @@ jobs:
           cp engine/branding/ArutRagdollDummy3D.svg godot/editor/icons/ArutRagdollDummy3D.svg
           cp engine/branding/ArutRenderProfile3D.svg godot/editor/icons/ArutRenderProfile3D.svg
 
+      - name: Apply ARUT Mobile APK launcher icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          icon="engine/branding/arut-mobile-icon.png"
+          if [[ ! -f "$icon" ]]; then
+            echo "::error title=Missing ARUT Mobile icon::Add a square PNG (at least 512x512) at engine/branding/arut-mobile-icon.png before running this workflow."
+            exit 1
+          fi
+          python -m pip install Pillow
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+
+          icon_path = Path("engine/branding/arut-mobile-icon.png")
+          with Image.open(icon_path) as source:
+              if source.format != "PNG":
+                  raise SystemExit("ARUT Mobile app icon must be a PNG file.")
+              if source.width != source.height or source.width < 512:
+                  raise SystemExit("ARUT Mobile app icon must be square and at least 512x512 pixels.")
+              image = source.convert("RGBA")
+
+          resource_root = Path("godot/platform/android/java/editor/src/main/res")
+          density_sizes = {
+              "mipmap-ldpi": 36,
+              "mipmap-mdpi": 48,
+              "mipmap-hdpi": 72,
+              "mipmap-xhdpi": 96,
+              "mipmap-xxhdpi": 144,
+              "mipmap-xxxhdpi": 192,
+          }
+          for directory, size in density_sizes.items():
+              target_dir = resource_root / directory
+              target_dir.mkdir(parents=True, exist_ok=True)
+              resized = image.resize((size, size), Image.Resampling.LANCZOS)
+              resized.save(target_dir / "themed_icon.png", format="PNG", optimize=True)
+              print(f"Generated {target_dir / 'themed_icon.png'} ({size}x{size})")
+          PY
+
       - name: Add built-in ARUT C++ module
         shell: bash
         run: |
