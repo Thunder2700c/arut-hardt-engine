@@ -14,6 +14,13 @@ class ArutCar3D : public RigidBody3D {
     GDCLASS(ArutCar3D, RigidBody3D);
 
 public:
+    enum VehiclePreset {
+        CUSTOM = 0,
+        COMPACT = 1,
+        SEDAN = 2,
+        OFFROAD = 3
+    };
+
     enum DriveLayout {
         FRONT_WHEEL_DRIVE = 0,
         REAR_WHEEL_DRIVE = 1,
@@ -21,6 +28,8 @@ public:
     };
 
 private:
+    int32_t vehicle_preset = SEDAN;
+
     real_t wheel_track = 1.55;
     real_t front_axle_offset = -1.15;
     real_t rear_axle_offset = 1.15;
@@ -64,6 +73,9 @@ protected:
 public:
     void _ready() override;
     void _physics_process(double p_delta) override;
+
+    void set_vehicle_preset(int32_t value);
+    int32_t get_vehicle_preset() const { return vehicle_preset; }
 
     void set_wheel_track(real_t value) { wheel_track = std::clamp(value, static_cast<real_t>(0.5), static_cast<real_t>(3.5)); _update_wheel_probes(); }
     real_t get_wheel_track() const { return wheel_track; }
@@ -123,4 +135,5 @@ public:
     int32_t get_wheel_contact_count() const { return wheel_contact_count; }
 };
 
+VARIANT_ENUM_CAST(ArutCar3D::VehiclePreset);
 VARIANT_ENUM_CAST(ArutCar3D::DriveLayout);
