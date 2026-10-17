@@ -1,5 +1,8 @@
 #include "arut_character_3d.h"
 
+#include "scene/animation/animation_player.h"
+#include "scene/resources/animation.h"
+
 #include <initializer_list>
 
 #include "arut_ragdoll_dummy_3d.h"
@@ -72,12 +75,39 @@ void ArutCharacter3D::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_sprint_action", "value"), &ArutCharacter3D::set_sprint_action);
     ClassDB::bind_method(D_METHOD("get_sprint_action"), &ArutCharacter3D::get_sprint_action);
 
+    ClassDB::bind_method(D_METHOD("set_animation_enabled", "value"), &ArutCharacter3D::set_animation_enabled);
+    ClassDB::bind_method(D_METHOD("get_animation_enabled"), &ArutCharacter3D::get_animation_enabled);
+    ClassDB::bind_method(D_METHOD("set_animation_player_path", "value"), &ArutCharacter3D::set_animation_player_path);
+    ClassDB::bind_method(D_METHOD("get_animation_player_path"), &ArutCharacter3D::get_animation_player_path);
+    ClassDB::bind_method(D_METHOD("set_animation_visual_root_path", "value"), &ArutCharacter3D::set_animation_visual_root_path);
+    ClassDB::bind_method(D_METHOD("get_animation_visual_root_path"), &ArutCharacter3D::get_animation_visual_root_path);
+    ClassDB::bind_method(D_METHOD("set_animation_idle_clip", "value"), &ArutCharacter3D::set_animation_idle_clip);
+    ClassDB::bind_method(D_METHOD("get_animation_idle_clip"), &ArutCharacter3D::get_animation_idle_clip);
+    ClassDB::bind_method(D_METHOD("set_animation_walk_clip", "value"), &ArutCharacter3D::set_animation_walk_clip);
+    ClassDB::bind_method(D_METHOD("get_animation_walk_clip"), &ArutCharacter3D::get_animation_walk_clip);
+    ClassDB::bind_method(D_METHOD("set_animation_run_clip", "value"), &ArutCharacter3D::set_animation_run_clip);
+    ClassDB::bind_method(D_METHOD("get_animation_run_clip"), &ArutCharacter3D::get_animation_run_clip);
+    ClassDB::bind_method(D_METHOD("set_animation_jump_clip", "value"), &ArutCharacter3D::set_animation_jump_clip);
+    ClassDB::bind_method(D_METHOD("get_animation_jump_clip"), &ArutCharacter3D::get_animation_jump_clip);
+    ClassDB::bind_method(D_METHOD("set_animation_blend_time", "value"), &ArutCharacter3D::set_animation_blend_time);
+    ClassDB::bind_method(D_METHOD("get_animation_blend_time"), &ArutCharacter3D::get_animation_blend_time);
+
     ClassDB::bind_method(D_METHOD("set_move_input", "value"), &ArutCharacter3D::set_move_input);
     ClassDB::bind_method(D_METHOD("get_move_input"), &ArutCharacter3D::get_move_input);
     ClassDB::bind_method(D_METHOD("request_jump"), &ArutCharacter3D::request_jump);
     ClassDB::bind_method(D_METHOD("set_sprint_active", "active"), &ArutCharacter3D::set_sprint_active);
     ClassDB::bind_method(D_METHOD("start_ragdoll"), &ArutCharacter3D::start_ragdoll);
     ClassDB::bind_method(D_METHOD("is_ragdoll_started"), &ArutCharacter3D::is_ragdoll_started);
+
+    ADD_GROUP("Animation", "animation_");
+    ADD_PROPERTY(PropertyInfo(Variant::BOOL, "animation_enabled"), "set_animation_enabled", "get_animation_enabled");
+    ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "animation_player_path"), "set_animation_player_path", "get_animation_player_path");
+    ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "animation_visual_root_path"), "set_animation_visual_root_path", "get_animation_visual_root_path");
+    ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "animation_idle_clip"), "set_animation_idle_clip", "get_animation_idle_clip");
+    ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "animation_walk_clip"), "set_animation_walk_clip", "get_animation_walk_clip");
+    ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "animation_run_clip"), "set_animation_run_clip", "get_animation_run_clip");
+    ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "animation_jump_clip"), "set_animation_jump_clip", "get_animation_jump_clip");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "animation_blend_time", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:s"), "set_animation_blend_time", "get_animation_blend_time");
 
     ADD_GROUP("Movement", "movement_");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "movement_walk_speed", PROPERTY_HINT_RANGE, "0,50,0.1,suffix:m/s"), "set_walk_speed", "get_walk_speed");
@@ -181,6 +211,16 @@ void ArutCharacter3D::_on_ready() {
         }
     }
 
+    character_visual_root = Object::cast_to<Node3D>(get_node_or_null(animation_visual_root_path));
+    Node *animation_node = get_node_or_null(animation_player_path);
+    if (animation_node == nullptr) {
+        animation_node = find_child("AnimationPlayer", true, false);
+    }
+    animation_player = Object::cast_to<AnimationPlayer>(animation_node);
+    if (animation_enabled && animation_player != nullptr) {
+        _update_character_animation(true);
+    }
+
     if (create_default_camera) {
         bool has_camera = false;
         for (int32_t i = 0; i < get_child_count(); ++i) {
@@ -203,6 +243,79 @@ void ArutCharacter3D::_on_ready() {
 
     if (enable_mobile_touch_controls) {
         _create_touch_hint_overlay();
+    }
+}
+
+StringName ArutCharacter3D::_resolve_animation_clip(const StringName &p_clip) const {
+    if (animation_player == nullptr) {
+        return StringName();
+    }
+    if (animation_player->has_animation(p_clip)) {
+        return p_clip;
+    }
+
+    // GLTF importers may normalize library-qualified names. Match the stable
+    // clip suffix as a fallback while still preferring the configured exact name.
+    String requested = String(p_clip);
+    const int32_t separator = requested.rfind("|");
+    if (separator >= 0) {
+        requested = requested.substr(separator + 1);
+    }
+    if (animation_player->has_animation(StringName(requested))) {
+        return StringName(requested);
+    }
+
+    const LocalVector<StringName> available = animation_player->get_sorted_animation_list();
+    for (uint32_t i = 0; i < available.size(); ++i) {
+        const String candidate = String(available[i]);
+        if (candidate == requested || candidate.ends_with(requested)) {
+            return available[i];
+        }
+    }
+    return StringName();
+}
+
+void ArutCharacter3D::_update_character_animation(bool p_force_idle) {
+    if (!animation_enabled || animation_player == nullptr || ragdoll_started) {
+        return;
+    }
+
+    StringName requested = animation_idle_clip;
+    bool should_loop = true;
+    if (!p_force_idle) {
+        const Vector3 velocity = get_velocity();
+        const Vector3 horizontal_velocity(velocity.x, 0.0, velocity.z);
+        if (!is_on_floor()) {
+            // The starter robot pack has a jump clip but no separate fall/land clip.
+            requested = animation_jump_clip;
+            should_loop = false;
+        } else if (horizontal_velocity.length() > 0.18) {
+            requested = sprint_active ? animation_run_clip : animation_walk_clip;
+        }
+    }
+
+    StringName selected = _resolve_animation_clip(requested);
+    if (selected == StringName() && requested == animation_run_clip) {
+        selected = _resolve_animation_clip(animation_walk_clip);
+        should_loop = true;
+    }
+    if (selected == StringName() && requested == animation_jump_clip) {
+        selected = _resolve_animation_clip(animation_idle_clip);
+        should_loop = true;
+    }
+    if (selected == StringName()) {
+        return;
+    }
+
+    // Gait clips loop; jump plays once and holds until grounded locomotion resumes.
+    // Animation never moves the collider or determines collision truth.
+    if (selected != active_animation) {
+        Ref<Animation> clip = animation_player->get_animation(selected);
+        if (clip.is_valid()) {
+            clip->set_loop_mode(should_loop ? Animation::LOOP_LINEAR : Animation::LOOP_NONE);
+        }
+        animation_player->play(selected, animation_blend_time);
+        active_animation = selected;
     }
 }
 
@@ -359,6 +472,9 @@ void ArutCharacter3D::_start_ragdoll() {
 
     if (default_visual_root != nullptr) {
         default_visual_root->set_visible(false);
+    }
+    if (character_visual_root != nullptr) {
+        character_visual_root->set_visible(false);
     }
     if (default_collision_shape != nullptr) {
         default_collision_shape->set_disabled(true);
@@ -564,4 +680,5 @@ void ArutCharacter3D::_on_physics_process(double p_delta) {
     velocity.z = horizontal_velocity.z;
     set_velocity(velocity);
     move_and_slide();
+    _update_character_animation();
 }
