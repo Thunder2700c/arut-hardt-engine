@@ -128,12 +128,12 @@ void ArutCharacter3D::_ready() {
                 input_map->action_add_event(p_action, event);
             }
         };
-        ensure_action(move_left_action, { Key::KEY_A, Key::KEY_LEFT });
-        ensure_action(move_right_action, { Key::KEY_D, Key::KEY_RIGHT });
-        ensure_action(move_forward_action, { Key::KEY_W, Key::KEY_UP });
-        ensure_action(move_backward_action, { Key::KEY_S, Key::KEY_DOWN });
-        ensure_action(jump_action, { Key::KEY_SPACE, Key::KEY_ENTER });
-        ensure_action(sprint_action, { Key::KEY_SHIFT });
+        ensure_action(move_left_action, { Key::A, Key::LEFT });
+        ensure_action(move_right_action, { Key::D, Key::RIGHT });
+        ensure_action(move_forward_action, { Key::W, Key::UP });
+        ensure_action(move_backward_action, { Key::S, Key::DOWN });
+        ensure_action(jump_action, { Key::SPACE, Key::ENTER });
+        ensure_action(sprint_action, { Key::SHIFT });
     }
 
     // The basic character must work as soon as it is added to a scene.
