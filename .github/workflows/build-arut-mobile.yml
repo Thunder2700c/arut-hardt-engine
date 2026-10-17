@@ -156,6 +156,11 @@ jobs:
           print(f"Preflight passed: checked {len(sources)} ARUT C++ headers/sources and quoted include paths.")
           PY
 
+      - name: Compile ARUT C++ objects before full editor build
+        working-directory: godot
+        run: |
+          scons platform=android target=editor arch=arm64 production=yes dev_mode=yes module_text_server_fb_enabled=yes swappy=yes cache_path=.scons_cache/ redirect_build_objects=no modules/arut/arut_character_3d.android.editor.arm64.o modules/arut/arut_ragdoll_dummy_3d.android.editor.arm64.o modules/arut/arut_car_3d.android.editor.arm64.o modules/arut/arut_render_profile_3d.android.editor.arm64.o modules/arut/register_types.android.editor.arm64.o
+
       - name: Compile Android ARM64 editor
         working-directory: godot
         run: |
