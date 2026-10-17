@@ -175,7 +175,20 @@ void ArutCar3D::set_vehicle_preset(int32_t p_value) {
     _update_wheel_probes();
 }
 
-void ArutCar3D::_ready() {
+void ArutCar3D::_notification(int p_what) {
+    switch (p_what) {
+        case NOTIFICATION_READY:
+            _on_ready();
+            break;
+        case NOTIFICATION_PHYSICS_PROCESS:
+            _on_physics_process(get_physics_process_delta_time());
+            break;
+        default:
+            break;
+    }
+}
+
+void ArutCar3D::_on_ready() {
     static const char *probe_names[4] = {
         "WheelProbeFrontLeft",
         "WheelProbeFrontRight",
@@ -219,7 +232,7 @@ void ArutCar3D::_update_wheel_probes() {
     }
 }
 
-void ArutCar3D::_physics_process(double p_delta) {
+void ArutCar3D::_on_physics_process(double p_delta) {
     (void)p_delta;
 
     if (use_input_actions) {
