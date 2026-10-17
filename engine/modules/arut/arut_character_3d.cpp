@@ -370,7 +370,7 @@ void ArutCharacter3D::input(const Ref<InputEvent> &p_event) {
     }
 
     InputEventKey *key_event = Object::cast_to<InputEventKey>(p_event.ptr());
-    if (key_event != nullptr && key_event->is_pressed() && !key_event->is_echo() && key_event->get_keycode() == Key::KEY_R) {
+    if (key_event != nullptr && key_event->is_pressed() && !key_event->is_echo() && key_event->get_keycode() == Key::R) {
         _start_ragdoll();
         return;
     }
