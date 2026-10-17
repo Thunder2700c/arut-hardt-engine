@@ -18,7 +18,7 @@ The solver alone does not make vehicle creation easy. ARUT needs first-class com
 ### 1. PhysX 5 — leading alternative to investigate
 NVIDIA publishes PhysX 5 as an open-source C++ SDK. The official repository documents multi-platform support, including Android ARM, and has an upstream BSD-3-Clause license file; individual SDK components/dependencies may have additional notices, which must be checked for the exact pinned revision. PhysX has mature rigid-body/joint and vehicle-related systems. GPU/CUDA features must not be assumed to work on Android.
 
-A Godot 4.x PhysX 5 backend was linked from a discussion dated 2026-09-03. Its author describes it as work in progress and mentions externally linked dependencies. It is a serious candidate, **not a ready-to-ship Android backend**. Audit the exact branch/commit, build method, feature coverage, target platforms and notices before adoption.
+A Godot 4.x PhysX 5 backend was linked from a discussion dated 2026-09-03. The author described it as WIP, then reported an expanding set of features: static/rigid/kinematic bodies, common collision shapes, ray/shape queries, contact reporting, Area3D triggers, Joint3D families and CharacterBody3D motion testing. An optional GPU rigid-body path uses CUDA; do not assume it works on Android or on the user's Xclipse GPU. The author later described a separate fork/module-based integration route. This makes it a serious candidate to inspect, **not a ready-to-ship Android backend**. The exact commit, build recipe, CPU ARM64 path, Godot 4.7 compatibility, nested dependency notices and license files still need auditing before adoption.
 
 - SDK: https://github.com/NVIDIA-Omniverse/PhysX
 - Godot module branch: https://github.com/uno1982/godot/tree/feature/physx5-module
