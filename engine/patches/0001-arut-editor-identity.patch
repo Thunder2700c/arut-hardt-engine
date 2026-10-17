@@ -1,7 +1,7 @@
 diff --git a/editor/settings/editor_settings.cpp b/editor/settings/editor_settings.cpp
 --- a/editor/settings/editor_settings.cpp
 +++ b/editor/settings/editor_settings.cpp
-@@ -603,7 +603,7 @@
+@@ -603,6 +603,6 @@
  	// Theme
  	EDITOR_SETTING_BASIC(Variant::BOOL, PROPERTY_HINT_ENUM, "interface/theme/follow_system_theme", false, "")
  	EDITOR_SETTING_BASIC(Variant::STRING, PROPERTY_HINT_ENUM, "interface/theme/style", "Modern", "Modern,Classic")
@@ -9,7 +9,6 @@ diff --git a/editor/settings/editor_settings.cpp b/editor/settings/editor_settin
 +	EDITOR_SETTING_BASIC(Variant::STRING, PROPERTY_HINT_ENUM, "interface/theme/color_preset", "ARUT-HARDT", "ARUT-HARDT,Default,Breeze Dark,Godot 2,Godot 3,Gray,Light,Solarized (Dark),Solarized (Light),Black (OLED),Custom")
  	EDITOR_SETTING_BASIC(Variant::STRING, PROPERTY_HINT_ENUM, "interface/theme/spacing_preset", "Default", "Compact,Default,Spacious,Custom")
  	EDITOR_SETTING(Variant::INT, PROPERTY_HINT_ENUM, "interface/theme/icon_and_font_color", 0, "Auto,Dark,Light")
- 
 diff --git a/editor/themes/editor_theme_manager.cpp b/editor/themes/editor_theme_manager.cpp
 --- a/editor/themes/editor_theme_manager.cpp
 +++ b/editor/themes/editor_theme_manager.cpp
@@ -30,7 +29,7 @@ diff --git a/editor/themes/editor_theme_manager.cpp b/editor/themes/editor_theme
 diff --git a/editor/project_manager/project_manager.cpp b/editor/project_manager/project_manager.cpp
 --- a/editor/project_manager/project_manager.cpp
 +++ b/editor/project_manager/project_manager.cpp
-@@ -116,7 +116,7 @@
+@@ -117,6 +117,6 @@
  		case NOTIFICATION_TRANSLATION_CHANGED: {
  			// TRANSLATORS: This refers to the application where users manage their Godot projects.
 -			SceneTree::get_singleton()->get_root()->set_title(GODOT_VERSION_NAME + String(" - ") + TTR("Project Manager", "Application"));
@@ -50,7 +49,7 @@ diff --git a/editor/project_manager/project_manager.cpp b/editor/project_manager
 diff --git a/editor/editor_node.cpp b/editor/editor_node.cpp
 --- a/editor/editor_node.cpp
 +++ b/editor/editor_node.cpp
-@@ -377,7 +377,7 @@
+@@ -377,8 +377,8 @@
  	if (unsaved_cache) {
  		// Display the "modified" mark before anything else so that it can always be seen in the OS task bar.
  		title = vformat("(*) %s", title);
@@ -60,3 +59,27 @@ diff --git a/editor/editor_node.cpp b/editor/editor_node.cpp
  	if (project_title) {
  		project_title->set_text(title);
  	}
+diff --git a/platform/android/java/editor/build.gradle b/platform/android/java/editor/build.gradle
+--- a/platform/android/java/editor/build.gradle
++++ b/platform/android/java/editor/build.gradle
+@@ -87,5 +87,5 @@
+         missingDimensionStrategy 'products', 'editor'
+         manifestPlaceholders += [
+-            editorAppName: "Godot Engine 4",
++            editorAppName: "ARUT Mobile",
+             editorBuildSuffix: ""
+         ]
+@@ -134,5 +134,5 @@
+         debug {
+             applicationIdSuffix ".debug"
+-            manifestPlaceholders += [editorBuildSuffix: " (debug)"]
++            manifestPlaceholders += [editorBuildSuffix: ""]
+             signingConfig signingConfigs.debug
+         }
+@@ -147,5 +147,5 @@
+                 // In addition, we update the application ID to allow installing an Android studio release build
+                 // side by side with a production build from the store.
+                 applicationIdSuffix ".release"
+-                manifestPlaceholders += [editorBuildSuffix: " (release)"]
++                manifestPlaceholders += [editorBuildSuffix: ""]
+             }

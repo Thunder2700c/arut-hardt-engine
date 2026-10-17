@@ -2,12 +2,17 @@
 
 #include <algorithm>
 
-#include "core/string/string_name.h"
 #include "core/math/vector2.h"
+#include "core/string/string_name.h"
 #include "scene/3d/physics/character_body_3d.h"
 
-// C++-native first-person/third-person movement baseline. Camera and visual
-// rig remain user-supplied children; movement does not require a script.
+class Camera3D;
+class CollisionShape3D;
+class Node3D;
+class ArutRagdollDummy3D;
+
+// C++-native player controller with a generated visible dummy, default capsule
+// collision and camera. A skinned model can replace the dummy later.
 class ArutCharacter3D : public CharacterBody3D {
     GDCLASS(ArutCharacter3D, CharacterBody3D);
 
@@ -21,24 +26,54 @@ private:
     real_t jump_velocity = 4.5;
     real_t gravity = 9.8;
 
+    bool create_default_dummy = true;
+    bool create_default_collision = true;
+    bool create_default_camera = true;
+    bool enable_ragdoll = true;
+    bool enable_mobile_touch_controls = true;
+    real_t camera_distance = 4.0;
+    real_t touch_look_sensitivity = 0.005;
+
     bool use_input_actions = true;
-    StringName move_left_action = "ui_left";
-    StringName move_right_action = "ui_right";
-    StringName move_forward_action = "ui_up";
-    StringName move_backward_action = "ui_down";
-    StringName jump_action = "ui_accept";
-    StringName sprint_action = "sprint";
+    StringName move_left_action = "arut_move_left";
+    StringName move_right_action = "arut_move_right";
+    StringName move_forward_action = "arut_move_forward";
+    StringName move_backward_action = "arut_move_backward";
+    StringName jump_action = "arut_jump";
+    StringName sprint_action = "arut_sprint";
 
     Vector2 move_input;
     bool jump_requested = false;
     bool sprint_active = false;
 
+    Node3D *default_visual_root = nullptr;
+    CollisionShape3D *default_collision_shape = nullptr;
+    Node3D *camera_pivot = nullptr;
+    Camera3D *default_camera = nullptr;
+    ArutRagdollDummy3D *ragdoll_dummy = nullptr;
+    int32_t joystick_touch_index = -1;
+    int32_t look_touch_index = -1;
+    int32_t sprint_touch_index = -1;
+    Vector2 joystick_origin;
+    Vector2 previous_look_position;
+    bool ragdoll_started = false;
+
+    void _on_ready();
+    void _on_process(double p_delta);
+    void _on_physics_process(double p_delta);
+
+    void _create_default_dummy();
+    void _create_default_collision();
+    void _create_default_camera();
+    void _create_touch_hint_overlay();
+    void _start_ragdoll();
+
 protected:
     static void _bind_methods();
+    void _notification(int p_what);
 
 public:
-    void _ready() override;
-    void _physics_process(double p_delta) override;
+    void input(const Ref<InputEvent> &p_event) override;
 
     void set_walk_speed(real_t value) { walk_speed = std::clamp(value, static_cast<real_t>(0.0), static_cast<real_t>(50.0)); }
     real_t get_walk_speed() const { return walk_speed; }
@@ -57,6 +92,21 @@ public:
     void set_gravity(real_t value) { gravity = std::clamp(value, static_cast<real_t>(0.0), static_cast<real_t>(100.0)); }
     real_t get_gravity() const { return gravity; }
 
+    void set_create_default_dummy(bool value) { create_default_dummy = value; }
+    bool get_create_default_dummy() const { return create_default_dummy; }
+    void set_create_default_collision(bool value) { create_default_collision = value; }
+    bool get_create_default_collision() const { return create_default_collision; }
+    void set_create_default_camera(bool value) { create_default_camera = value; }
+    bool get_create_default_camera() const { return create_default_camera; }
+    void set_enable_ragdoll(bool value) { enable_ragdoll = value; }
+    bool get_enable_ragdoll() const { return enable_ragdoll; }
+    void set_enable_mobile_touch_controls(bool value) { enable_mobile_touch_controls = value; }
+    bool get_enable_mobile_touch_controls() const { return enable_mobile_touch_controls; }
+    void set_camera_distance(real_t value) { camera_distance = std::clamp(value, static_cast<real_t>(0.0), static_cast<real_t>(12.0)); }
+    real_t get_camera_distance() const { return camera_distance; }
+    void set_touch_look_sensitivity(real_t value) { touch_look_sensitivity = std::clamp(value, static_cast<real_t>(0.001), static_cast<real_t>(0.02)); }
+    real_t get_touch_look_sensitivity() const { return touch_look_sensitivity; }
+
     void set_use_input_actions(bool value) { use_input_actions = value; }
     bool get_use_input_actions() const { return use_input_actions; }
     void set_move_left_action(const StringName &value) { move_left_action = value; }
@@ -72,10 +122,11 @@ public:
     void set_sprint_action(const StringName &value) { sprint_action = value; }
     StringName get_sprint_action() const { return sprint_action; }
 
-    // Native entry points for mobile touch controls, AI and future input layers.
     void set_move_input(const Vector2 &value) { move_input = value.length() > 1.0 ? value.normalized() : value; }
     Vector2 get_move_input() const { return move_input; }
     void request_jump() { jump_requested = true; }
     void set_sprint_active(bool value) { sprint_active = value; }
+    void start_ragdoll() { _start_ragdoll(); }
+    bool is_ragdoll_started() const { return ragdoll_started; }
 };
 

@@ -1,0 +1,88 @@
+[gd_scene load_steps=8 format=3]
+
+[sub_resource type="Environment" id="Environment_main"]
+background_mode = 1
+background_color = Color(0.025, 0.035, 0.06, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.43, 0.52, 0.67, 1)
+ambient_light_energy = 0.65
+reflected_light_source = 2
+tonemap_mode = 2
+
+[sub_resource type="StandardMaterial3D" id="Material_floor"]
+albedo_color = Color(0.13, 0.17, 0.23, 1)
+roughness = 0.92
+
+[sub_resource type="BoxShape3D" id="Shape_floor"]
+size = Vector3(40, 0.5, 40)
+
+[sub_resource type="BoxMesh" id="Mesh_floor"]
+size = Vector3(40, 0.5, 40)
+material = SubResource("Material_floor")
+
+[sub_resource type="BoxShape3D" id="Shape_crate"]
+size = Vector3(0.7, 0.7, 0.7)
+
+[sub_resource type="BoxMesh" id="Mesh_crate"]
+size = Vector3(0.7, 0.7, 0.7)
+
+[sub_resource type="StandardMaterial3D" id="Material_crate"]
+albedo_color = Color(0.8, 0.32, 0.12, 1)
+roughness = 0.8
+
+[node name="ARUTCharacterLab" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_main")
+
+[node name="ArutRenderProfile3D" type="ArutRenderProfile3D" parent="."]
+quality_preset = 0
+quality_apply_on_ready = true
+
+[node name="KeyLight" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-48, -32, 0)
+light_color = Color(0.9, 0.94, 1, 1)
+light_energy = 1.25
+shadow_enabled = true
+
+[node name="Floor" type="StaticBody3D" parent="."]
+position = Vector3(0, -0.25, 0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("Shape_floor")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("Mesh_floor")
+
+[node name="ArutCharacter3D" type="ArutCharacter3D" parent="."]
+position = Vector3(0, 0.03, 0)
+movement_walk_speed = 5.0
+movement_sprint_speed = 8.0
+movement_ground_acceleration = 18.0
+movement_air_acceleration = 4.0
+movement_air_control = 0.35
+movement_ground_friction = 16.0
+movement_jump_velocity = 4.5
+movement_gravity = 9.8
+character_create_default_dummy = true
+character_create_default_collision = true
+character_create_default_camera = true
+character_enable_ragdoll = true
+character_enable_mobile_touch_controls = true
+character_camera_distance = 4.0
+
+[node name="RagdollTestCrate" type="RigidBody3D" parent="."]
+position = Vector3(1.2, 1.0, -1.8)
+mass = 8.0
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RagdollTestCrate"]
+shape = SubResource("Shape_crate")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="RagdollTestCrate"]
+mesh = SubResource("Mesh_crate")
+surface_material_override/0 = SubResource("Material_crate")
+

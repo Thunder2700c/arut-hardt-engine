@@ -7,6 +7,10 @@
 #include "core/object/class_db.h"
 #include "core/variant/variant.h"
 
+ArutCar3D::ArutCar3D() {
+    set_mass(1200.0);
+}
+
 void ArutCar3D::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_vehicle_preset", "value"), &ArutCar3D::set_vehicle_preset);
     ClassDB::bind_method(D_METHOD("get_vehicle_preset"), &ArutCar3D::get_vehicle_preset);
@@ -171,7 +175,20 @@ void ArutCar3D::set_vehicle_preset(int32_t p_value) {
     _update_wheel_probes();
 }
 
-void ArutCar3D::_ready() {
+void ArutCar3D::_notification(int p_what) {
+    switch (p_what) {
+        case NOTIFICATION_READY:
+            _on_ready();
+            break;
+        case NOTIFICATION_PHYSICS_PROCESS:
+            _on_physics_process(get_physics_process_delta_time());
+            break;
+        default:
+            break;
+    }
+}
+
+void ArutCar3D::_on_ready() {
     static const char *probe_names[4] = {
         "WheelProbeFrontLeft",
         "WheelProbeFrontRight",
@@ -215,7 +232,7 @@ void ArutCar3D::_update_wheel_probes() {
     }
 }
 
-void ArutCar3D::_physics_process(double p_delta) {
+void ArutCar3D::_on_physics_process(double p_delta) {
     (void)p_delta;
 
     if (use_input_actions) {
@@ -263,7 +280,7 @@ void ArutCar3D::_physics_process(double p_delta) {
         Vector3 wheel_forward = body_forward;
         if (i < 2) {
             const real_t steering_radians = steering_input * max_steering_angle_degrees * static_cast<real_t>(0.017453292519943295);
-            wheel_forward = Basis(body_up, steering_radians) * wheel_forward;
+            wheel_forward = Basis(body_up, steering_radians).xform(wheel_forward);
         }
         wheel_forward -= normal * wheel_forward.dot(normal);
         if (wheel_forward.length_squared() < static_cast<real_t>(0.0001)) {
