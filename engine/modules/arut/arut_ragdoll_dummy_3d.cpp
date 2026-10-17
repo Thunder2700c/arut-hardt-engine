@@ -208,6 +208,10 @@ void ArutRagdollDummy3D::_apply_simulation_state() {
             continue;
         }
         body->set_freeze_enabled(!start_simulating);
+        // While the mannequin is active, its hidden ragdoll must not block
+        // the world or the character capsule. Enable collision only on drop.
+        body->set_collision_layer(start_simulating ? 1 : 0);
+        body->set_collision_mask(start_simulating ? 1 : 0);
         if (start_simulating) {
             body->set_sleeping(false);
         }
