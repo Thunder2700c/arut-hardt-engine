@@ -110,6 +110,7 @@ void ArutCharacter3D::_bind_methods() {
 
 void ArutCharacter3D::_ready() {
     set_physics_process(true);
+    set_process(true);
     set_process_input(true);
 
     // Provide a usable keyboard layout on a fresh project without requiring
@@ -449,6 +450,26 @@ void ArutCharacter3D::input(const Ref<InputEvent> &p_event) {
         }
         previous_look_position = drag->get_position();
     }
+}
+
+void ArutCharacter3D::_process(double p_delta) {
+    (void)p_delta;
+    if (!ragdoll_started || ragdoll_dummy == nullptr || camera_pivot == nullptr || default_camera == nullptr) {
+        return;
+    }
+
+    Node *pelvis_node = ragdoll_dummy->get_node_or_null(NodePath("Pelvis"));
+    RigidBody3D *pelvis = Object::cast_to<RigidBody3D>(pelvis_node);
+    if (pelvis == nullptr) {
+        return;
+    }
+
+    // Keep the camera with the falling ragdoll rather than leaving it behind
+    // on the now-disabled player capsule.
+    const Vector3 pelvis_position = pelvis->get_global_position();
+    const Vector3 backward = get_global_basis().get_column(2).normalized();
+    camera_pivot->set_global_position(pelvis_position + Vector3(0.0, 1.0, 0.0) + backward * camera_distance);
+    default_camera->look_at(pelvis_position + Vector3(0.0, 0.65, 0.0));
 }
 
 void ArutCharacter3D::_physics_process(double p_delta) {
