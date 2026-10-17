@@ -49,6 +49,42 @@ jobs:
         working-directory: godot
         run: python misc/scripts/install_swappy_android.py
 
+      - name: Preflight unique runtime identity patch ownership
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          expected_owners = {
+              "version.py": "0003-arut-runtime-identity.patch",
+              "platform/android/java/editor/src/main/res/values/strings.xml": "0003-arut-runtime-identity.patch",
+          }
+          owners = {path: [] for path in expected_owners}
+          for patch in sorted(Path("engine/patches").glob("*.patch")):
+              content = patch.read_text(encoding="utf-8")
+              for old_path, new_path in re.findall(r"^diff --git a/(.*?) b/(.*?)$", content, re.MULTILINE):
+                  for path in {old_path, new_path}:
+                      if path in owners:
+                          owners[path].append(patch.name)
+
+          errors = []
+          for path, canonical_patch in expected_owners.items():
+              actual = owners[path]
+              if actual != [canonical_patch]:
+                  errors.append(
+                      f"{path}: expected only {canonical_patch}, found {actual or 'no patch owner'}"
+                  )
+
+          if errors:
+              for error in errors:
+                  print(f"::error::{error}")
+              sys.exit(1)
+
+          print("Runtime identity patch ownership preflight passed.")
+          PY
+
       - name: Validate and apply ARUT-HARDT engine patches
         shell: bash
         run: |
