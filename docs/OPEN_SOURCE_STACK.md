@@ -9,6 +9,8 @@ Do not replace Godot's whole renderer with another engine in the current milesto
 
 The first target is a polished *mobile stylized-PBR / anime-hybrid* pipeline—not a claim that ARUT can reproduce Arknights: Endfield's proprietary renderer. Results depend on art direction, textures, lighting, animation, and disciplined budgets as much as shader code.
 
+The animation direction is GASP-inspired: use the publicly documented feature set as a target, audit the MIT-licensed C++ Godot motion-matching implementation as a port candidate, and use CC0 humanoid/animation data. The full implementation plan is in [ANIMATION_SYSTEM_ARCHITECTURE.md](ANIMATION_SYSTEM_ARCHITECTURE.md).
+
 ## Stack shortlist
 
 | Area | Recommended starting point | Why it fits | Status / guardrail |
@@ -16,10 +18,11 @@ The first target is a polished *mobile stylized-PBR / anime-hybrid* pipeline—n
 | Base renderer | Godot 4.7 Mobile renderer over Vulkan; keep Compatibility as a fallback target | Existing Android renderer, device-aware raster pipeline and existing scene/material workflows | Keep; profile on real Android hardware. Do not enable desktop-only features by assumption. |
 | PBR foundation | Godot's built-in PBR materials and renderer | Provides metallic/roughness, normal maps, ORM, toon shading modes, fog, glow and other engine-level material features without another renderer | Keep and author ARUT presets rather than importing a second renderer. |
 | Anime material stack | ARUT-owned toon/PBR hybrid shaders, outline/rim-light options, artist-adjustable shadow thresholds, optional face/hair presets | Gives users a cohesive style and Inspector controls; can be adapted to mobile raster constraints | Build as a small shader library; every effect needs a Mobile profile and a low-cost switch. |
-| Physics backend | Jolt Physics already integrated into modern Godot as an alternative backend; compare against Godot Physics using ARUT tests | C++ physics library, MIT license upstream, has vehicle constraints and strong rigid-body features | Preferred candidate to evaluate, not yet a declaration that every ARUT system works with it. Test car, ragdoll and joints first. |
+| Physics backend | Jolt Physics already integrated into modern Godot as an alternative backend; compare against Godot Physics using ARUT tests | C++ physics library, MIT license upstream, has vehicle constraints and strong rigid-body features | Preferred candidate to evaluate, not yet a declaration that every ARUT system works with it. |
 | Ready-made car | ARUT-native C++ `ArutCar3D` with internally managed wheel probes, simple drivetrain/steering/brakes, touch/gamepad/keyboard maps and a sample vehicle scene | The user needs a component that works by adding one node, not a separate physics SDK project | Improve and test this native component. Do not depend on Godot's `VehicleBody3D` as the final realistic vehicle system; upstream docs note known limitations. |
 | Humanoid animation | Quaternius Universal Base Characters + Universal Animation Library (and optional Animation Library 2) as CC0 source assets | Publicly documented humanoid rigs and 120+/130+ animation packs, including locomotion, sprint, combat and death; GLB/glTF assets fit Godot import | Curate only the needed assets and preserve an asset manifest. These packs are stylized human characters, not a robot mannequin out of the box. |
 | Default test dummy | Prototype with Quaternius's **Animated LowPoly Robot** (CC0; 14 clips, about 7 MB via OpenGameArt), with a matte-white material override; separately build an engine-owned human-proportioned ARUT Test Mannequin | Closest small-pack match to a robot-like unskinned placeholder; keeps the first test asset small | Test the downloaded rig/clip names and FBX import first. The pack is stylized, not a blank human mannequin; use it as a prototype, not a hard dependency. For human rigs, use Quaternius Universal Base Characters + Universal Animation Library and retarget where compatible. |
+| GASP-style animation | Audit and port [godot-motion-matching](https://github.com/GuilhermeGSousa/godot-motion-matching) into an ARUT built-in C++ module; use Quaternius CC0 clips as data | MIT-licensed C++ motion-matching project already ties into Godot's AnimationTree; GASP demonstrates the desired trajectory-aware locomotion/traversal concepts | Not a drop-in for Godot 4.7: the current project targets Godot 4.4-era APIs. Audit and port source, check demo-data licenses, then benchmark CPU/memory on Android. Use GASP as a behavioral reference, not copied code/assets. |
 | Reusable examples | Selected Godot demo-project ideas/assets under their MIT license, only after checking each project and dependency | Useful source of examples and regression scenes | Treat as references/templates, not as a replacement for the native C++ foundation. |
 | Optional research references | Google Filament (Apache-2.0) and bgfx (BSD-2-Clause) | High-quality PBR renderer / cross-platform rendering library with Android and Vulkan support | Do not embed now. Both would need a serious renderer/resource/editor integration layer; neither is a drop-in Godot renderer upgrade. |
 | PhysX | Keep as research only | Capable C++ SDK, but not a drop-in Android-ready Godot PhysicsServer backend | Do not add a second physics SDK before the Jolt-vs-Godot evaluation. Audit the precise release's platform build and license files; the public PhysX repository has conflicting license statements across repository-level and SDK readme materials. |
@@ -44,6 +47,18 @@ Do not enable every post effect simultaneously. Screen-reading effects, outlines
 4. Provide a C++-native character/animation component with an Inspector interface for locomotion speed, acceleration, jump, camera and animation mapping. Animation data can be an imported asset; engine behavior stays C++-first.
 5. Keep source/attribution/licence metadata for any model, animation, shader or code bundle. CC0 means the original pack's license permits reuse, but the engine should still document where each asset came from.
 
+## GASP-inspired animation plan
+
+GASP (Unreal Engine's Game Animation Sample Project) is a reference for responsive, high-quality motion matching and traversal. Its official documentation describes pose/trajectory-based animation selection, contextual database filtering, and examples including vaulting and ledge traversal. The GASP implementation is tied to Unreal Engine systems, so it should not be copied wholesale into ARUT as if it were portable open-source engine code.
+
+Use [ANIMATION_SYSTEM_ARCHITECTURE.md](ANIMATION_SYSTEM_ARCHITECTURE.md) for the detailed implementation plan. At a high level:
+1. Prove skinned character/skeleton import with the small CC0 robot, then set up a consistent humanoid rig and curated CC0 locomotion set.
+2. First ship a conventional AnimationPlayer/AnimationTree controller; this validates clips, physics-driven movement and mobile controls.
+3. Audit and port the MIT-licensed Godot motion-matching C++ project to the pinned Godot 4.7 source as a built-in module. It is a 4.4-era implementation and must not be assumed source-compatible.
+4. Add baked pose/trajectory features, spatial-index query, configurable query cadence and debug visualization with a state-machine fallback.
+5. Add contextual action/chooser behavior, collision-aware root-motion, vault/ledge traversal and animation warping only after locomotion is stable.
+6. Measure memory and query time on Android before increasing the database.
+
 ## Vehicle plan
 
 The starter should contain a chassis mesh and collision shape, visible wheels, wheel probes, suspension/damping, steering, engine torque, brakes, drive layout, speed telemetry, reset action and mobile touch controls. A prefab/scene should run without the user manually assembling 15 child nodes. The high-level ARUT API should target Godot's physics server rather than hard-code the Jolt-specific API; this preserves the ability to test backend options.
@@ -61,11 +76,13 @@ The existing custom `ArutCar3D` code is only a first pass. The last successful w
 - [Animated LowPoly Robot pack download/source listing (CC0)](https://opengameart.org/content/animated-lowpoly-robot)
 - [Quaternius Universal Base Characters (CC0)](https://quaternius.com/packs/universalbasecharacters.html)
 - [Quaternius Universal Animation Library (CC0)](https://quaternius.com/packs/universalanimationlibrary.html)
-- [Quaternius Universal Animation Library 2 (CC0)](https://quaternius.com/packs/universalanimationlibrary2.html)
+- [Quaternius Universal Animation Library 2 (CC0)](https://quaternius.itch.io/universal-animation-library-2)
 - [Godot demo projects (MIT)](https://github.com/godotengine/godot-demo-projects)
 - [Google Filament (Apache-2.0)](https://github.com/google/filament)
 - [bgfx (BSD-2-Clause)](https://github.com/bkaradzic/bgfx)
 - [NVIDIA PhysX repository](https://github.com/NVIDIA-Omniverse/PhysX)
+- [GASP documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine)
+- [Godot motion-matching extension (MIT; audit/port candidate)](https://github.com/GuilhermeGSousa/godot-motion-matching)
 
 ## What we should not do
 
