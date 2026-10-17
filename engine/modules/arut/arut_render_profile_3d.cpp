@@ -2,6 +2,8 @@
 
 #include <cstdlib>
 
+#include "core/config/engine.h"
+
 #include "core/object/class_db.h"
 #include "core/variant/variant.h"
 
@@ -32,11 +34,15 @@ void ArutRenderProfile3D::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_positional_shadow_atlas_size"), &ArutRenderProfile3D::get_positional_shadow_atlas_size);
     ClassDB::bind_method(D_METHOD("set_apply_on_ready", "value"), &ArutRenderProfile3D::set_apply_on_ready);
     ClassDB::bind_method(D_METHOD("get_apply_on_ready"), &ArutRenderProfile3D::get_apply_on_ready);
+    ClassDB::bind_method(D_METHOD("set_apply_on_change", "value"), &ArutRenderProfile3D::set_apply_on_change);
+    ClassDB::bind_method(D_METHOD("get_apply_on_change"), &ArutRenderProfile3D::get_apply_on_change);
+    ClassDB::bind_method(D_METHOD("apply_to_current_viewport"), &ArutRenderProfile3D::apply_to_current_viewport);
     ClassDB::bind_method(D_METHOD("apply_to_viewport", "viewport"), &ArutRenderProfile3D::apply_to_viewport);
 
     ADD_GROUP("Quality Profile", "quality_");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "quality_preset", PROPERTY_HINT_ENUM, "Mobile,Balanced,High,Custom"), "set_preset", "get_preset");
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "quality_apply_on_ready"), "set_apply_on_ready", "get_apply_on_ready");
+    ADD_PROPERTY(PropertyInfo(Variant::BOOL, "quality_apply_on_change"), "set_apply_on_change", "get_apply_on_change");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "quality_render_scale", PROPERTY_HINT_RANGE, "0.25,1.5,0.05"), "set_render_scale", "get_render_scale");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "quality_scaling_mode", PROPERTY_HINT_ENUM, "Bilinear,FSR,FSR2,MetalFX Spatial,MetalFX Temporal,Nearest"), "set_scaling_mode", "get_scaling_mode");
 
@@ -61,6 +67,13 @@ void ArutRenderProfile3D::_bind_methods() {
     BIND_ENUM_CONSTANT(CUSTOM);
 }
 
+void ArutRenderProfile3D::_apply_if_active() const {
+    Engine *engine = Engine::get_singleton();
+    if (apply_on_change && is_inside_tree() && (engine == nullptr || !engine->is_editor_hint())) {
+        apply_to_viewport(get_viewport());
+    }
+}
+
 void ArutRenderProfile3D::_notification(int p_what) {
     if (p_what == NOTIFICATION_READY) {
         _on_ready();
@@ -68,8 +81,9 @@ void ArutRenderProfile3D::_notification(int p_what) {
 }
 
 void ArutRenderProfile3D::_on_ready() {
-    if (apply_on_ready) {
-        apply_to_viewport(get_viewport());
+    Engine *engine = Engine::get_singleton();
+    if (apply_on_ready && (engine == nullptr || !engine->is_editor_hint())) {
+        apply_to_current_viewport();
     }
 }
 
@@ -120,6 +134,7 @@ void ArutRenderProfile3D::set_preset(int32_t p_value) {
             // Selecting Custom preserves all currently edited values.
             break;
     }
+    _apply_if_active();
 }
 
 void ArutRenderProfile3D::set_positional_shadow_atlas_size(int32_t p_value) {
@@ -131,6 +146,12 @@ void ArutRenderProfile3D::set_positional_shadow_atlas_size(int32_t p_value) {
         }
     }
     positional_shadow_atlas_size = nearest;
+    _apply_if_active();
+}
+
+void ArutRenderProfile3D::apply_to_current_viewport() const {
+    // Explicit application bypasses automatic-apply toggles by design.
+    apply_to_viewport(get_viewport());
 }
 
 void ArutRenderProfile3D::apply_to_viewport(Viewport *p_viewport) const {

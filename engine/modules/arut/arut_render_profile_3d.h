@@ -34,6 +34,9 @@ private:
     real_t texture_mipmap_bias = 0.0;
     int32_t positional_shadow_atlas_size = 1024;
     bool apply_on_ready = true;
+    bool apply_on_change = true;
+
+    void _apply_if_active() const;
 
 protected:
     void _on_ready();
@@ -46,31 +49,34 @@ public:
     void set_preset(int32_t value);
     int32_t get_preset() const { return preset; }
 
-    void set_render_scale(real_t value) { render_scale = std::clamp(value, static_cast<real_t>(0.25), static_cast<real_t>(1.5)); }
+    void set_render_scale(real_t value) { render_scale = std::clamp(value, static_cast<real_t>(0.25), static_cast<real_t>(1.5)); _apply_if_active(); }
     real_t get_render_scale() const { return render_scale; }
-    void set_scaling_mode(int32_t value) { scaling_mode = std::clamp(value, 0, static_cast<int32_t>(Viewport::SCALING_3D_MODE_MAX - 1)); }
+    void set_scaling_mode(int32_t value) { scaling_mode = std::clamp(value, 0, static_cast<int32_t>(Viewport::SCALING_3D_MODE_MAX - 1)); _apply_if_active(); }
     int32_t get_scaling_mode() const { return scaling_mode; }
-    void set_msaa_3d(int32_t value) { msaa_3d = std::clamp(value, 0, static_cast<int32_t>(Viewport::MSAA_MAX - 1)); }
+    void set_msaa_3d(int32_t value) { msaa_3d = std::clamp(value, 0, static_cast<int32_t>(Viewport::MSAA_MAX - 1)); _apply_if_active(); }
     int32_t get_msaa_3d() const { return msaa_3d; }
-    void set_screen_space_aa(int32_t value) { screen_space_aa = std::clamp(value, 0, static_cast<int32_t>(Viewport::SCREEN_SPACE_AA_MAX - 1)); }
+    void set_screen_space_aa(int32_t value) { screen_space_aa = std::clamp(value, 0, static_cast<int32_t>(Viewport::SCREEN_SPACE_AA_MAX - 1)); _apply_if_active(); }
     int32_t get_screen_space_aa() const { return screen_space_aa; }
-    void set_use_taa(bool value) { use_taa = value; }
+    void set_use_taa(bool value) { use_taa = value; _apply_if_active(); }
     bool get_use_taa() const { return use_taa; }
-    void set_use_occlusion_culling(bool value) { use_occlusion_culling = value; }
+    void set_use_occlusion_culling(bool value) { use_occlusion_culling = value; _apply_if_active(); }
     bool get_use_occlusion_culling() const { return use_occlusion_culling; }
-    void set_mesh_lod_threshold(real_t value) { mesh_lod_threshold = std::clamp(value, static_cast<real_t>(0.0), static_cast<real_t>(20.0)); }
+    void set_mesh_lod_threshold(real_t value) { mesh_lod_threshold = std::clamp(value, static_cast<real_t>(0.0), static_cast<real_t>(20.0)); _apply_if_active(); }
     real_t get_mesh_lod_threshold() const { return mesh_lod_threshold; }
-    void set_use_debanding(bool value) { use_debanding = value; }
+    void set_use_debanding(bool value) { use_debanding = value; _apply_if_active(); }
     bool get_use_debanding() const { return use_debanding; }
-    void set_fsr_sharpness(real_t value) { fsr_sharpness = std::clamp(value, static_cast<real_t>(0.0), static_cast<real_t>(1.0)); }
+    void set_fsr_sharpness(real_t value) { fsr_sharpness = std::clamp(value, static_cast<real_t>(0.0), static_cast<real_t>(1.0)); _apply_if_active(); }
     real_t get_fsr_sharpness() const { return fsr_sharpness; }
-    void set_texture_mipmap_bias(real_t value) { texture_mipmap_bias = std::clamp(value, static_cast<real_t>(-4.0), static_cast<real_t>(4.0)); }
+    void set_texture_mipmap_bias(real_t value) { texture_mipmap_bias = std::clamp(value, static_cast<real_t>(-4.0), static_cast<real_t>(4.0)); _apply_if_active(); }
     real_t get_texture_mipmap_bias() const { return texture_mipmap_bias; }
     void set_positional_shadow_atlas_size(int32_t value);
     int32_t get_positional_shadow_atlas_size() const { return positional_shadow_atlas_size; }
     void set_apply_on_ready(bool value) { apply_on_ready = value; }
     bool get_apply_on_ready() const { return apply_on_ready; }
+    void set_apply_on_change(bool value) { apply_on_change = value; if (apply_on_change) _apply_if_active(); }
+    bool get_apply_on_change() const { return apply_on_change; }
 
+    void apply_to_current_viewport() const;
     void apply_to_viewport(Viewport *p_viewport) const;
 };
 

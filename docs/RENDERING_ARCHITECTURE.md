@@ -22,6 +22,17 @@ The current engine source build starts from Godot 4.7 and its existing mobile re
 
 These are starting presets, not measured performance guarantees. Some viewport options depend on the renderer, driver and platform; particularly advanced scaling and TAA options must be checked on the final device. The node's Inspector can override values after choosing a preset. Set the preset to Custom before making a set of manual adjustments if you want to communicate that intention clearly.
 
+### Runtime profile switching (native C++)
+
+`ArutRenderProfile3D` can update its active viewport when profile properties change at runtime while the node is inside the scene tree. Automatic application is suppressed while editing scenes in the editor.
+
+- `quality_apply_on_ready` controls initial application when the node becomes ready.
+- `quality_apply_on_change` (enabled by default) controls automatic application of subsequent property and preset changes at runtime.
+- `apply_to_current_viewport()` is an explicit native API for a C++ quality/settings controller. It applies the current values regardless of the two automatic-apply switches and safely does nothing if the node has no viewport.
+- Scene properties are loaded before the node enters the tree, so deserializing a saved profile does not trigger partial applications during scene loading.
+
+This is a viewport-profile feature, not a new rendering backend. It uses supported Godot viewport controls and does not claim new GPU effects, a Nanite replacement, or measured performance gains.
+
 ## Mobile-friendly optimization strategy
 
 ### Implemented in source (not build-verified)
@@ -49,4 +60,4 @@ Epic's Game Animation Sample Project (GASP) is an animation/motion-matching samp
 
 ## Verification truth
 
-The C++ profile source has not yet been compiled or run on Android. The settings are selected from Godot 4.7's viewport API; the workflow's first build will verify C++ integration, and device testing will be needed to validate renderer-option support and actual performance. No Nanite replacement or custom GPU renderer is claimed.
+The baseline C++ profile compiled in the successful Android editor workflow at commit `158ea1efb2c897d52adb8f676376f59bbfc7aec5`. The live-switching addition is source-reviewed but has not yet been compiled in a new workflow run or exercised on Android. Device testing is still required to validate renderer-option support and actual performance. No Nanite replacement or custom GPU renderer is claimed.
