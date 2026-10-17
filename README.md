@@ -9,7 +9,7 @@ A Godot-based C++-first engine project focused on approachable native components
 Both share the same core, APIs and project format. They are not separate engines.
 
 ## Product focus
-ARUT-HARDT is being built as an engine before it is used to develop the user's game. The first high-level component target is a ready-to-use C++ `ArutCar3D` node with editable vehicle/suspension/steering/braking properties and presets. Other planned systems include native character movement, interaction, breakable props, diagnostics and custom editor panels.
+ARUT-HARDT is being built as an engine before it is used to develop the user's game. The first native source batch now includes C++ `ArutCar3D` and `ArutCharacter3D` classes, with editable vehicle/suspension/steering/braking settings, compact/sedan/off-road presets, and native character movement controls. This code is not compiled or runtime-verified yet. Planned follow-ons include interaction, breakable props, diagnostics, ARUT-specific editor categories and custom editor panels.
 
 The initial intended audience is a private group of five people. The current priority is functional engine features and usability—not a public launch.
 
