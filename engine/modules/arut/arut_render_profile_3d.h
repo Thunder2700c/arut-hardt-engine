@@ -35,6 +35,7 @@ private:
     real_t texture_mipmap_bias = 0.0;
     int32_t positional_shadow_atlas_size = 1024;
     bool apply_on_ready = true;
+    bool apply_on_change = true;
 
     void _apply_if_active();
 
@@ -78,9 +79,14 @@ public:
     int32_t get_positional_shadow_atlas_size() const { return positional_shadow_atlas_size; }
     void set_apply_on_ready(bool value);
     bool get_apply_on_ready() const { return apply_on_ready; }
+    void set_apply_on_change(bool value);
+    bool get_apply_on_change() const { return apply_on_change; }
 
-    // Applies the current profile to the node's viewport immediately.
-    // Useful for native editor tools or C++ gameplay code that changes profiles.
+    // Applies the current profile to its viewport immediately, regardless of
+    // the automatic-application flags. A missing viewport is handled safely.
+    void apply_to_current_viewport() const;
+
+    // Backward-compatible explicit-apply API for existing native callers.
     void apply_now();
     void apply_to_viewport(Viewport *p_viewport) const;
 };
