@@ -5,10 +5,11 @@
 #include "core/input/input_event.h"
 #include "core/input/input_map.h"
 #include "core/math/color.h"
+#include "core/math/math_defs.h"
 #include "core/object/class_db.h"
 #include "core/os/keyboard.h"
 #include "core/variant/variant.h"
-#include "scene/2d/canvas_layer.h"
+#include "scene/main/canvas_layer.h"
 #include "scene/3d/camera_3d.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/physics/collision_shape_3d.h"
@@ -262,7 +263,7 @@ void ArutCharacter3D::_create_default_camera() {
     default_camera = memnew(Camera3D);
     default_camera->set_name("ArutDefaultCamera");
     default_camera->set_position(Vector3(0.0, 0.12, camera_distance));
-    default_camera->set_rotation(Vector3(-0.12, Math_PI, 0.0));
+    default_camera->set_rotation(Vector3(-0.12, 0.0, 0.0));
     default_camera->set_current(true);
     camera_pivot->add_child(default_camera);
 }
