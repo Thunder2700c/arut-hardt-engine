@@ -18,7 +18,7 @@ One shared core, API and project format.
 
 Repository: https://github.com/Thunder2700c/arut-hardt-engine  
 Default/canonical working branch: `main`. Keep all ongoing work on `main`; do not create feature branches or reopen superseded pull requests. Older branch refs remain on GitHub as historical work because branch deletion is not available through the connected operation set; do not use or force-reset them.  
-Latest main commit (2026-10-17): `3d0c138c245fed208b65120cacb59a0ee17220e7` — ports runtime render-profile switching while preserving the existing renderer-compatibility behavior.
+Most recent code fix covered by this status snapshot: `2bcc1a372378178ae1e8c848278c44e1fce295a5` (2026-10-17) — fixes the Android runtime-branding patch hunk. This status synchronization is a documentation-only follow-up; consult GitHub `main` for the exact current HEAD.
 
 Keep PEAK separate. Do not merge into PEAK or change its main branch as a side effect.
 
@@ -40,10 +40,11 @@ Keep PEAK separate. Do not merge into PEAK or change its main branch as a side e
 
 - Successful Android ARM64 workflow run: [39024274125](https://github.com/Thunder2700c/arut-hardt-engine/actions/runs/39024274125), source commit `158ea1efb2c897d52adb8f676376f59bbfc7aec5` (2026-10-17).
 - At that commit, patch checks, launcher icon step as it existed at the time, C++ preflight, five ARUT module object builds, full Android editor compile, Gradle packaging and upload passed. The native GDExtension build/packaging jobs also passed.
-- Latest branch commit `a342f26` adds the runtime identity patch, assigns `templates/arut_character_lab/icon.png` as that project's icon, and points its `project.godot` setting to it. The adaptive/legacy launcher-icon generator was also changed after the last successful build to write the shared Android library resources. **None of these newer source/workflow changes has yet been verified by a later CI run.**
+- The runtime identity patch, character-lab project icon wiring, adaptive/legacy launcher-icon generation, and uploaded mannequin GLB checks were added after the successful Android run above and still need a passing build.
+- Android workflow failure: [run 39050293595](https://github.com/Thunder2700c/arut-hardt-engine/actions/runs/39050293595), source commit `680e6bee5e1f9def46514f94e1d406408e43798d` (2026-10-17), failed at `Validate and apply ARUT-HARDT engine patches` while checking `0003-arut-runtime-branding.patch` against `platform/android/java/editor/src/main/res/values/strings.xml`. The three-line hunk lacked trailing context; integration commit `2bcc1a372378178ae1e8c848278c44e1fce295a5` adds the following resource line as context. A matching local `git apply --check` reproduction passed with that context. The failed run skipped C++ preflight, Android compilation, Gradle packaging and artifact upload. A fresh workflow after the fix has not been run; build/package status remains **unverified**.
 - The user's `[ARUT] SMOKE TEST PASSED` runtime message confirms the separate C++ GDExtension smoke-test project loaded. It does not prove the built-in Car3D, Character3D, ragdoll, or RenderProfile behavior in the editor or in a character lab scene.
 - The app icon, adaptive icon, project/game icon and exported game icon are separate resource paths. Successful generation/copy steps do not replace a device-side visual verification.
-- A new source patch changes `version.py`'s human-facing name to `ARUT-HARDT Engine` while intentionally keeping `short_name = "godot"`, and changes the Android editor run-window label to `ARUT Run window`. This is **source-written, not yet built or visually verified**. Perform a wider source search for other product-facing strings; preserve Godot attribution and licence notices in About/docs.
+- A new source patch changes `version.py`'s human-facing name to `ARUT-HARDT Engine` while intentionally keeping `short_name = "godot"`, and changes the Android editor run-window label to `ARUT Play window`. This is **source-written, not yet built or visually verified**. Perform a wider source search for other product-facing strings; preserve Godot attribution and licence notices in About/docs.
 - `ArutCar3D`, `ArutCharacter3D`, `ArutRagdollDummy3D` and the baseline `ArutRenderProfile3D` were source-compiled at the successful commit; their in-scene behavior, node-browser visibility and phone runtime behavior remain unverified.
 - Main commit `3d0c138c245fed208b65120cacb59a0ee17220e7` ports live render-profile switching by adding independent `quality_apply_on_change`, editor-safe automatic application, and `apply_to_current_viewport()` while retaining `apply_now()` compatibility. The source commit is present, but GitHub reported no CI status or workflow run for it; this change is **not yet build-verified**.
 
@@ -58,7 +59,7 @@ Keep PEAK separate. Do not merge into PEAK or change its main branch as a side e
 
 ## Next actions
 
-1. Run the manual `Build ARUT Mobile (Android ARM64)` workflow on the current `main` commit to compile the new render-profile switching changes and the current module. Confirm the workflow is for commit `3d0c138c245fed208b65120cacb59a0ee17220e7` or a newer reviewed commit; do not claim success without a completed run.
+1. Dispatch `Build ARUT Mobile (Android ARM64)` on current `main` after the runtime-branding patch-context fix. Run `39050293595` failed before C++ compilation, so verify a fresh run reaches patch validation, C++ preflight/object builds, full Android editor compilation, Gradle packaging and artifact upload before reporting a successful APK/editor build.
 2. Build a mobile-first grass/foliage shader prototype in an isolated renderer demo, including wind, cutout, sensible distance/instance budgets, and preserved normals/UV behavior.
 3. Audit and complete the first-party anime/PBR material path without creating a duplicate of the existing `ArutAnimeLitMaterial3D` or replacing the current renderer-compatibility logic.
 4. Add the compact CC0 animated robot asset to the character lab and validate GLB/FBX import, Skeleton3D hierarchy and clip names. Preserve the asset license/source in the manifest.
