@@ -61,7 +61,13 @@ void ArutRenderProfile3D::_bind_methods() {
     BIND_ENUM_CONSTANT(CUSTOM);
 }
 
-void ArutRenderProfile3D::_ready() {
+void ArutRenderProfile3D::_notification(int p_what) {
+    if (p_what == NOTIFICATION_READY) {
+        _on_ready();
+    }
+}
+
+void ArutRenderProfile3D::_on_ready() {
     if (apply_on_ready) {
         apply_to_viewport(get_viewport());
     }
