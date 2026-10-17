@@ -52,7 +52,7 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 **Gate:** the selected backend builds on target platforms and serves the standard body/collision/query APIs.
 
 ## Phase 4 — Original editor workflows and templates
-- [ ] Ship an ARUT Test Mannequin: neutral matte-white humanoid, proper Skeleton3D, idle/walk/run/jump animations and capsule collision.
+- [ ] Prototype the first white dummy using Quaternius Animated LowPoly Robot (CC0, 14 clips, ~7 MB source pack) with white material overrides; then ship an engine-owned ARUT Test Mannequin with a proper Skeleton3D and idle/walk/run/jump animations.
 - [ ] Add a C++-native animation state/mapping workflow with sensible locomotion defaults and editable Inspector properties.
 - [ ] Include an immediately runnable vehicle lab with an actual chassis/wheels, collision, mobile controls, reset, and car telemetry.
 - [ ] Curate a small CC0 character/animation pack; do not bundle complete multi-hundred-megabyte source packs into the engine APK.
