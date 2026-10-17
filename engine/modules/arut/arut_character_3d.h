@@ -3,9 +3,11 @@
 #include <algorithm>
 
 #include "core/math/vector2.h"
+#include "core/string/node_path.h"
 #include "core/string/string_name.h"
 #include "scene/3d/physics/character_body_3d.h"
 
+class AnimationPlayer;
 class Camera3D;
 class CollisionShape3D;
 class Node3D;
@@ -42,6 +44,15 @@ private:
     StringName jump_action = "arut_jump";
     StringName sprint_action = "arut_sprint";
 
+    bool animation_enabled = true;
+    NodePath animation_player_path = NodePath("ArutTestMannequin/Model/AnimationPlayer");
+    NodePath animation_visual_root_path = NodePath("ArutTestMannequin");
+    StringName animation_idle_clip = "RobotArmature|Robot_Idle";
+    StringName animation_walk_clip = "RobotArmature|Robot_Walking";
+    StringName animation_run_clip = "RobotArmature|Robot_Running";
+    StringName animation_jump_clip = "RobotArmature|Robot_Jump";
+    real_t animation_blend_time = 0.16;
+
     Vector2 move_input;
     bool jump_requested = false;
     bool sprint_active = false;
@@ -50,6 +61,9 @@ private:
     CollisionShape3D *default_collision_shape = nullptr;
     Node3D *camera_pivot = nullptr;
     Camera3D *default_camera = nullptr;
+    AnimationPlayer *animation_player = nullptr;
+    Node3D *character_visual_root = nullptr;
+    StringName active_animation;
     ArutRagdollDummy3D *ragdoll_dummy = nullptr;
     int32_t joystick_touch_index = -1;
     int32_t look_touch_index = -1;
@@ -66,6 +80,8 @@ private:
     void _create_default_collision();
     void _create_default_camera();
     void _create_touch_hint_overlay();
+    StringName _resolve_animation_clip(const StringName &p_clip) const;
+    void _update_character_animation(bool p_force_idle = false);
     void _start_ragdoll();
 
 protected:
@@ -121,6 +137,23 @@ public:
     StringName get_jump_action() const { return jump_action; }
     void set_sprint_action(const StringName &value) { sprint_action = value; }
     StringName get_sprint_action() const { return sprint_action; }
+
+    void set_animation_enabled(bool value) { animation_enabled = value; }
+    bool get_animation_enabled() const { return animation_enabled; }
+    void set_animation_player_path(const NodePath &value) { animation_player_path = value; }
+    NodePath get_animation_player_path() const { return animation_player_path; }
+    void set_animation_visual_root_path(const NodePath &value) { animation_visual_root_path = value; }
+    NodePath get_animation_visual_root_path() const { return animation_visual_root_path; }
+    void set_animation_idle_clip(const StringName &value) { animation_idle_clip = value; }
+    StringName get_animation_idle_clip() const { return animation_idle_clip; }
+    void set_animation_walk_clip(const StringName &value) { animation_walk_clip = value; }
+    StringName get_animation_walk_clip() const { return animation_walk_clip; }
+    void set_animation_run_clip(const StringName &value) { animation_run_clip = value; }
+    StringName get_animation_run_clip() const { return animation_run_clip; }
+    void set_animation_jump_clip(const StringName &value) { animation_jump_clip = value; }
+    StringName get_animation_jump_clip() const { return animation_jump_clip; }
+    void set_animation_blend_time(real_t value) { animation_blend_time = std::clamp(value, static_cast<real_t>(0.0), static_cast<real_t>(1.0)); }
+    real_t get_animation_blend_time() const { return animation_blend_time; }
 
     void set_move_input(const Vector2 &value) { move_input = value.length() > 1.0 ? value.normalized() : value; }
     Vector2 get_move_input() const { return move_input; }
