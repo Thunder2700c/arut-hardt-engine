@@ -4,6 +4,7 @@
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
 
+#include "arut_car_3d.h"
 #include "arut_runtime.h"
 
 using namespace godot;
@@ -13,6 +14,7 @@ void initialize_arut_native_module(ModuleInitializationLevel p_level) {
         return;
     }
     GDREGISTER_CLASS(ArutRuntime);
+    GDREGISTER_CLASS(ArutCar3D);
 }
 
 void uninitialize_arut_native_module(ModuleInitializationLevel p_level) {
