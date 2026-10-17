@@ -36,10 +36,12 @@ private:
     bool apply_on_ready = true;
 
 protected:
+    void _on_ready();
+
     static void _bind_methods();
+    void _notification(int p_what) override;
 
 public:
-    void _ready() override;
 
     void set_preset(int32_t value);
     int32_t get_preset() const { return preset; }
