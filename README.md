@@ -16,7 +16,7 @@ The initial intended audience is a private group of five people. The current pri
 ## Architecture and status
 The project currently uses a source-build overlay that fetches a pinned Godot 4.7 source tree at build time, applies reviewed patches, builds native code, and packages editor artifacts. It is an early foundation, not yet a complete maintained source fork or custom renderer.
 
-Read [DEVELOPMENT_PROTOCOL.md](DEVELOPMENT_PROTOCOL.md), [ROADMAP.md](ROADMAP.md), [docs/ENGINE_COMPONENT_CATALOG.md](docs/ENGINE_COMPONENT_CATALOG.md), [docs/EDITOR_UX_ARCHITECTURE.md](docs/EDITOR_UX_ARCHITECTURE.md), and [docs/PHYSICS_ARCHITECTURE.md](docs/PHYSICS_ARCHITECTURE.md) before continuing work.
+Read [DEVELOPMENT_PROTOCOL.md](DEVELOPMENT_PROTOCOL.md), [ROADMAP.md](ROADMAP.md), [docs/ENGINE_COMPONENT_CATALOG.md](docs/ENGINE_COMPONENT_CATALOG.md), [docs/EDITOR_UX_ARCHITECTURE.md](docs/EDITOR_UX_ARCHITECTURE.md), [docs/PHYSICS_ARCHITECTURE.md](docs/PHYSICS_ARCHITECTURE.md), and [docs/RENDERING_ARCHITECTURE.md](docs/RENDERING_ARCHITECTURE.md) before continuing work.
 
 ## Repository boundaries
 This repository must not contain PEAK game assets or game-specific files. The game remains separate. Keep required Godot/third-party notices for any dependencies actually included; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
