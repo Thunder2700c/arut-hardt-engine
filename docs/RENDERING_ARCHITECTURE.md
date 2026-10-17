@@ -12,15 +12,23 @@ The current engine source build starts from Godot 4.7 and its existing mobile re
 |---|---:|---:|---:|
 | 3D render scale | 0.80 | 0.90 | 1.00 |
 | Scaling | FSR | FSR | Bilinear |
-| 3D MSAA | Off | 2x | Off |
+| 3D MSAA | Off | 2x | 4x |
 | Screen-space AA | FXAA | Off | Off |
-| Temporal AA | Off | Off | On |
+| Temporal AA | Off | Off | Off |
 | Occlusion culling | On | On | On |
 | Mesh LOD threshold | 1.5 px | 1.0 px | 0.5 px |
 | Shadow atlas | 1024 | 2048 | 4096 |
 | Debanding | On | On | On |
 
-These are starting presets, not measured performance guarantees. Some viewport options depend on the renderer, driver and platform; particularly advanced scaling and TAA options must be checked on the final device. The node's Inspector can override values after choosing a preset. Set the preset to Custom before making a set of manual adjustments if you want to communicate that intention clearly.
+These are starting presets, not measured performance guarantees. High uses 4x MSAA rather than forcing TAA, because TAA is not a portable choice across Godot renderer backends. TAA remains an explicit advanced option for a project whose selected renderer supports it. MetalFX scaling is platform-specific; FSR is the default mobile choice. The node clamps scale, mipmap bias, LOD threshold and FSR sharpness to the ranges exposed by Godot 4.7. The Inspector can override values after choosing a preset; selecting Custom preserves the values already edited.
+
+## Native anime/PBR material resource
+
+`ArutAnimeMaterial3D` is a first-party C++ `ShaderMaterial` resource registered by the built-in module. Its shader source is embedded in the class, so a project can create the resource without copying a shader asset. It exposes an optional albedo texture, normal map and AO texture, tint, UV texture scale, roughness, specular strength, rim strength/tint and normal-map depth. It uses Godot's existing spatial renderer with toon diffuse plus GGX specular; it does not replace the renderer or claim to reproduce a proprietary game pipeline. Actual shader compilation/visual output still requires the engine build and runtime validation.
+
+## Runtime render metrics
+
+`ArutRenderProfile3D.get_viewport_metrics()` exposes native per-frame counters for visible objects, visible primitives, visible draw calls, shadow draw calls and canvas draw calls. These are draw/scene counters, not GPU timings, FPS measurements or memory totals. Counters may be zero before the first rendered frame, and renderer/platform support must be verified before using them for automatic quality decisions.
 
 ## Mobile-friendly optimization strategy
 
