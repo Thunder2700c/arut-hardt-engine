@@ -54,6 +54,12 @@ jobs:
             git -C godot apply "$GITHUB_WORKSPACE/${patch}"
           done
 
+      - name: Apply ARUT branding assets
+        shell: bash
+        run: |
+          test -f engine/branding/arut_mark.svg
+          cp engine/branding/arut_mark.svg godot/editor/icons/Godot.svg
+
       - name: Add built-in ARUT C++ module
         shell: bash
         run: |
