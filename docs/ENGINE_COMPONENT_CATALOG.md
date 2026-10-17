@@ -51,3 +51,8 @@ Core behavior belongs in native C++ classes or engine modules. Properties should
 ## Implementation status (2026-10-17)
 
 The first `engine/modules/arut/ArutCar3D` source has been added to the engine repository branch. It currently provides editable geometry/suspension/drive/tire/control properties, three presets, auto-managed four-corner raycast probes and a simple native spring/damper plus bounded tire-force model. Its source has not yet been compiled or run. Visual wheel meshes/rotation, a torque curve, reverse-gear model, detailed slip curves, differential, ABS/TCS, and a dedicated debug panel are not implemented yet.
+
+
+## ArutCharacter3D first-pass source
+
+A built-in C++ `ArutCharacter3D` class has also been added to the ARUT module. It exposes walk/sprint speed, ground acceleration/friction, air acceleration/control, jump velocity, gravity and action mappings; native setter methods allow touch input and AI integration without GDScript. This source is not yet compiled or runtime-verified. Camera rig, animation, input buffering, crouch, ledge handling and polished slope/step defaults remain future work.
