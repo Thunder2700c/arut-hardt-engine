@@ -32,7 +32,7 @@ The engine-only foundation has its own history. Do not continue work in the old 
 - `engine/patches/0001-arut-editor-identity.patch` defines the initial ARUT-HARDT theme preset and window/project-manager identity; the build overlays original mark and custom node icons into the editor source.
 
 ## Build truth
-The permanent repository's Android and Linux workflows have not been verified by a successful run in this branch. The earlier installed editor APK came from the previous PEAK workflow; it does not prove this repo's workflows or native code compiled. The renderer shader remains a prototype. Native `ArutCar3D` and `ArutCharacter3D` source now exists in `engine/modules/arut/`, but neither has been compiled or runtime-verified.
+The permanent repository's Android and Linux workflows have not been verified by a successful run in this branch. The earlier installed editor APK came from the previous PEAK workflow; it does not prove this repo's workflows or native code compiled. The renderer shader remains a prototype. Native Car3D, Character3D, RagdollDummy3D and RenderProfile3D source now exists in `engine/modules/arut/`, but none has been compiled or runtime-verified. The Android workflow packages the `arut-character-ragdoll-lab` project as a separate artifact.
 
 ## Physics findings
 - The starter ragdoll uses the active Godot `PhysicsServer3D` through standard rigid bodies and joints; this is not a separate ARUT physics solver.
