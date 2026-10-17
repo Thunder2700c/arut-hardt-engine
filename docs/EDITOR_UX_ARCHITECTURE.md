@@ -62,3 +62,8 @@ The first identity batch now has source assets at `engine/branding/` and patch `
 ## Native component icons and profiling node
 
 The source build also overlays `ArutCar3D.svg`, `ArutCharacter3D.svg`, `ArutRagdollDummy3D.svg`, and `ArutRenderProfile3D.svg` into the editor icon directory. The corresponding classes are registered by the custom native module. Whether all icons appear in the expected node-browser contexts still needs confirmation from a compiled editor.
+
+
+## About and first-run identity patch
+
+A second source patch updates the About dialog title and adds the explicit line “ARUT-HARDT Engine is based on Godot Engine.” while retaining the original Godot contributor copyright statements. It also replaces the Godot-Asset-Store-focused empty-project welcome text with ARUT project/starter-template wording. The build overlays actual `Logo.svg` and `TitleBarLogo.svg` assets in addition to the 16×16 engine mark and node icons. This improves the product identity without concealing the upstream origin.
