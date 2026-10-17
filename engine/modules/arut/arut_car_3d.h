@@ -71,6 +71,7 @@ protected:
     static void _bind_methods();
 
 public:
+    ArutCar3D();
     void _ready() override;
     void _physics_process(double p_delta) override;
 
