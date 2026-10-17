@@ -1,5 +1,7 @@
 #include "arut_character_3d.h"
 
+#include <initializer_list>
+
 #include "arut_ragdoll_dummy_3d.h"
 #include "core/input/input.h"
 #include "core/input/input_event.h"
