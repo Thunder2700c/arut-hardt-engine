@@ -178,10 +178,10 @@ void ArutRagdollDummy3D::_build_ragdoll() {
     _create_capsule_part("Pelvis", Vector3(0.0, 0.96, 0.0), 0.18, 0.34, 8.0, trousers);
     _create_capsule_part("Torso", Vector3(0.0, 1.38, 0.0), 0.23, 0.62, 15.0, shirt);
     _create_sphere_part("Head", Vector3(0.0, 1.91, 0.0), 0.17, 4.0, skin);
-    _create_capsule_part("UpperArm_L", Vector3(-0.34, 1.40, 0.0), 0.085, 0.48, 2.4, shirt, -Math_PI * 0.5);
-    _create_capsule_part("UpperArm_R", Vector3(0.34, 1.40, 0.0), 0.085, 0.48, 2.4, shirt, Math_PI * 0.5);
-    _create_capsule_part("Forearm_L", Vector3(-0.61, 1.20, 0.0), 0.072, 0.43, 1.6, skin, -Math_PI * 0.5);
-    _create_capsule_part("Forearm_R", Vector3(0.61, 1.20, 0.0), 0.072, 0.43, 1.6, skin, Math_PI * 0.5);
+    _create_capsule_part("UpperArm_L", Vector3(-0.34, 1.40, 0.0), 0.085, 0.48, 2.4, shirt, -Math::PI * 0.5);
+    _create_capsule_part("UpperArm_R", Vector3(0.34, 1.40, 0.0), 0.085, 0.48, 2.4, shirt, Math::PI * 0.5);
+    _create_capsule_part("Forearm_L", Vector3(-0.61, 1.20, 0.0), 0.072, 0.43, 1.6, skin, -Math::PI * 0.5);
+    _create_capsule_part("Forearm_R", Vector3(0.61, 1.20, 0.0), 0.072, 0.43, 1.6, skin, Math::PI * 0.5);
     _create_capsule_part("Thigh_L", Vector3(-0.13, 0.68, 0.0), 0.12, 0.56, 5.5, trousers);
     _create_capsule_part("Thigh_R", Vector3(0.13, 0.68, 0.0), 0.12, 0.56, 5.5, trousers);
     _create_capsule_part("Shin_L", Vector3(-0.13, 0.27, 0.0), 0.095, 0.48, 3.6, shoes);
