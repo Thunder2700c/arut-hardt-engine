@@ -164,3 +164,21 @@ jobs:
           path: arut-anime-surface-demo.zip
           if-no-files-found: error
           retention-days: 14
+
+  character-ragdoll-lab:
+    name: Package native character and ragdoll test project
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout engine project
+        uses: actions/checkout@v6
+      - name: Package character lab
+        run: |
+          cd templates/arut_character_lab
+          zip -r "$GITHUB_WORKSPACE/arut-character-ragdoll-lab.zip" .
+      - name: Upload starter project
+        uses: actions/upload-artifact@v6
+        with:
+          name: arut-character-ragdoll-lab
+          path: arut-character-ragdoll-lab.zip
+          if-no-files-found: error
+          retention-days: 14
