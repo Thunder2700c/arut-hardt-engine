@@ -28,15 +28,16 @@ The engine-only foundation has its own history. Do not continue work in the old 
 - `docs/PHYSICS_ARCHITECTURE.md` now compares backend candidates without declaring Jolt the winner.
 - `docs/EDITOR_UX_ARCHITECTURE.md` describes a genuinely branded editor redesign.
 - `docs/ENGINE_COMPONENT_CATALOG.md` specifies first-class nodes, starting with Car3D.
-- `engine/modules/arut/` contains the first built-in native C++ module with `ArutCar3D` and `ArutCharacter3D` source. Both editor workflows copy this module into the pinned Godot source before SCons runs. This is source-level implementation only so far.
+- `engine/modules/arut/` contains built-in native C++ source for `ArutCar3D`, `ArutCharacter3D`, `ArutRagdollDummy3D` and `ArutRenderProfile3D`. Both editor workflows copy this module into the pinned Godot source before SCons runs. This is source-level implementation only so far.
 - `engine/patches/0001-arut-editor-identity.patch` defines the initial ARUT-HARDT theme preset and window/project-manager identity; the build overlays original mark and custom node icons into the editor source.
 
 ## Build truth
 The permanent repository's Android and Linux workflows have not been verified by a successful run in this branch. The earlier installed editor APK came from the previous PEAK workflow; it does not prove this repo's workflows or native code compiled. The renderer shader remains a prototype. Native `ArutCar3D` and `ArutCharacter3D` source now exists in `engine/modules/arut/`, but neither has been compiled or runtime-verified.
 
 ## Physics findings
+- The starter ragdoll uses the active Godot `PhysicsServer3D` through standard rigid bodies and joints; this is not a separate ARUT physics solver.
 - Current project baseline is Godot 4.7 with built-in Godot Physics/Jolt options; Jolt is not a permanent decision.
-- Native `ArutCar3D` source provides Inspector properties, editable compact/sedan/off-road presets, internally managed wheel raycasts, spring/damper force, simple steering, drive/braking inputs and contact/speed telemetry. Native `ArutCharacter3D` source provides walk/sprint, ground acceleration/friction, air control, gravity, jump and input-action mapping. Neither is compiled or run yet; both are first-pass components, not finished gameplay systems.
+- Native `ArutCar3D` source provides Inspector properties, editable compact/sedan/off-road presets, internally managed wheel raycasts, spring/damper force, simple steering, drive/braking inputs and contact/speed telemetry. Native `ArutCharacter3D` now generates its own humanoid dummy, capsule collider and third-person camera; provides WASD/arrow movement, sprint, jump and phone touch controls; and hands off to a procedural articulated ragdoll on R/touch. `ArutRagdollDummy3D` builds connected rigid bodies/cone-twist joints. `ArutRenderProfile3D` applies Mobile/Balanced/High viewport profiles with render scaling, AA, occlusion culling, mesh LOD threshold, shadow atlas, texture mip bias and debanding. None is compiled or runtime-verified yet.
 - The ARUT-HARDT theme/identity patch and custom SVG brand/node icons are written, but source application/build is not yet verified.
 - A community Godot 4.x PhysX 5 backend exists as work-in-progress and needs a source/commit, license/notice, Android ARM64 and build-path audit before adoption.
 - Bullet and ReactPhysics3D remain comparison candidates; neither is a drop-in Godot 4.7 backend.
