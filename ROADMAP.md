@@ -14,8 +14,9 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 
 ## Phase 1 — First-class C++ engine components
 - [ ] Define ARUT node names/categories and Inspector conventions.
-- [ ] Implement high-level `ArutCar3D`: manages basic wheel probes/suspension, steering, drive layout, engine force, brakes, tire grip and control mapping through Inspector properties.
-- [ ] Add compact/sedan/off-road vehicle presets with no script requirement.
+- [x] Add first-pass built-in C++ `ArutCar3D` source and module-registration scaffold (not yet compiled/runtime-verified).
+- [ ] Refine high-level `ArutCar3D`: validate module integration and physics behavior; manage wheel probes/suspension, steering, drive layout, engine force, brakes, tire grip and control mapping through Inspector properties.
+- [x] Add source-level compact/sedan/off-road preset property (not yet compiled/verified).
 - [ ] Add native FPS/third-person character movement with tunable acceleration, ground friction, steps/slopes, air control and jumping.
 - [ ] Add C++ interactable/rigid-body and physical-prop helpers.
 - [ ] Add physics/vehicle diagnostics: contacts, speed, wheel compression and frame-time telemetry.
@@ -66,7 +67,8 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 - [ ] Ask the user and four other intended testers to try the engine only when it has enough real features to evaluate.
 
 ## Existing prototypes (not yet validated)
-- `native/arut_native/`: initial C++ GDExtension scaffold.
+- `engine/modules/arut/`: initial built-in C++ module and `ArutCar3D` source; not compiled yet.
+- `native/arut_native/`: initial optional C++ GDExtension smoke-test scaffold.
 - `renderer/demo/`: isolated anime surface shader/demo prototype.
 - `docs/PHYSICS_ARCHITECTURE.md`: open physics-backend evaluation, not a selected or integrated backend.
 
