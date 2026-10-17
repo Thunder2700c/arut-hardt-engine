@@ -2,11 +2,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 
 #include <godot_cpp/classes/input.hpp>
 #include <godot_cpp/classes/input_map.hpp>
 #include <godot_cpp/core/class_db.hpp>
-#include <godot_cpp/variant/utility_functions.hpp>
 
 namespace godot {
 
@@ -199,7 +200,7 @@ void ArutCar3D::_physics_process(double p_delta) {
 
         Vector3 wheel_forward = body_forward;
         if (i < 2) {
-            const real_t steering_radians = _steering * _max_steering_angle_degrees * static_cast<real_t>(Math_PI / 180.0);
+            const real_t steering_radians = _steering * _max_steering_angle_degrees * static_cast<real_t>(0.017453292519943295);
             wheel_forward = Basis(body_up, steering_radians) * wheel_forward;
         }
         wheel_forward -= normal * wheel_forward.dot(normal);
@@ -290,7 +291,7 @@ StringName ArutCar3D::get_steer_right_action() const { return _steer_right_actio
 void ArutCar3D::set_handbrake_action(const StringName &p_value) { _handbrake_action = p_value; }
 StringName ArutCar3D::get_handbrake_action() const { return _handbrake_action; }
 void ArutCar3D::set_wheel_collision_mask(int64_t p_value) {
-    _wheel_collision_mask = std::clamp(p_value, static_cast<int64_t>(1), static_cast<int64_t>(UINT32_MAX));
+    _wheel_collision_mask = std::clamp(p_value, static_cast<int64_t>(1), static_cast<int64_t>(std::numeric_limits<std::uint32_t>::max()));
     _update_wheel_probes();
 }
 int64_t ArutCar3D::get_wheel_collision_mask() const { return _wheel_collision_mask; }
