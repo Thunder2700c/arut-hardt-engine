@@ -12,10 +12,11 @@ This is currently an upstream source-build overlay, not yet a full mirrored copy
 
 ## Layers
 1. Godot baseline: scene tree, editor, physics, importers, platform runtime.
-2. Native C++ GDExtension: CPU-side systems that need native classes.
-3. Engine patch layer: renderer/editor/runtime internals unavailable through GDExtension.
-4. Renderer assets: tested shaders and material presets.
-5. Quality profiles: Mobile/Balanced/High with explicitly costed options.
+2. Built-in ARUT C++ module overlay (`engine/modules/arut`): first-class native component classes registered directly in the engine.
+3. Optional native C++ GDExtension: CPU-side systems that do not need built-in engine/editor integration.
+4. Engine patch layer: renderer/editor/runtime internals unavailable through GDExtension.
+5. Renderer assets: tested shaders and material presets.
+6. Quality profiles: Mobile/Balanced/High with explicitly costed options.
 
 ## Graphics order
 1. Material/colour consistency and low-cost key light.
