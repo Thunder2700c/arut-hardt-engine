@@ -65,15 +65,16 @@ private:
 
     RayCast3D *wheel_probes[4] = { nullptr, nullptr, nullptr, nullptr };
 
+    void _on_ready();
+    void _on_physics_process(double p_delta);
     void _update_wheel_probes();
 
 protected:
     static void _bind_methods();
+    void _notification(int p_what) override;
 
 public:
     ArutCar3D();
-    void _ready() override;
-    void _physics_process(double p_delta) override;
 
     void set_vehicle_preset(int32_t value);
     int32_t get_vehicle_preset() const { return vehicle_preset; }
