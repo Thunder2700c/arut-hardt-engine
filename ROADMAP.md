@@ -28,7 +28,7 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 **Gate:** core components are searchable in the node browser and configurable without writing GDScript.
 
 ## Phase 2 — ARUT-HARDT editor identity and UI redesign
-- [x] Add initial ARUT-HARDT theme-preset/window/project-manager identity patch plus original mark and custom native-node icon SVGs (not yet applied in a verified build).
+- [x] Add ARUT-HARDT theme/window/project-manager identity patches, branded About/welcome text, original mark/logos, and native component icons (not yet applied in a verified build).
 - [ ] Finish branding in splash/about surfaces and platform application identity; retain Godot attribution in notices/docs.
 - [ ] Create original theme, icons, typography and spacing—not only different colours.
 - [ ] Establish a useful default 3D layout: node/scene panel, viewport, Inspector, file/assets panel and diagnostics.
