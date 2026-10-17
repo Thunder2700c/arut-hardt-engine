@@ -35,6 +35,10 @@ roughness = 0.8
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_main")
 
+[node name="ArutRenderProfile3D" type="ArutRenderProfile3D" parent="."]
+quality_preset = 0
+quality_apply_on_ready = true
+
 [node name="KeyLight" type="DirectionalLight3D" parent="."]
 rotation_degrees = Vector3(-48, -32, 0)
 light_color = Color(0.9, 0.94, 1, 1)
