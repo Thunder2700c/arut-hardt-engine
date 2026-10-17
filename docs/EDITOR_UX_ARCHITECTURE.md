@@ -52,3 +52,8 @@ Only show a feature when it is implemented. Do not add decorative menu entries t
 - Preserve scene/project compatibility between ARUT Mobile and HARDT Studio at matching engine versions.
 - Do not copy proprietary UI code/assets from Unity or Unreal. Build original styles and icons.
 - No user phone-test is required for every design iteration. Batch source-level UI work and include it in the private-alpha package.
+
+
+## Initial source changes (not yet build-verified)
+
+The first identity batch now has source assets at `engine/branding/` and patch `engine/patches/0001-arut-editor-identity.patch`. The patch adds an ARUT-HARDT theme preset with a dark navy base and turquoise accent, switches the default preset for fresh editor settings, and changes editor/project-manager title text. The Android and desktop workflows overlay the ARUT mark and custom Car3D/Character3D node icons. This is the start of the UI redesign, not a claim that the complete editor layout has already been redesigned.
