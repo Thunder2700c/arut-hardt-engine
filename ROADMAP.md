@@ -69,7 +69,7 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 - [ ] Ask the user and four other intended testers to try the engine only when it has enough real features to evaluate.
 
 ## Existing prototypes (not yet validated)
-- `engine/modules/arut/`: initial built-in C++ module and `ArutCar3D` source; not compiled yet.
+- `engine/modules/arut/`: initial built-in C++ module with `ArutCar3D` and `ArutCharacter3D` sources; not compiled yet.
 - `native/arut_native/`: initial optional C++ GDExtension smoke-test scaffold.
 - `renderer/demo/`: isolated anime surface shader/demo prototype.
 - `docs/PHYSICS_ARCHITECTURE.md`: open physics-backend evaluation, not a selected or integrated backend.
