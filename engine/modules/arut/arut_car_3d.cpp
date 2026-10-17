@@ -8,6 +8,8 @@
 #include "core/variant/variant.h"
 
 void ArutCar3D::_bind_methods() {
+    ClassDB::bind_method(D_METHOD("set_vehicle_preset", "value"), &ArutCar3D::set_vehicle_preset);
+    ClassDB::bind_method(D_METHOD("get_vehicle_preset"), &ArutCar3D::get_vehicle_preset);
     ClassDB::bind_method(D_METHOD("set_wheel_track", "value"), &ArutCar3D::set_wheel_track);
     ClassDB::bind_method(D_METHOD("get_wheel_track"), &ArutCar3D::get_wheel_track);
     ClassDB::bind_method(D_METHOD("set_front_axle_offset", "value"), &ArutCar3D::set_front_axle_offset);
@@ -64,6 +66,9 @@ void ArutCar3D::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_speed_kph"), &ArutCar3D::get_speed_kph);
     ClassDB::bind_method(D_METHOD("get_wheel_contact_count"), &ArutCar3D::get_wheel_contact_count);
 
+    ADD_GROUP("Vehicle Setup", "vehicle_");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "vehicle_preset", PROPERTY_HINT_ENUM, "Custom,Compact,Sedan,Off-road"), "set_vehicle_preset", "get_vehicle_preset");
+
     ADD_GROUP("Wheel Layout", "wheel_");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wheel_track", PROPERTY_HINT_RANGE, "0.5,3.5,0.01,or_greater,suffix:m"), "set_wheel_track", "get_wheel_track");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wheel_front_axle_offset", PROPERTY_HINT_RANGE, "-4.0,0.0,0.01,suffix:m"), "set_front_axle_offset", "get_front_axle_offset");
@@ -96,9 +101,74 @@ void ArutCar3D::_bind_methods() {
     ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "control_handbrake_action"), "set_handbrake_action", "get_handbrake_action");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "control_wheel_collision_mask", PROPERTY_HINT_LAYERS_3D_PHYSICS), "set_wheel_collision_mask", "get_wheel_collision_mask");
 
+    BIND_ENUM_CONSTANT(CUSTOM);
+    BIND_ENUM_CONSTANT(COMPACT);
+    BIND_ENUM_CONSTANT(SEDAN);
+    BIND_ENUM_CONSTANT(OFFROAD);
     BIND_ENUM_CONSTANT(FRONT_WHEEL_DRIVE);
     BIND_ENUM_CONSTANT(REAR_WHEEL_DRIVE);
     BIND_ENUM_CONSTANT(ALL_WHEEL_DRIVE);
+}
+
+void ArutCar3D::set_vehicle_preset(int32_t p_value) {
+    vehicle_preset = std::clamp(p_value, static_cast<int32_t>(CUSTOM), static_cast<int32_t>(OFFROAD));
+
+    switch (vehicle_preset) {
+        case COMPACT:
+            wheel_track = 1.46;
+            front_axle_offset = -1.00;
+            rear_axle_offset = 1.00;
+            wheel_mount_height = -0.12;
+            wheel_radius = 0.29;
+            suspension_rest_length = 0.34;
+            suspension_stiffness = 22000.0;
+            suspension_damping = 2700.0;
+            engine_force = 6800.0;
+            brake_force = 9000.0;
+            handbrake_force = 11500.0;
+            max_steering_angle_degrees = 34.0;
+            tire_friction = 1.0;
+            lateral_grip = 1.65;
+            break;
+        case SEDAN:
+            wheel_track = 1.55;
+            front_axle_offset = -1.15;
+            rear_axle_offset = 1.15;
+            wheel_mount_height = -0.15;
+            wheel_radius = 0.34;
+            suspension_rest_length = 0.42;
+            suspension_stiffness = 26000.0;
+            suspension_damping = 3200.0;
+            engine_force = 8500.0;
+            brake_force = 11000.0;
+            handbrake_force = 14000.0;
+            max_steering_angle_degrees = 32.0;
+            tire_friction = 1.05;
+            lateral_grip = 1.8;
+            break;
+        case OFFROAD:
+            wheel_track = 1.72;
+            front_axle_offset = -1.35;
+            rear_axle_offset = 1.35;
+            wheel_mount_height = -0.08;
+            wheel_radius = 0.47;
+            suspension_rest_length = 0.62;
+            suspension_stiffness = 34000.0;
+            suspension_damping = 4200.0;
+            engine_force = 10500.0;
+            brake_force = 13500.0;
+            handbrake_force = 16000.0;
+            max_steering_angle_degrees = 30.0;
+            tire_friction = 1.15;
+            lateral_grip = 1.6;
+            break;
+        case CUSTOM:
+        default:
+            // Keep the user's custom values unchanged.
+            break;
+    }
+
+    _update_wheel_probes();
 }
 
 void ArutCar3D::_ready() {
