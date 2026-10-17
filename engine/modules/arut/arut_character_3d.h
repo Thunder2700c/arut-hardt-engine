@@ -58,6 +58,10 @@ private:
     Vector2 previous_look_position;
     bool ragdoll_started = false;
 
+    void _on_ready();
+    void _on_process(double p_delta);
+    void _on_physics_process(double p_delta);
+
     void _create_default_dummy();
     void _create_default_collision();
     void _create_default_camera();
@@ -66,11 +70,9 @@ private:
 
 protected:
     static void _bind_methods();
+    void _notification(int p_what) override;
 
 public:
-    void _ready() override;
-    void _physics_process(double p_delta) override;
-    void _process(double p_delta) override;
     void input(const Ref<InputEvent> &p_event) override;
 
     void set_walk_speed(real_t value) { walk_speed = std::clamp(value, static_cast<real_t>(0.0), static_cast<real_t>(50.0)); }
