@@ -54,6 +54,13 @@ jobs:
             git -C godot apply "$GITHUB_WORKSPACE/${patch}"
           done
 
+      - name: Add built-in ARUT C++ module
+        shell: bash
+        run: |
+          test -f engine/modules/arut/config.py
+          mkdir -p godot/modules/arut
+          cp -a engine/modules/arut/. godot/modules/arut/
+
       - name: Compile Linux x86_64 editor
         working-directory: godot
         run: |
