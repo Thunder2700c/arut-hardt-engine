@@ -32,13 +32,18 @@ void ArutRenderProfile3D::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_positional_shadow_atlas_size"), &ArutRenderProfile3D::get_positional_shadow_atlas_size);
     ClassDB::bind_method(D_METHOD("set_apply_on_ready", "value"), &ArutRenderProfile3D::set_apply_on_ready);
     ClassDB::bind_method(D_METHOD("get_apply_on_ready"), &ArutRenderProfile3D::get_apply_on_ready);
+    ClassDB::bind_method(D_METHOD("set_auto_apply_changes", "value"), &ArutRenderProfile3D::set_auto_apply_changes);
+    ClassDB::bind_method(D_METHOD("get_auto_apply_changes"), &ArutRenderProfile3D::get_auto_apply_changes);
+    ClassDB::bind_method(D_METHOD("apply_profile"), &ArutRenderProfile3D::apply_profile);
     ClassDB::bind_method(D_METHOD("apply_to_viewport", "viewport"), &ArutRenderProfile3D::apply_to_viewport);
+    ClassDB::bind_method(D_METHOD("get_viewport_metrics"), &ArutRenderProfile3D::get_viewport_metrics);
 
     ADD_GROUP("Quality Profile", "quality_");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "quality_preset", PROPERTY_HINT_ENUM, "Mobile,Balanced,High,Custom"), "set_preset", "get_preset");
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "quality_apply_on_ready"), "set_apply_on_ready", "get_apply_on_ready");
-    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "quality_render_scale", PROPERTY_HINT_RANGE, "0.25,1.5,0.05"), "set_render_scale", "get_render_scale");
-    ADD_PROPERTY(PropertyInfo(Variant::INT, "quality_scaling_mode", PROPERTY_HINT_ENUM, "Bilinear,FSR,FSR2,MetalFX Spatial,MetalFX Temporal,Nearest"), "set_scaling_mode", "get_scaling_mode");
+    ADD_PROPERTY(PropertyInfo(Variant::BOOL, "quality_auto_apply_changes"), "set_auto_apply_changes", "get_auto_apply_changes");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "quality_render_scale", PROPERTY_HINT_RANGE, "0.1,2.0,0.05"), "set_render_scale", "get_render_scale");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "quality_scaling_mode", PROPERTY_HINT_ENUM, "Bilinear:0,FSR:1,FSR2:2,MetalFX Spatial:3,MetalFX Temporal:4,Nearest:5"), "set_scaling_mode", "get_scaling_mode");
 
     ADD_GROUP("Anti-Aliasing", "aa_");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "aa_msaa_3d", PROPERTY_HINT_ENUM, "Disabled,2x,4x,8x"), "set_msaa_3d", "get_msaa_3d");
@@ -47,13 +52,13 @@ void ArutRenderProfile3D::_bind_methods() {
 
     ADD_GROUP("Optimization", "optimization_");
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "optimization_occlusion_culling"), "set_use_occlusion_culling", "get_use_occlusion_culling");
-    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "optimization_mesh_lod_threshold", PROPERTY_HINT_RANGE, "0,20,0.1,suffix:px"), "set_mesh_lod_threshold", "get_mesh_lod_threshold");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "optimization_mesh_lod_threshold", PROPERTY_HINT_RANGE, "0,1024,0.1,suffix:px"), "set_mesh_lod_threshold", "get_mesh_lod_threshold");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "optimization_shadow_atlas_size", PROPERTY_HINT_ENUM, "256:256,512:512,1024:1024,2048:2048,4096:4096"), "set_positional_shadow_atlas_size", "get_positional_shadow_atlas_size");
-    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "optimization_texture_mipmap_bias", PROPERTY_HINT_RANGE, "-4,4,0.25"), "set_texture_mipmap_bias", "get_texture_mipmap_bias");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "optimization_texture_mipmap_bias", PROPERTY_HINT_RANGE, "-2,2,0.1"), "set_texture_mipmap_bias", "get_texture_mipmap_bias");
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "optimization_debanding"), "set_use_debanding", "get_use_debanding");
 
     ADD_GROUP("Advanced", "advanced_");
-    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "advanced_fsr_sharpness", PROPERTY_HINT_RANGE, "0,1,0.05"), "set_fsr_sharpness", "get_fsr_sharpness");
+    ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "advanced_fsr_sharpness", PROPERTY_HINT_RANGE, "0,2,0.05"), "set_fsr_sharpness", "get_fsr_sharpness");
 
     BIND_ENUM_CONSTANT(MOBILE);
     BIND_ENUM_CONSTANT(BALANCED);
@@ -69,7 +74,13 @@ void ArutRenderProfile3D::_notification(int p_what) {
 
 void ArutRenderProfile3D::_on_ready() {
     if (apply_on_ready) {
-        apply_to_viewport(get_viewport());
+        apply_profile();
+    }
+}
+
+void ArutRenderProfile3D::_apply_if_active() {
+    if (auto_apply_changes && is_inside_tree()) {
+        apply_profile();
     }
 }
 
@@ -105,9 +116,11 @@ void ArutRenderProfile3D::set_preset(int32_t p_value) {
         case HIGH:
             render_scale = 1.0;
             scaling_mode = Viewport::SCALING_3D_MODE_BILINEAR;
-            msaa_3d = Viewport::MSAA_DISABLED;
+            // Keep the built-in High profile portable to the Mobile renderer.
+            // TAA remains an explicit custom option for renderers that support it.
+            msaa_3d = Viewport::MSAA_4X;
             screen_space_aa = Viewport::SCREEN_SPACE_AA_DISABLED;
-            use_taa = true;
+            use_taa = false;
             use_occlusion_culling = true;
             mesh_lod_threshold = 0.5;
             use_debanding = true;
@@ -120,6 +133,57 @@ void ArutRenderProfile3D::set_preset(int32_t p_value) {
             // Selecting Custom preserves all currently edited values.
             break;
     }
+    _apply_if_active();
+}
+
+void ArutRenderProfile3D::set_render_scale(real_t p_value) {
+    render_scale = std::clamp(p_value, static_cast<real_t>(0.1), static_cast<real_t>(2.0));
+    _apply_if_active();
+}
+
+void ArutRenderProfile3D::set_scaling_mode(int32_t p_value) {
+    scaling_mode = std::clamp(p_value, 0, static_cast<int32_t>(Viewport::SCALING_3D_MODE_MAX - 1));
+    _apply_if_active();
+}
+
+void ArutRenderProfile3D::set_msaa_3d(int32_t p_value) {
+    msaa_3d = std::clamp(p_value, 0, static_cast<int32_t>(Viewport::MSAA_MAX - 1));
+    _apply_if_active();
+}
+
+void ArutRenderProfile3D::set_screen_space_aa(int32_t p_value) {
+    screen_space_aa = std::clamp(p_value, 0, static_cast<int32_t>(Viewport::SCREEN_SPACE_AA_MAX - 1));
+    _apply_if_active();
+}
+
+void ArutRenderProfile3D::set_use_taa(bool p_value) {
+    use_taa = p_value;
+    _apply_if_active();
+}
+
+void ArutRenderProfile3D::set_use_occlusion_culling(bool p_value) {
+    use_occlusion_culling = p_value;
+    _apply_if_active();
+}
+
+void ArutRenderProfile3D::set_mesh_lod_threshold(real_t p_value) {
+    mesh_lod_threshold = std::clamp(p_value, static_cast<real_t>(0.0), static_cast<real_t>(1024.0));
+    _apply_if_active();
+}
+
+void ArutRenderProfile3D::set_use_debanding(bool p_value) {
+    use_debanding = p_value;
+    _apply_if_active();
+}
+
+void ArutRenderProfile3D::set_fsr_sharpness(real_t p_value) {
+    fsr_sharpness = std::clamp(p_value, static_cast<real_t>(0.0), static_cast<real_t>(2.0));
+    _apply_if_active();
+}
+
+void ArutRenderProfile3D::set_texture_mipmap_bias(real_t p_value) {
+    texture_mipmap_bias = std::clamp(p_value, static_cast<real_t>(-2.0), static_cast<real_t>(2.0));
+    _apply_if_active();
 }
 
 void ArutRenderProfile3D::set_positional_shadow_atlas_size(int32_t p_value) {
@@ -131,6 +195,27 @@ void ArutRenderProfile3D::set_positional_shadow_atlas_size(int32_t p_value) {
         }
     }
     positional_shadow_atlas_size = nearest;
+    _apply_if_active();
+}
+
+void ArutRenderProfile3D::set_apply_on_ready(bool p_value) {
+    apply_on_ready = p_value;
+    if (apply_on_ready) {
+        _apply_if_active();
+    }
+}
+
+void ArutRenderProfile3D::set_auto_apply_changes(bool p_value) {
+    auto_apply_changes = p_value;
+    if (auto_apply_changes) {
+        _apply_if_active();
+    }
+}
+
+void ArutRenderProfile3D::apply_profile() {
+    if (is_inside_tree()) {
+        apply_to_viewport(get_viewport());
+    }
 }
 
 void ArutRenderProfile3D::apply_to_viewport(Viewport *p_viewport) const {
@@ -149,4 +234,28 @@ void ArutRenderProfile3D::apply_to_viewport(Viewport *p_viewport) const {
     p_viewport->set_fsr_sharpness(static_cast<float>(fsr_sharpness));
     p_viewport->set_texture_mipmap_bias(static_cast<float>(texture_mipmap_bias));
     p_viewport->set_positional_shadow_atlas_size(positional_shadow_atlas_size);
+}
+
+Dictionary ArutRenderProfile3D::get_viewport_metrics() const {
+    Dictionary metrics;
+    if (!is_inside_tree()) {
+        metrics["available"] = false;
+        metrics["reason"] = "The render profile is not inside the scene tree.";
+        return metrics;
+    }
+
+    Viewport *viewport = get_viewport();
+    if (viewport == nullptr) {
+        metrics["available"] = false;
+        metrics["reason"] = "No viewport is associated with the render profile.";
+        return metrics;
+    }
+
+    metrics["available"] = true;
+    metrics["visible_objects"] = viewport->get_render_info(Viewport::RENDER_INFO_TYPE_VISIBLE, Viewport::RENDER_INFO_OBJECTS_IN_FRAME);
+    metrics["visible_primitives"] = viewport->get_render_info(Viewport::RENDER_INFO_TYPE_VISIBLE, Viewport::RENDER_INFO_PRIMITIVES_IN_FRAME);
+    metrics["visible_draw_calls"] = viewport->get_render_info(Viewport::RENDER_INFO_TYPE_VISIBLE, Viewport::RENDER_INFO_DRAW_CALLS_IN_FRAME);
+    metrics["shadow_draw_calls"] = viewport->get_render_info(Viewport::RENDER_INFO_TYPE_SHADOW, Viewport::RENDER_INFO_DRAW_CALLS_IN_FRAME);
+    metrics["canvas_draw_calls"] = viewport->get_render_info(Viewport::RENDER_INFO_TYPE_CANVAS, Viewport::RENDER_INFO_DRAW_CALLS_IN_FRAME);
+    return metrics;
 }
