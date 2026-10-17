@@ -59,3 +59,13 @@ diff --git a/editor/editor_node.cpp b/editor/editor_node.cpp
  	if (project_title) {
  		project_title->set_text(title);
  	}
+diff --git a/platform/android/java/editor/build.gradle b/platform/android/java/editor/build.gradle
+--- a/platform/android/java/editor/build.gradle
++++ b/platform/android/java/editor/build.gradle
+@@ -87,5 +87,5 @@
+         missingDimensionStrategy 'products', 'editor'
+         manifestPlaceholders += [
+-            editorAppName: "Godot Engine 4",
++            editorAppName: "ARUT Mobile",
+             editorBuildSuffix: ""
+         ]
