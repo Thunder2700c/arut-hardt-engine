@@ -76,8 +76,8 @@ RigidBody3D *ArutRagdollDummy3D::_create_capsule_part(const StringName &p_name, 
     body->set_mass(p_mass * mass_scale);
     body->set_linear_damp(0.15);
     body->set_angular_damp(angular_damping);
-    body->set_collision_layer(2);
-    body->set_collision_mask(1 | 2);
+    body->set_collision_layer(1);
+    body->set_collision_mask(1);
     body->set_can_sleep(true);
     add_child(body);
 
@@ -226,7 +226,7 @@ bool ArutRagdollDummy3D::is_ragdoll_active() const {
 }
 
 void ArutRagdollDummy3D::apply_impulse_to_body(const StringName &p_body_name, const Vector3 &p_impulse) {
-    Node *node = get_node_or_null(NodePath(String(".") + String(p_body_name)));
+    Node *node = get_node_or_null(NodePath(String(p_body_name)));
     RigidBody3D *body = Object::cast_to<RigidBody3D>(node);
     if (body != nullptr && start_simulating) {
         body->apply_central_impulse(p_impulse);
