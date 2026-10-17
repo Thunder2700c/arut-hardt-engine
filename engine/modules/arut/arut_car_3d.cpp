@@ -7,6 +7,10 @@
 #include "core/object/class_db.h"
 #include "core/variant/variant.h"
 
+ArutCar3D::ArutCar3D() {
+    set_mass(1200.0);
+}
+
 void ArutCar3D::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_vehicle_preset", "value"), &ArutCar3D::set_vehicle_preset);
     ClassDB::bind_method(D_METHOD("get_vehicle_preset"), &ArutCar3D::get_vehicle_preset);
