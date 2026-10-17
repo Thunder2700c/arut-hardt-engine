@@ -10,4 +10,6 @@ Put one reviewed Godot patch per `*.patch` file here. Both editor workflows targ
 | `0002-arut-about-and-project-manager.patch` | About dialog and project-manager welcome copy | These are built-in editor UI surfaces; retain the explicit Godot basis statement and legal notices | Apply-check and inspect resulting editor UI |
 | `0003-arut-runtime-identity.patch` | Product-facing version name and Android run-window label | The startup/version banner is generated from upstream version metadata, while the Android play-window label is a native resource string | Apply-check; compile once and inspect startup log plus Android run window |
 
+`0003-arut-runtime-identity.patch` is the only active patch for `version.py` and the Android run-window string. Do not add another `*.patch` file that repeats those same hunks; patch files are applied sequentially and duplicate original-context edits will fail the build.
+
 Keep `short_name = "godot"` in `version.py` intentionally: this patch changes the human-facing product name without casually changing internal compatibility/path assumptions. Never remove required upstream copyright or licence notices. Avoid patching renderer internals before simpler engine-level options have been evaluated.
