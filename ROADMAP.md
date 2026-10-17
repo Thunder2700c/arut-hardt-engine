@@ -69,7 +69,8 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 - [ ] Ask the user and four other intended testers to try the engine only when it has enough real features to evaluate.
 
 ## Existing prototypes (not yet validated)
-- `engine/modules/arut/`: initial built-in C++ module with `ArutCar3D` and `ArutCharacter3D` sources; not compiled yet.
+- `engine/modules/arut/`: built-in C++ components for Car3D, Character3D, RagdollDummy3D and RenderProfile3D; not compiled yet.
+- `templates/arut_character_lab/`: importable character/ragdoll lab packaged by the Android workflow; depends on the unverified built-in module.
 - `native/arut_native/`: initial optional C++ GDExtension smoke-test scaffold.
 - `renderer/demo/`: isolated anime surface shader/demo prototype.
 - `docs/PHYSICS_ARCHITECTURE.md`: open physics-backend evaluation, not a selected or integrated backend.
