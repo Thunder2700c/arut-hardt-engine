@@ -3,7 +3,7 @@
 #include <algorithm>
 
 #include "core/string/string_name.h"
-#include "core/variant/vector2.h"
+#include "core/math/vector2.h"
 #include "scene/3d/physics/character_body_3d.h"
 
 // C++-native first-person/third-person movement baseline. Camera and visual
