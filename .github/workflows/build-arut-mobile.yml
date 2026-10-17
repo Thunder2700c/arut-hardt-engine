@@ -131,16 +131,16 @@ jobs:
           sources = sorted(list(module.glob("*.h")) + list(module.glob("*.cpp")))
           errors = []
 
-          invalid_override = re.compile(r"\\bvoid\\s+_(?:ready|process|physics_process)\\s*\\([^)]*\\)\\s*override\\s*;")
+          invalid_override = re.compile(r"\bvoid\s+_(?:ready|process|physics_process)\s*\([^)]*\)\s*override\s*;")
           for source in sources:
               text = source.read_text(encoding="utf-8")
               if invalid_override.search(text):
                   errors.append(f"{source}: built-in Godot modules must not override _ready/_process/_physics_process directly; use _notification.")
-              for include in re.findall(r'^\\s*#include\\s+"([^"]+)"', text, re.MULTILINE):
+              for include in re.findall(r'^\s*#include\s+"([^"]+)"', text, re.MULTILINE):
                   local_candidate = source.parent / include
                   godot_candidate = godot / include
                   if not local_candidate.is_file() and not godot_candidate.is_file():
-                      errors.append(f"{source}: missing quoted include \\"{include}\\" (checked module folder and Godot 4.7 source).")
+                      errors.append(f"{source}: missing quoted include {include} (checked module folder and Godot 4.7 source).")
 
           for source_name in ("arut_character_3d.cpp", "arut_ragdoll_dummy_3d.cpp"):
               source = module / source_name
@@ -150,7 +150,7 @@ jobs:
                       errors.append(f"{source}: expected StandardMaterial3D include from scene/resources/material.h.")
 
           if errors:
-              print("\\n".join(f"::error::{message}" for message in errors))
+              print("\n".join(f"::error::{message}" for message in errors))
               sys.exit(1)
 
           print(f"Preflight passed: checked {len(sources)} ARUT C++ headers/sources and quoted include paths.")
