@@ -30,7 +30,7 @@ diff --git a/editor/themes/editor_theme_manager.cpp b/editor/themes/editor_theme
 diff --git a/editor/project_manager/project_manager.cpp b/editor/project_manager/project_manager.cpp
 --- a/editor/project_manager/project_manager.cpp
 +++ b/editor/project_manager/project_manager.cpp
-@@ -116,7 +116,7 @@
+@@ -117,6 +117,6 @@
  		case NOTIFICATION_TRANSLATION_CHANGED: {
  			// TRANSLATORS: This refers to the application where users manage their Godot projects.
 -			SceneTree::get_singleton()->get_root()->set_title(GODOT_VERSION_NAME + String(" - ") + TTR("Project Manager", "Application"));
@@ -38,7 +38,7 @@ diff --git a/editor/project_manager/project_manager.cpp b/editor/project_manager
  
  			const String line1 = TTR("You don't have any projects yet.");
  			const String line2 = TTR("Get started by creating a new one,\nimporting one that exists, or by downloading a project template from the Asset Store!");
-@@ -1445,7 +1445,7 @@
+@@ -1445,8 +1445,8 @@
  
  		title_bar_logo = memnew(Button);
  		title_bar_logo->set_flat(true);
@@ -50,7 +50,7 @@ diff --git a/editor/project_manager/project_manager.cpp b/editor/project_manager
 diff --git a/editor/editor_node.cpp b/editor/editor_node.cpp
 --- a/editor/editor_node.cpp
 +++ b/editor/editor_node.cpp
-@@ -377,7 +377,7 @@
+@@ -377,8 +377,8 @@
  	if (unsaved_cache) {
  		// Display the "modified" mark before anything else so that it can always be seen in the OS task bar.
  		title = vformat("(*) %s", title);
