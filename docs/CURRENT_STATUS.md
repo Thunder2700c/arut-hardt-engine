@@ -17,8 +17,8 @@ One shared core, API and project format.
 ## Permanent repository
 
 Repository: https://github.com/Thunder2700c/arut-hardt-engine  
-Default branch: main.  
-Working branch: `engine-first-cpp-ux`.
+Default/canonical working branch: `main`. Keep all ongoing work on `main`; do not create feature branches or reopen superseded pull requests. Older branch refs remain on GitHub as historical work because branch deletion is not available through the connected operation set; do not use or force-reset them.  
+Latest main commit (2026-10-17): `3d0c138c245fed208b65120cacb59a0ee17220e7` — ports runtime render-profile switching while preserving the existing renderer-compatibility behavior.
 
 Keep PEAK separate. Do not merge into PEAK or change its main branch as a side effect.
 
@@ -44,7 +44,8 @@ Keep PEAK separate. Do not merge into PEAK or change its main branch as a side e
 - The user's `[ARUT] SMOKE TEST PASSED` runtime message confirms the separate C++ GDExtension smoke-test project loaded. It does not prove the built-in Car3D, Character3D, ragdoll, or RenderProfile behavior in the editor or in a character lab scene.
 - The app icon, adaptive icon, project/game icon and exported game icon are separate resource paths. Successful generation/copy steps do not replace a device-side visual verification.
 - A new source patch changes `version.py`'s human-facing name to `ARUT-HARDT Engine` while intentionally keeping `short_name = "godot"`, and changes the Android editor run-window label to `ARUT Run window`. This is **source-written, not yet built or visually verified**. Perform a wider source search for other product-facing strings; preserve Godot attribution and licence notices in About/docs.
-- `ArutCar3D`, `ArutCharacter3D`, `ArutRagdollDummy3D` and `ArutRenderProfile3D` were source-compiled at the successful commit; their in-scene behavior, node-browser visibility and phone runtime behavior remain unverified.
+- `ArutCar3D`, `ArutCharacter3D`, `ArutRagdollDummy3D` and the baseline `ArutRenderProfile3D` were source-compiled at the successful commit; their in-scene behavior, node-browser visibility and phone runtime behavior remain unverified.
+- Main commit `3d0c138c245fed208b65120cacb59a0ee17220e7` ports live render-profile switching by adding independent `quality_apply_on_change`, editor-safe automatic application, and `apply_to_current_viewport()` while retaining `apply_now()` compatibility. The source commit is present, but GitHub reported no CI status or workflow run for it; this change is **not yet build-verified**.
 
 ## Selected engineering direction
 
@@ -57,12 +58,12 @@ Keep PEAK separate. Do not merge into PEAK or change its main branch as a side e
 
 ## Next actions
 
-1. Run the Android ARM64 editor workflow on the current branch after the launcher/adaptive-icon and runtime-identity changes. Inspect the resulting APK/log and verify its launcher icon and run-window label before saying branding is fixed; distinguish the editor app icon from project/exported-game icons.
-2. Add the compact CC0 animated robot asset to the character lab and validate GLB/FBX import, Skeleton3D hierarchy and clip names. Preserve the asset license/source in the manifest.
-3. Build the real white ARUT mannequin scene using a consistent humanoid rig and a curated set of CC0 locomotion clips; drive it from the existing C++ Character3D movement rather than leaving the generated primitives as the primary visual.
-4. Add a conventional C++-first AnimationTree controller for idle/start/stop/walk/run/sprint/strafe/turn/jump/fall/land.
-5. Audit and port the MIT Godot motion-matching source to Godot 4.7 as a built-in C++ module; add pose/trajectory baking, bounded queries, debug tools and a state-machine fallback.
-6. In a later coherent feature batch, advance Car3D handling, the mobile anime/PBR shader stack, physics backend comparisons and runtime telemetry.
-7. Run Android ARM64 CI after the coherent source/asset batch, then report exact commit, artifact and test scope honestly.
+1. Run the manual `Build ARUT Mobile (Android ARM64)` workflow on the current `main` commit to compile the new render-profile switching changes and the current module. Confirm the workflow is for commit `3d0c138c245fed208b65120cacb59a0ee17220e7` or a newer reviewed commit; do not claim success without a completed run.
+2. Build a mobile-first grass/foliage shader prototype in an isolated renderer demo, including wind, cutout, sensible distance/instance budgets, and preserved normals/UV behavior.
+3. Audit and complete the first-party anime/PBR material path without creating a duplicate of the existing `ArutAnimeLitMaterial3D` or replacing the current renderer-compatibility logic.
+4. Add the compact CC0 animated robot asset to the character lab and validate GLB/FBX import, Skeleton3D hierarchy and clip names. Preserve the asset license/source in the manifest.
+5. Build the real white ARUT mannequin scene using a consistent humanoid rig and curated CC0 locomotion clips, driven by the existing C++ `ArutCharacter3D` movement instead of leaving generated primitives as the primary visual.
+6. Add the conventional C++-first AnimationTree controller for idle/start/stop/walk/run/sprint/strafe/turn/jump/fall/land. Audit and port motion matching to Godot 4.7 only after the rig/controller baseline works.
+7. At a coherent integration milestone, run both `Build ARUT Mobile (Android ARM64)` and `Build HARDT Studio (Linux x86_64)`, then report exact commits, artifacts and verified scope. The workflows are manual; if the connected tools cannot dispatch them, provide the precise UI steps rather than claiming a run.
 
 Always follow `DEVELOPMENT_PROTOCOL.md`. Keep PEAK untouched and report what is written, compiled and tested accurately.

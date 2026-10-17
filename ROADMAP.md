@@ -76,9 +76,10 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 ## Phase 5 — Rendering and mobile performance
 - [x] Create isolated shader/material and procedural demo prototypes.
 - [ ] Verify shader/API semantics against the exact Godot version; preserve UV/triplanar, normal and AO behavior.
-- [x] Add native `ArutRenderProfile3D` scene node with Mobile/Balanced/High viewport presets (source compiled in the successful Android CI build; target runtime behavior still needs verification).
+- [x] Add native `ArutRenderProfile3D` scene node with Mobile/Balanced/High viewport presets (baseline source compiled in the successful Android CI build; live-switching port committed as `3d0c138c245fed208b65120cacb59a0ee17220e7` and awaiting a fresh build/runtime check).
 - [ ] Profile actual cost on the target renderer and tune preset values.
 - [ ] Add centralized lighting/environment conventions, fog, LOD/culling, instancing and texture budgets.
+- [ ] Build a mobile-first grass/foliage shader prototype with wind animation, alpha-scissor cutouts, correct normal/UV behavior and practical instancing/distance budgets; keep it as an isolated feature demo until its API and costs are verified.
 - [ ] Build a stylized anime/PBR hybrid material stack with optional outlines/rim light, face/hair controls and sensible fallbacks for the Mobile renderer.
 - [ ] Add reusable first-party ARUT Anime Lit and ARUT PBR material presets with clear Inspector controls.
 - [ ] Keep desktop Forward+ features from leaking into unsupported mobile profiles.
