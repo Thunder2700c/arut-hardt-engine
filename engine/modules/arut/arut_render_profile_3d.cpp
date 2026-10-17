@@ -1,5 +1,7 @@
 #include "arut_render_profile_3d.h"
 
+#include <cstdlib>
+
 #include "core/object/class_db.h"
 #include "core/variant/variant.h"
 
