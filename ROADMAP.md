@@ -17,11 +17,13 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 - [x] Add first-pass built-in C++ `ArutCar3D` source and module-registration scaffold (not yet compiled/runtime-verified).
 - [ ] Refine high-level `ArutCar3D`: validate module integration and physics behavior; manage wheel probes/suspension, steering, drive layout, engine force, brakes, tire grip and control mapping through Inspector properties.
 - [x] Add source-level compact/sedan/off-road preset property (not yet compiled/verified).
-- [x] Add first-pass native `ArutCharacter3D` movement source (not yet compiled/runtime-verified).
+- [x] Add first-pass native `ArutCharacter3D` movement plus generated mannequin/collision/camera source (not yet compiled/runtime-verified).
+- [x] Add `ArutRagdollDummy3D` with procedural rigid-body limbs and cone-twist joints; connect it to the character's ragdoll trigger (not yet compiled/runtime-verified).
 - [ ] Refine character movement with tuned step/slope handling and authoring defaults.
 - [ ] Add C++ interactable/rigid-body and physical-prop helpers.
 - [ ] Add physics/vehicle diagnostics: contacts, speed, wheel compression and frame-time telemetry.
-- [ ] Promote first-class nodes from extension prototypes into the engine source/module build so every new project has them.
+- [x] Add the source-build overlay for first-class native C++ module classes so every project using the custom editor can create them.
+- [ ] Compile the module and verify the classes appear in the editor's Create Node dialog.
 
 **Gate:** core components are searchable in the node browser and configurable without writing GDScript.
 
@@ -57,7 +59,8 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 ## Phase 5 — Rendering and mobile performance
 - [x] Create isolated shader/material and procedural demo prototypes.
 - [ ] Verify shader/API semantics against the exact Godot version; preserve UV/triplanar, normal and AO behavior.
-- [ ] Create Mobile/Balanced/High profiles with explicit costs.
+- [x] Add native `ArutRenderProfile3D` scene node with Mobile/Balanced/High viewport presets (not yet compiled/verified on target).
+- [ ] Profile actual cost on the target renderer and tune preset values.
 - [ ] Add centralized lighting/environment conventions, fog, LOD/culling, instancing and texture budgets.
 - [ ] Build a stylized anime/PBR hybrid material stack with optional outlines/rim light.
 - [ ] Benchmark before making performance claims.
