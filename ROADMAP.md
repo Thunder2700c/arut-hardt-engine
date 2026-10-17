@@ -8,8 +8,9 @@ Statuses apply to the initial foundation; nothing is marked built or tested with
 - [x] Add manual CI definitions for Android editor, native extension/smoke bundle and Linux editor.
 - [x] Add C++ GDExtension scaffold and on-screen smoke-test project.
 - [x] Add a renderer demo project and first shader prototype.
-- [ ] Move this clean staging tree to a new standalone GitHub repository.
-- [ ] Pin upstream revisions and verify license bundle.
+- [x] Transfer the clean engine-only tree into its own repository with a separate history.
+- [x] Record Godot/godot-cpp source revisions and include initial license/notice files.
+- [ ] Review exact third-party notice bundle before public binary releases.
 **Gate:** dedicated engine repository, no PEAK assets, coherent/manual build setup.
 
 ## Phase 1 — Native C++ proof (scaffolded, not runtime-verified)
