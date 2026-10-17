@@ -29,7 +29,7 @@ The engine-only foundation has its own history. Do not continue work in the old 
 - `docs/EDITOR_UX_ARCHITECTURE.md` describes a genuinely branded editor redesign.
 - `docs/ENGINE_COMPONENT_CATALOG.md` specifies first-class nodes, starting with Car3D.
 - `engine/modules/arut/` contains built-in native C++ source for `ArutCar3D`, `ArutCharacter3D`, `ArutRagdollDummy3D` and `ArutRenderProfile3D`. Both editor workflows copy this module into the pinned Godot source before SCons runs. This is source-level implementation only so far.
-- `engine/patches/0001-arut-editor-identity.patch` defines the initial ARUT-HARDT theme preset and window/project-manager identity; the build overlays original mark and custom node icons into the editor source.
+- `engine/patches/0001-arut-editor-identity.patch` defines the initial ARUT-HARDT theme preset and window/project-manager identity. `0002-arut-about-and-project-manager.patch` brands the About dialog/welcome copy while preserving Godot attribution. The build overlays original mark, About logo, title-bar wordmark and custom node icons into the editor source.
 
 ## Build truth
 The permanent repository's Android and Linux workflows have not been verified by a successful run in this branch. The earlier installed editor APK came from the previous PEAK workflow; it does not prove this repo's workflows or native code compiled. The renderer shader remains a prototype. Native Car3D, Character3D, RagdollDummy3D and RenderProfile3D source now exists in `engine/modules/arut/`, but none has been compiled or runtime-verified. The Android workflow packages the `arut-character-ragdoll-lab` project as a separate artifact.
