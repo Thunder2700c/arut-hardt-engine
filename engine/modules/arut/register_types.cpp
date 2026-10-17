@@ -3,6 +3,7 @@
 #include "core/object/class_db.h"
 
 #include "arut_car_3d.h"
+#include "arut_character_3d.h"
 
 void initialize_arut_module(ModuleInitializationLevel p_level) {
     if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
@@ -10,6 +11,7 @@ void initialize_arut_module(ModuleInitializationLevel p_level) {
     }
 
     ClassDB::register_class<ArutCar3D>();
+    ClassDB::register_class<ArutCharacter3D>();
 }
 
 void uninitialize_arut_module(ModuleInitializationLevel p_level) {
