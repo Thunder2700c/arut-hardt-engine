@@ -23,14 +23,15 @@ private:
     RigidBody3D *_create_capsule_part(const StringName &p_name, const Vector3 &p_position, real_t p_radius, real_t p_height, real_t p_mass, const Color &p_color, real_t p_rotation_z = 0.0);
     RigidBody3D *_create_sphere_part(const StringName &p_name, const Vector3 &p_position, real_t p_radius, real_t p_mass, const Color &p_color);
     void _create_joint(const StringName &p_name, const StringName &p_body_a, const StringName &p_body_b, const Vector3 &p_anchor, real_t p_swing_span, real_t p_twist_span);
+    void _on_ready();
     void _build_ragdoll();
     void _apply_simulation_state();
 
 protected:
     static void _bind_methods();
+    void _notification(int p_what) override;
 
 public:
-    void _ready() override;
 
     void set_start_simulating(bool p_value);
     bool get_start_simulating() const;
