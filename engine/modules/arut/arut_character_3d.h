@@ -53,6 +53,7 @@ private:
     ArutRagdollDummy3D *ragdoll_dummy = nullptr;
     int32_t joystick_touch_index = -1;
     int32_t look_touch_index = -1;
+    int32_t sprint_touch_index = -1;
     Vector2 joystick_origin;
     Vector2 previous_look_position;
     bool ragdoll_started = false;
