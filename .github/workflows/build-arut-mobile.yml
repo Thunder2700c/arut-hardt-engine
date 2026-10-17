@@ -68,6 +68,7 @@ jobs:
           cp engine/branding/ArutCar3D.svg godot/editor/icons/ArutCar3D.svg
           cp engine/branding/ArutCharacter3D.svg godot/editor/icons/ArutCharacter3D.svg
           cp engine/branding/ArutRagdollDummy3D.svg godot/editor/icons/ArutRagdollDummy3D.svg
+          cp engine/branding/ArutRenderProfile3D.svg godot/editor/icons/ArutRenderProfile3D.svg
 
       - name: Add built-in ARUT C++ module
         shell: bash
