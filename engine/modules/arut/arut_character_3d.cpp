@@ -22,7 +22,7 @@
 #include "scene/main/viewport.h"
 #include "scene/resources/3d/capsule_shape_3d.h"
 #include "scene/resources/3d/primitive_meshes.h"
-#include "scene/resources/3d/standard_material_3d.h"
+#include "scene/resources/material.h"
 
 void ArutCharacter3D::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_walk_speed", "value"), &ArutCharacter3D::set_walk_speed);
@@ -108,7 +108,23 @@ void ArutCharacter3D::_bind_methods() {
     ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "control_sprint_action"), "set_sprint_action", "get_sprint_action");
 }
 
-void ArutCharacter3D::_ready() {
+void ArutCharacter3D::_notification(int p_what) {
+    switch (p_what) {
+        case NOTIFICATION_READY:
+            _on_ready();
+            break;
+        case NOTIFICATION_PROCESS:
+            _on_process(get_process_delta_time());
+            break;
+        case NOTIFICATION_PHYSICS_PROCESS:
+            _on_physics_process(get_physics_process_delta_time());
+            break;
+        default:
+            break;
+    }
+}
+
+void ArutCharacter3D::_on_ready() {
     set_physics_process(true);
     set_process(true);
     set_process_input(true);
@@ -452,7 +468,7 @@ void ArutCharacter3D::input(const Ref<InputEvent> &p_event) {
     }
 }
 
-void ArutCharacter3D::_process(double p_delta) {
+void ArutCharacter3D::_on_process(double p_delta) {
     (void)p_delta;
     if (!ragdoll_started || ragdoll_dummy == nullptr || camera_pivot == nullptr || default_camera == nullptr) {
         return;
@@ -472,7 +488,7 @@ void ArutCharacter3D::_process(double p_delta) {
     default_camera->look_at(pelvis_position + Vector3(0.0, 0.65, 0.0));
 }
 
-void ArutCharacter3D::_physics_process(double p_delta) {
+void ArutCharacter3D::_on_physics_process(double p_delta) {
     if (ragdoll_started) {
         return;
     }
