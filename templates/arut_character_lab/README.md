@@ -14,11 +14,25 @@ optional fallback when `character_create_default_dummy` is enabled.
   data. There are no companion `.bin` files or external texture downloads.
 - Robot material treatment: white shell, light titanium joints, dark graphite
   faceplate. Palette overrides are stored in the model itself.
-- Rig audit: two glTF skin records share a 43-joint rig; named joints include
-  torso, head, both arms/legs, feet and finger chains (thumb, index, middle,
-  ring) on both hands. The articulated hand primitives contain `JOINTS_0` and
-  `WEIGHTS_0` attributes. The rigid shell pieces are modeled mesh sections
-  attached to skeletal joints, rather than engine-created capsules/cubes.
+- Rig audit from the committed source glTF: the scene root is `RootNode`,
+  the armature node is `RobotArmature`, and `Bone` is the first/root joint
+  in each 43-joint skin record. The common joint hierarchy contains torso,
+  head, both arms/legs, feet, pole targets, and finger chains (thumb, index,
+  middle and ring) on both hands. The articulated hand meshes contain
+  `JOINTS_0` and `WEIGHTS_0`; the robot's hard-shell sections are separate
+  authored mesh pieces attached to their joints, not engine-generated
+  capsules/cubes or a continuous soft-human skin. The source contains two skin
+  records pointing to the same 43-joint armature. Animation clips use that same
+  armature, so no cross-rig retargeting is introduced for the baseline.
+- Rest pose/scale notes: the source glTF's node transforms and bind data are
+  preserved, rather than regenerated or re-named. The reusable scene currently
+  scales the imported model by `0.82` to fit the existing approximately
+  1.78 m character capsule. That scene scale is a starting alignment choice,
+  **not visually verified calibration**; check feet-on-ground, head height,
+  forward axis and rest pose in an actual ARUT-HARDT Engine import before
+  calling the mannequin runtime-validated. Source-glTF joint/clip inspection
+  does not by itself prove Godot's imported `Skeleton3D` and AnimationPlayer
+  track paths have been runtime-tested.
 - Included animations (14): `Robot_Idle`, `Robot_Walking`,
   `Robot_Running`, `Robot_Jump`, `Robot_WalkJump`, `Robot_Standing`,
   `Robot_Sitting`, `Robot_Dance`, `Robot_Death`, `Robot_Punch`,
