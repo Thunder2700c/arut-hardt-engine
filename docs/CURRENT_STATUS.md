@@ -28,21 +28,23 @@ The engine-only foundation has its own history. Do not continue work in the old 
 - `docs/PHYSICS_ARCHITECTURE.md` now compares backend candidates without declaring Jolt the winner.
 - `docs/EDITOR_UX_ARCHITECTURE.md` describes a genuinely branded editor redesign.
 - `docs/ENGINE_COMPONENT_CATALOG.md` specifies first-class nodes, starting with Car3D.
+- `engine/modules/arut/` now contains the first built-in native C++ module and `ArutCar3D` class source. Both editor workflows copy this module into the pinned Godot source before SCons runs. This is source-level implementation only so far.
 
 ## Build truth
 The permanent repository's Android and Linux workflows have not been verified by a successful run in this branch. The earlier installed editor APK came from the previous PEAK workflow; it does not prove this repo's workflows or native code compiled. The renderer shader remains a prototype. No custom ARUT Car3D node is implemented yet.
 
 ## Physics findings
 - Current project baseline is Godot 4.7 with built-in Godot Physics/Jolt options; Jolt is not a permanent decision.
+- The first native `ArutCar3D` module is written with Inspector properties, editable compact/sedan/off-road presets, internally managed wheel raycasts, spring/damper force, simple steering, drive/braking inputs and contact/speed telemetry. It is not compiled or run yet; it is deliberately a first-pass component, not a finished simulation.
 - A community Godot 4.x PhysX 5 backend exists as work-in-progress and needs a source/commit, license/notice, Android ARM64 and build-path audit before adoption.
 - Bullet and ReactPhysics3D remain comparison candidates; neither is a drop-in Godot 4.7 backend.
 - Next physics milestone is evaluating the existing PhysX backend and designing native, backend-aware ARUT components—not blindly embedding another solver.
 
 ## Next actions
-1. Start implementing the first native high-level component (`ArutCar3D`) and establish the path to a built-in C++ node in the source-build process.
-2. Start ARUT-HARDT editor identity work: original theme/icons, project manager and node categories, then dedicated inspector/panel improvements.
-3. Continue physics backend comparison, checking Android/build details before choosing a primary solver.
-4. Keep renderer work moving as a separate workstream instead of letting it crowd out core engine features.
-5. Batch CI/build checks when a coherent source change is ready. Do not ask the user to install/test the engine yet.
+1. Extend the native engine component set (character movement and interaction) and finish the first Car3D authoring flow without forcing the user to assemble wheel probes.
+2. Begin source-level ARUT-HARDT editor identity changes: logo/app identity, theme, node-browser organization and Inspector workflows.
+3. Inspect the WIP PhysX backend revision and Android build path; decide based on evidence rather than defaults.
+4. Keep renderer development as a separate track instead of letting it crowd out component/editor work.
+5. At a coherent milestone, run internal CI to catch source/API errors; do not ask the user to install/test the engine yet.
 
 Always follow `DEVELOPMENT_PROTOCOL.md`. Keep PEAK untouched and report what is written, compiled and tested accurately.
