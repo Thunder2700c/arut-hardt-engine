@@ -42,6 +42,8 @@ This catalog describes the first native C++ systems planned for the engine. It i
 | `ArutPhysicsMaterial` | Friendly surface presets for friction, bounce, density and sound/FX tags |
 | `ArutDestructionProfile` | Reusable fracture/debris settings with mobile-friendly limits |
 | `ArutPhysicsDiagnostics` | Body/contact counts, step time and optional per-component telemetry |
+| `ArutRenderProfile3D` | Native viewport quality presets, runtime apply controls and per-frame render counters |
+| `ArutAnimeMaterial3D` | C++-registered toon/PBR hybrid material with texture, UV scale, normal/AO, roughness, specular and rim controls |
 | `ArutQualityProfile` | Named Mobile/Balanced/High rendering and simulation settings |
 
 ## C++-first contract
@@ -62,6 +64,7 @@ A built-in C++ `ArutCharacter3D` class has also been added to the ARUT module. I
 
 - `ArutCharacter3D` now generates a simple colored mannequin from primitive meshes if the user has not supplied a visual child; it creates a default capsule collider and third-person camera by default. It also has WASD/arrow, jump, sprint and a basic phone-touch control arrangement.
 - `ArutRagdollDummy3D` is a passive 11-body articulated ragdoll assembled with standard rigid bodies and cone-twist joints. The character can switch to it with R or a top-right phone tap, and the camera follows the dropping pelvis.
-- `ArutRenderProfile3D` is a scene node that applies named viewport quality profiles on ready. It exposes FSR/render scale, AA options, occlusion-culling toggle, mesh LOD threshold, shadow-atlas size, texture mipmap bias, debanding and FSR sharpness.
+- `ArutRenderProfile3D` is a scene node that applies named viewport quality profiles, can reapply changes at runtime, and exposes native viewport render counters.
+- `ArutAnimeMaterial3D` is a C++-registered `ShaderMaterial` with an embedded toon/PBR hybrid shader and Inspector properties for albedo/normal/AO maps, tint, UV scale, roughness, specular and rim lighting.
 
-These are first-pass source implementations and have not been compiled or runtime-tested. The ragdoll currently uses the active Godot PhysicsServer backend; no independent ARUT physics solver is integrated.
+This rendering feature branch contains source changes only; compile and runtime status must be updated after CI. The material still uses Godot's existing renderer and is not a separate GPU rendering backend. The ragdoll currently uses the active Godot PhysicsServer backend; no independent ARUT physics solver is integrated.
