@@ -1,7 +1,7 @@
 diff --git a/editor/gui/editor_about.cpp b/editor/gui/editor_about.cpp
 --- a/editor/gui/editor_about.cpp
 +++ b/editor/gui/editor_about.cpp
-@@ -57,7 +57,8 @@
+@@ -58,5 +58,6 @@
  		case NOTIFICATION_TRANSLATION_CHANGED: {
  			_about_text_label->set_text(
 +					TTR("ARUT-HARDT Engine is based on Godot Engine.") + "\n" +
@@ -20,7 +20,7 @@ diff --git a/editor/gui/editor_about.cpp b/editor/gui/editor_about.cpp
 diff --git a/editor/project_manager/project_manager.cpp b/editor/project_manager/project_manager.cpp
 --- a/editor/project_manager/project_manager.cpp
 +++ b/editor/project_manager/project_manager.cpp
-@@ -121,7 +121,7 @@
+@@ -121,3 +121,3 @@
  			const String line1 = TTR("You don't have any projects yet.");
 -			const String line2 = TTR("Get started by creating a new one,\nimporting one that exists, or by downloading a project template from the Asset Store!");
 +			const String line2 = TTR("Create a project, import an existing one, or start from an ARUT-HARDT template.");
