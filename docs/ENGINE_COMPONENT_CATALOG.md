@@ -46,3 +46,8 @@ This catalog describes the first native C++ systems planned for the engine. It i
 
 ## C++-first contract
 Core behavior belongs in native C++ classes or engine modules. Properties should be editable from the Inspector. Gameplay projects should not require the user to write GDScript just to get a basic car or character moving. Native control methods must remain available for more advanced users and AI systems.
+
+
+## Implementation status (2026-10-17)
+
+The first `engine/modules/arut/ArutCar3D` source has been added to the engine repository branch. It currently provides editable geometry/suspension/drive/tire/control properties, three presets, auto-managed four-corner raycast probes and a simple native spring/damper plus bounded tire-force model. Its source has not yet been compiled or run. Visual wheel meshes/rotation, a torque curve, reverse-gear model, detailed slip curves, differential, ABS/TCS, and a dedicated debug panel are not implemented yet.
