@@ -91,3 +91,10 @@ This is the implementation target, not a claim that the node already exists.
 - Physics/vehicle panel: backend, body/contact counts, timing and per-car telemetry.
 
 No backend is selected or integrated by this design document.
+
+
+## Current implementation and Android backend constraint
+
+A first-pass `ArutRagdollDummy3D` is now written under `engine/modules/arut/`: it generates pelvis/torso/head/limbs as rigid bodies, links them with cone-twist joints, supports a mass/damping setup, inherits player velocity, and can be activated by the native character component. This is passive physical ragdoll source, not an Euphoria-style active muscle/pose controller, and is not yet compiled or tested.
+
+The current WIP PhysX 5 Godot fork is **not integrated into ARUT-HARDT**. Its own module README documents Windows and Linux testing/build instructions, and its SCons implementation has Windows/Linux link paths rather than an Android ARM64 path. GPU dynamics uses CUDA/NVIDIA GPU assumptions which are not applicable to the user's Exynos/Xclipse phone. Do not swap it into the Android workflow until the CPU-only PhysX SDK and Godot PhysicsServer module are deliberately ported, linked, and built for Android ARM64. For the current phone test, the starter project explicitly uses the existing `GodotPhysics` backend so the custom high-level ragdoll component can be exercised without claiming that a new solver has shipped.
