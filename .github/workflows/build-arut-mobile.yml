@@ -71,6 +71,7 @@ jobs:
           cp engine/branding/ArutCharacter3D.svg godot/editor/icons/ArutCharacter3D.svg
           cp engine/branding/ArutRagdollDummy3D.svg godot/editor/icons/ArutRagdollDummy3D.svg
           cp engine/branding/ArutRenderProfile3D.svg godot/editor/icons/ArutRenderProfile3D.svg
+          cp engine/branding/ArutAnimeMaterial3D.svg godot/editor/icons/ArutAnimeMaterial3D.svg
 
       - name: Apply ARUT Mobile legacy and adaptive launcher icons
         shell: bash
@@ -193,7 +194,7 @@ jobs:
       - name: Compile ARUT C++ objects before full editor build
         working-directory: godot
         run: |
-          scons platform=android target=editor arch=arm64 production=yes dev_mode=yes module_text_server_fb_enabled=yes swappy=yes cache_path=.scons_cache/ redirect_build_objects=no modules/arut/arut_character_3d.android.editor.arm64.o modules/arut/arut_ragdoll_dummy_3d.android.editor.arm64.o modules/arut/arut_car_3d.android.editor.arm64.o modules/arut/arut_render_profile_3d.android.editor.arm64.o modules/arut/register_types.android.editor.arm64.o
+          scons platform=android target=editor arch=arm64 production=yes dev_mode=yes module_text_server_fb_enabled=yes swappy=yes cache_path=.scons_cache/ redirect_build_objects=no modules/arut/arut_character_3d.android.editor.arm64.o modules/arut/arut_ragdoll_dummy_3d.android.editor.arm64.o modules/arut/arut_car_3d.android.editor.arm64.o modules/arut/arut_render_profile_3d.android.editor.arm64.o modules/arut/arut_anime_material_3d.android.editor.arm64.o modules/arut/register_types.android.editor.arm64.o
 
       - name: Compile Android ARM64 editor
         working-directory: godot
