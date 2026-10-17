@@ -1,0 +1,62 @@
+diff --git a/editor/settings/editor_settings.cpp b/editor/settings/editor_settings.cpp
+--- a/editor/settings/editor_settings.cpp
++++ b/editor/settings/editor_settings.cpp
+@@ -603,7 +603,7 @@
+ 	// Theme
+ 	EDITOR_SETTING_BASIC(Variant::BOOL, PROPERTY_HINT_ENUM, "interface/theme/follow_system_theme", false, "")
+ 	EDITOR_SETTING_BASIC(Variant::STRING, PROPERTY_HINT_ENUM, "interface/theme/style", "Modern", "Modern,Classic")
+-	EDITOR_SETTING_BASIC(Variant::STRING, PROPERTY_HINT_ENUM, "interface/theme/color_preset", "Default", "Default,Breeze Dark,Godot 2,Godot 3,Gray,Light,Solarized (Dark),Solarized (Light),Black (OLED),Custom")
++	EDITOR_SETTING_BASIC(Variant::STRING, PROPERTY_HINT_ENUM, "interface/theme/color_preset", "ARUT-HARDT", "ARUT-HARDT,Default,Breeze Dark,Godot 2,Godot 3,Gray,Light,Solarized (Dark),Solarized (Light),Black (OLED),Custom")
+ 	EDITOR_SETTING_BASIC(Variant::STRING, PROPERTY_HINT_ENUM, "interface/theme/spacing_preset", "Default", "Compact,Default,Spacious,Custom")
+ 	EDITOR_SETTING(Variant::INT, PROPERTY_HINT_ENUM, "interface/theme/icon_and_font_color", 0, "Auto,Dark,Light")
+ 
+diff --git a/editor/themes/editor_theme_manager.cpp b/editor/themes/editor_theme_manager.cpp
+--- a/editor/themes/editor_theme_manager.cpp
++++ b/editor/themes/editor_theme_manager.cpp
+@@ -323,7 +323,12 @@
+ 			const float light_contrast = -0.06;
+ 
+ 			// Please use alphabetical order if you're adding a new color preset here.
+-			if (config.preset == "Black (OLED)") {
++			if (config.preset == "ARUT-HARDT") {
++				preset_accent_color = Color(0.15, 0.82, 0.69);
++				preset_base_color = Color(0.055, 0.071, 0.09);
++				preset_contrast = 0.18;
++				preset_draw_extra_borders = true;
++			} else if (config.preset == "Black (OLED)") {
+ 				preset_accent_color = Color(0.45, 0.75, 1.0);
+ 				preset_base_color = Color(0, 0, 0);
+ 				// The contrast rate value is irrelevant on a fully black theme.
+diff --git a/editor/project_manager/project_manager.cpp b/editor/project_manager/project_manager.cpp
+--- a/editor/project_manager/project_manager.cpp
++++ b/editor/project_manager/project_manager.cpp
+@@ -116,7 +116,7 @@
+ 		case NOTIFICATION_TRANSLATION_CHANGED: {
+ 			// TRANSLATORS: This refers to the application where users manage their Godot projects.
+-			SceneTree::get_singleton()->get_root()->set_title(GODOT_VERSION_NAME + String(" - ") + TTR("Project Manager", "Application"));
++			SceneTree::get_singleton()->get_root()->set_title(String("ARUT-HARDT Engine") + String(" - ") + TTR("Project Manager", "Application"));
+ 
+ 			const String line1 = TTR("You don't have any projects yet.");
+ 			const String line2 = TTR("Get started by creating a new one,\nimporting one that exists, or by downloading a project template from the Asset Store!");
+@@ -1445,7 +1445,7 @@
+ 
+ 		title_bar_logo = memnew(Button);
+ 		title_bar_logo->set_flat(true);
+-		title_bar_logo->set_tooltip_text(TTR("About Godot"));
++		title_bar_logo->set_tooltip_text(TTR("About ARUT-HARDT Engine (based on Godot)"));
+ 		left_hbox->add_child(title_bar_logo);
+ 		title_bar_logo->connect(SceneStringName(pressed), callable_mp(this, &ProjectManager::_show_about));
+ 
+diff --git a/editor/editor_node.cpp b/editor/editor_node.cpp
+--- a/editor/editor_node.cpp
++++ b/editor/editor_node.cpp
+@@ -377,7 +377,7 @@
+ 	if (unsaved_cache) {
+ 		// Display the "modified" mark before anything else so that it can always be seen in the OS task bar.
+ 		title = vformat("(*) %s", title);
+ 	}
+-	DisplayServer::get_singleton()->window_set_title(title + String(" - ") + GODOT_VERSION_NAME);
++	DisplayServer::get_singleton()->window_set_title(title + String(" - ARUT-HARDT Engine"));
+ 	if (project_title) {
+ 		project_title->set_text(title);
+ 	}
