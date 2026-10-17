@@ -69,3 +69,17 @@ diff --git a/platform/android/java/editor/build.gradle b/platform/android/java/e
 +            editorAppName: "ARUT Mobile",
              editorBuildSuffix: ""
          ]
+@@ -134,5 +134,5 @@
+         debug {
+             applicationIdSuffix ".debug"
+-            manifestPlaceholders += [editorBuildSuffix: " (debug)"]
++            manifestPlaceholders += [editorBuildSuffix: ""]
+             signingConfig signingConfigs.debug
+         }
+@@ -147,5 +147,5 @@
+                 // In addition, we update the application ID to allow installing an Android studio release build
+                 // side by side with a production build from the store.
+                 applicationIdSuffix ".release"
+-                manifestPlaceholders += [editorBuildSuffix: " (release)"]
++                manifestPlaceholders += [editorBuildSuffix: ""]
+             }
