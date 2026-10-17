@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#include "core/math/color.h"
+#include "core/math/vector3.h"
 #include "scene/3d/node_3d.h"
 #include "scene/3d/physics/rigid_body_3d.h"
 
