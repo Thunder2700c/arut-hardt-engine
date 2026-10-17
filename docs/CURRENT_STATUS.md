@@ -28,23 +28,25 @@ The engine-only foundation has its own history. Do not continue work in the old 
 - `docs/PHYSICS_ARCHITECTURE.md` now compares backend candidates without declaring Jolt the winner.
 - `docs/EDITOR_UX_ARCHITECTURE.md` describes a genuinely branded editor redesign.
 - `docs/ENGINE_COMPONENT_CATALOG.md` specifies first-class nodes, starting with Car3D.
-- `engine/modules/arut/` now contains the first built-in native C++ module and `ArutCar3D` class source. Both editor workflows copy this module into the pinned Godot source before SCons runs. This is source-level implementation only so far.
+- `engine/modules/arut/` contains the first built-in native C++ module with `ArutCar3D` and `ArutCharacter3D` source. Both editor workflows copy this module into the pinned Godot source before SCons runs. This is source-level implementation only so far.
+- `engine/patches/0001-arut-editor-identity.patch` defines the initial ARUT-HARDT theme preset and window/project-manager identity; the build overlays original mark and custom node icons into the editor source.
 
 ## Build truth
 The permanent repository's Android and Linux workflows have not been verified by a successful run in this branch. The earlier installed editor APK came from the previous PEAK workflow; it does not prove this repo's workflows or native code compiled. The renderer shader remains a prototype. No custom ARUT Car3D node is implemented yet.
 
 ## Physics findings
 - Current project baseline is Godot 4.7 with built-in Godot Physics/Jolt options; Jolt is not a permanent decision.
-- The first native `ArutCar3D` module is written with Inspector properties, editable compact/sedan/off-road presets, internally managed wheel raycasts, spring/damper force, simple steering, drive/braking inputs and contact/speed telemetry. It is not compiled or run yet; it is deliberately a first-pass component, not a finished simulation.
+- Native `ArutCar3D` source provides Inspector properties, editable compact/sedan/off-road presets, internally managed wheel raycasts, spring/damper force, simple steering, drive/braking inputs and contact/speed telemetry. Native `ArutCharacter3D` source provides walk/sprint, ground acceleration/friction, air control, gravity, jump and input-action mapping. Neither is compiled or run yet; both are first-pass components, not finished gameplay systems.
+- The ARUT-HARDT theme/identity patch and custom SVG brand/node icons are written, but source application/build is not yet verified.
 - A community Godot 4.x PhysX 5 backend exists as work-in-progress and needs a source/commit, license/notice, Android ARM64 and build-path audit before adoption.
 - Bullet and ReactPhysics3D remain comparison candidates; neither is a drop-in Godot 4.7 backend.
 - Next physics milestone is evaluating the existing PhysX backend and designing native, backend-aware ARUT components—not blindly embedding another solver.
 
 ## Next actions
-1. Extend the native engine component set (character movement and interaction) and finish the first Car3D authoring flow without forcing the user to assemble wheel probes.
-2. Begin source-level ARUT-HARDT editor identity changes: logo/app identity, theme, node-browser organization and Inspector workflows.
+1. Add the first interaction/physical-prop C++ component and improve the built-in Car3D setup flow.
+2. Continue editor source work beyond the initial identity/theme patch: inspect node icons, add ARUT-specific editor categories and make common Inspector sections more approachable.
 3. Inspect the WIP PhysX backend revision and Android build path; decide based on evidence rather than defaults.
-4. Keep renderer development as a separate track instead of letting it crowd out component/editor work.
-5. At a coherent milestone, run internal CI to catch source/API errors; do not ask the user to install/test the engine yet.
+4. Keep renderer development as a separate track instead of letting it crowd out components/editor work.
+5. After this first coherent component + identity batch is complete, run internal CI to catch native/API errors; do not ask the user to install/test the engine yet.
 
 Always follow `DEVELOPMENT_PROTOCOL.md`. Keep PEAK untouched and report what is written, compiled and tested accurately.
