@@ -2,6 +2,7 @@
 
 #include "core/object/class_db.h"
 
+#include "arut_anime_material_3d.h"
 #include "arut_car_3d.h"
 #include "arut_character_3d.h"
 #include "arut_ragdoll_dummy_3d.h"
@@ -12,6 +13,7 @@ void initialize_arut_module(ModuleInitializationLevel p_level) {
         return;
     }
 
+    ClassDB::register_class<ArutAnimeMaterial3D>();
     ClassDB::register_class<ArutCar3D>();
     ClassDB::register_class<ArutCharacter3D>();
     ClassDB::register_class<ArutRagdollDummy3D>();
