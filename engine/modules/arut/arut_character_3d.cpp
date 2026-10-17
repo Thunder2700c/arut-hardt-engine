@@ -110,6 +110,30 @@ void ArutCharacter3D::_ready() {
     set_physics_process(true);
     set_process_input(true);
 
+    // Provide a usable keyboard layout on a fresh project without requiring
+    // the user to configure Input Map first. Existing custom actions are left intact.
+    InputMap *input_map = InputMap::get_singleton();
+    if (input_map != nullptr) {
+        auto ensure_action = [input_map](const StringName &p_action, std::initializer_list<Key> p_keys) {
+            if (input_map->has_action(p_action)) {
+                return;
+            }
+            input_map->add_action(p_action);
+            for (Key key : p_keys) {
+                Ref<InputEventKey> event;
+                event.instantiate();
+                event->set_physical_keycode(key);
+                input_map->action_add_event(p_action, event);
+            }
+        };
+        ensure_action(move_left_action, { Key::KEY_A, Key::KEY_LEFT });
+        ensure_action(move_right_action, { Key::KEY_D, Key::KEY_RIGHT });
+        ensure_action(move_forward_action, { Key::KEY_W, Key::KEY_UP });
+        ensure_action(move_backward_action, { Key::KEY_S, Key::KEY_DOWN });
+        ensure_action(jump_action, { Key::KEY_SPACE, Key::KEY_ENTER });
+        ensure_action(sprint_action, { Key::KEY_SHIFT });
+    }
+
     // The basic character must work as soon as it is added to a scene.
     if (create_default_collision) {
         bool has_direct_collision = false;
