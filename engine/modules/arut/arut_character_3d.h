@@ -70,6 +70,7 @@ protected:
 public:
     void _ready() override;
     void _physics_process(double p_delta) override;
+    void _process(double p_delta) override;
     void input(const Ref<InputEvent> &p_event) override;
 
     void set_walk_speed(real_t value) { walk_speed = std::clamp(value, static_cast<real_t>(0.0), static_cast<real_t>(50.0)); }
