@@ -29,21 +29,34 @@ Statuses apply to the initial foundation; nothing is marked built or tested with
 - [ ] Record FPS/frame time before promoting material to PEAK.
 **Gate:** visible art-direction improvement without a severe performance regression on S23 FE.
 
-## Phase 3 — Mobile renderer baseline
+
+## Phase 3 — Physics systems (architecture selected; implementation not started)
+- [x] Inspect current PEAK physics selection and vehicle force model.
+- [x] Choose Jolt as the default general-purpose physics backend; keep it rather than adding a competing solver.
+- [x] Identify MIT Godot Advanced Vehicle as a reference for raycast suspension, brush/Pacejka tire response and drivetrain concepts.
+- [x] Record Chrono as an optional C++ vehicle-dynamics research reference, not the default mobile dependency.
+- [ ] Build an isolated vehicle test scene and baseline telemetry.
+- [ ] Implement the first native C++ vehicle dynamics slice with slip-aware tire forces and suspension.
+- [ ] Validate normal physics tick rates on mobile before considering higher rates.
+- [ ] Add drivetrain, gears, differential, brakes, ABS/TCS and steering refinements incrementally.
+- [ ] Tune FPS character acceleration, friction, slope/step response and selective ragdoll/prop interactions separately.
+**Gate:** stable, tunable vehicle/character feel with measured target-device cost.
+
+## Phase 4 — Mobile renderer baseline
 - [ ] Mobile/Balanced/High profiles.
 - [ ] Centralized environment/light ownership for streamed chunks.
 - [ ] Resolution scaling, shadow distance, LOD/culling, instancing and texture budgets.
 - [ ] Measure cold start, frame time, memory and thermal behavior.
 **Gate:** stable documented baseline on target hardware.
 
-## Phase 4 — Engine-source renderer/editor work
+## Phase 5 — Engine-source renderer/editor work
 - [ ] Check if each feature needs a Godot patch or can use shader/GDExtension.
 - [ ] Add small reviewed patches only for justified limitations.
 - [ ] Pin upstream revision and validate patches with git apply --check.
 - [ ] Rebuild after a coherent patch batch and compare with unmodified Godot using the same scene.
 **Gate:** reproducible benefit shown by benchmark or authoring workflow.
 
-## Phase 5 — Beginner workflows and releases
+## Phase 6 — Beginner workflows and releases
 - [ ] Mobile 3D template, starter controller, material/lighting presets and diagnostics.
 - [ ] Test that a beginner can create/run a small project without local command-line setup.
 - [ ] Versioned artifacts, checksums, changelog, notices and rollback steps.
