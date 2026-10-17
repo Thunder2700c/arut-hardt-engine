@@ -1,65 +1,73 @@
-# Roadmap
+# ARUT-HARDT Engine Roadmap
 
-Statuses apply to the initial foundation; nothing is marked built or tested without actual results.
+Priority: build a usable engine, not make PEAK test every prototype. Features are C++-first. Internal compilation checks happen at sensible integration milestones; user phone testing is deferred until a useful private-alpha engine package exists.
 
-## Phase 0 — Repository/build foundation (in progress)
-- [x] Set umbrella name and two edition names.
-- [x] Stage an engine-only tree without game files or assets.
-- [x] Add manual CI definitions for Android editor, native extension/smoke bundle and Linux editor.
-- [x] Add C++ GDExtension scaffold and on-screen smoke-test project.
-- [x] Add a renderer demo project and first shader prototype.
-- [x] Transfer the clean engine-only tree into its own repository with a separate history.
-- [x] Record Godot/godot-cpp source revisions and include initial license/notice files.
-- [ ] Review exact third-party notice bundle before public binary releases.
-**Gate:** dedicated engine repository, no PEAK assets, coherent/manual build setup.
+## Phase 0 — Independent engine foundation (in progress)
+- [x] Name the engine and distributions.
+- [x] Transfer the engine-only tree into its own repository/history.
+- [x] Keep PEAK game assets/scenes outside this repo.
+- [x] Add manual Android editor, Linux editor and native-extension workflows.
+- [x] Pin intended Godot/godot-cpp versions.
+- [x] Add initial C++ extension scaffold and renderer/material prototype.
+- [ ] Define the path from current source-build overlay to first-class built-in engine modules and editor changes.
+- [ ] Batch-check workflows at a sensible integration milestone.
 
-## Phase 1 — Native C++ proof (scaffolded, not runtime-verified)
-- [x] Implement ArutRuntime::get_build_info().
-- [x] Add on-screen smoke test.
-- [ ] Build artifact from the engine repository.
-- [ ] Confirm class registration, instantiation and returned build info on target.
-**Gate:** extension loads in matching Godot 4.7 editor; smoke-test UI says SMOKE TEST PASSED.
+## Phase 1 — First-class C++ engine components
+- [ ] Define ARUT node names/categories and Inspector conventions.
+- [ ] Implement high-level `ArutCar3D`: manages basic wheel probes/suspension, steering, drive layout, engine force, brakes, tire grip and control mapping through Inspector properties.
+- [ ] Add compact/sedan/off-road vehicle presets with no script requirement.
+- [ ] Add native FPS/third-person character movement with tunable acceleration, ground friction, steps/slopes, air control and jumping.
+- [ ] Add C++ interactable/rigid-body and physical-prop helpers.
+- [ ] Add physics/vehicle diagnostics: contacts, speed, wheel compression and frame-time telemetry.
+- [ ] Promote first-class nodes from extension prototypes into the engine source/module build so every new project has them.
 
-## Phase 2 — First stylized visual slice (prototype written, not shader-compiled)
-- [x] Create an isolated mesh/light/environment demo without PEAK assets.
-- [x] Implement a first anime-surface shader with colour tint, albedo, optional normal/AO maps, UV and triplanar modes.
-- [x] Keep texture scale explicit with a world-triplanar default of 1.0.
-- [x] Keep expensive GI/reflection features off by default.
-- [ ] Compile and visually inspect shader on matching Godot 4.7.
-- [ ] Record FPS/frame time before promoting material to PEAK.
-**Gate:** visible art-direction improvement without a severe performance regression on S23 FE.
+**Gate:** core components are searchable in the node browser and configurable without writing GDScript.
 
+## Phase 2 — ARUT-HARDT editor identity and UI redesign
+- [ ] Replace default branding in project manager, splash/about surfaces, icons and application identity with ARUT-HARDT branding; retain Godot attribution in notices/docs.
+- [ ] Create original theme, icons, typography and spacing—not only different colours.
+- [ ] Establish a useful default 3D layout: node/scene panel, viewport, Inspector, file/assets panel and diagnostics.
+- [ ] Add node-browser groups for Vehicles, Characters, Interaction, Destruction, Cameras and Rendering.
+- [ ] Give ARUT nodes clear Inspector groups, presets and advanced settings.
+- [ ] Add Physics/Vehicle and Mobile Performance panels.
 
-## Phase 3 — Physics systems (architecture selected; implementation not started)
-- [x] Inspect current PEAK physics selection and vehicle force model.
-- [x] Choose Jolt as the default general-purpose physics backend; keep it rather than adding a competing solver.
-- [x] Identify MIT Godot Advanced Vehicle as a reference for raycast suspension, brush/Pacejka tire response and drivetrain concepts.
-- [x] Record Chrono as an optional C++ vehicle-dynamics research reference, not the default mobile dependency.
-- [ ] Build an isolated vehicle test scene and baseline telemetry.
-- [ ] Implement the first native C++ vehicle dynamics slice with slip-aware tire forces and suspension.
-- [ ] Validate normal physics tick rates on mobile before considering higher rates.
-- [ ] Add drivetrain, gears, differential, brakes, ABS/TCS and steering refinements incrementally.
-- [ ] Tune FPS character acceleration, friction, slope/step response and selective ragdoll/prop interactions separately.
-**Gate:** stable, tunable vehicle/character feel with measured target-device cost.
+**Gate:** the editor feels like ARUT-HARDT rather than the unmodified Godot editor while retaining the underlying scene/resource workflow.
 
-## Phase 4 — Mobile renderer baseline
-- [ ] Mobile/Balanced/High profiles.
-- [ ] Centralized environment/light ownership for streamed chunks.
-- [ ] Resolution scaling, shadow distance, LOD/culling, instancing and texture budgets.
-- [ ] Measure cold start, frame time, memory and thermal behavior.
-**Gate:** stable documented baseline on target hardware.
+## Phase 3 — Physics backend choice and integration
+- [ ] Compare Godot Physics, integrated Jolt, PhysX 5, Bullet and ReactPhysics3D against Android ARM64 support, features, integration cost, performance and license/notices.
+- [ ] Audit the existing Godot 4.x PhysX 5 backend work, exact source revision, dependency build and Android support.
+- [ ] Keep high-level ARUT systems backend-neutral where practical; do not hard-code Jolt as the only solver.
+- [ ] Maintain Godot Physics and Jolt as comparison/fallback options during evaluation.
+- [ ] Select one practical primary backend and at most one maintained alternative once the evidence is clear.
+- [ ] Add a project setting for backend choice only after real adapters exist.
+- [ ] Enrich C++ vehicle dynamics with tire slip, combined grip, wheel speed, drivetrain, gearbox, differential, separate brakes, ABS/TCS and steering response.
+- [ ] Add character movement, ragdoll/physical bones, material-based interaction and selective breakable props.
 
-## Phase 5 — Engine-source renderer/editor work
-- [ ] Check if each feature needs a Godot patch or can use shader/GDExtension.
-- [ ] Add small reviewed patches only for justified limitations.
-- [ ] Pin upstream revision and validate patches with git apply --check.
-- [ ] Rebuild after a coherent patch batch and compare with unmodified Godot using the same scene.
-**Gate:** reproducible benefit shown by benchmark or authoring workflow.
+**Gate:** the selected backend builds on target platforms and serves the standard body/collision/query APIs.
 
-## Phase 6 — Beginner workflows and releases
-- [ ] Mobile 3D template, starter controller, material/lighting presets and diagnostics.
-- [ ] Test that a beginner can create/run a small project without local command-line setup.
-- [ ] Versioned artifacts, checksums, changelog, notices and rollback steps.
-- [ ] ARUT Mobile Android ARM64; HARDT Studio desktop first, other platforms later.
+## Phase 4 — Original editor workflows and templates
+- [ ] Create C++-ready starter projects with default input actions, character and Car3D templates.
+- [ ] Make scene/component creation, mesh/material assignment, physics tuning and Android packaging discoverable without command-line work.
+- [ ] Add native CPU/GPU frame-time, physics-cost, memory and quality-profile diagnostics.
+- [ ] Provide helpful errors for missing native libraries/resources.
 
-**Test policy:** don't request an on-device APK test until Phase 1 + Phase 2 form a complete vertical slice. Then run one combined cloud build and report actual results.
+## Phase 5 — Rendering and mobile performance
+- [x] Create isolated shader/material and procedural demo prototypes.
+- [ ] Verify shader/API semantics against the exact Godot version; preserve UV/triplanar, normal and AO behavior.
+- [ ] Create Mobile/Balanced/High profiles with explicit costs.
+- [ ] Add centralized lighting/environment conventions, fog, LOD/culling, instancing and texture budgets.
+- [ ] Build a stylized anime/PBR hybrid material stack with optional outlines/rim light.
+- [ ] Benchmark before making performance claims.
+
+## Phase 6 — Private alpha for five people
+- [ ] Batch built-in C++ node work, editor identity changes and the initial physics decision into coherent source changes.
+- [ ] Run Android ARM64 and Linux x86_64 cloud builds; report actual logs/artifacts.
+- [ ] Prepare private installation/import/rollback instructions and versioned artifacts.
+- [ ] Ask the user and four other intended testers to try the engine only when it has enough real features to evaluate.
+
+## Existing prototypes (not yet validated)
+- `native/arut_native/`: initial C++ GDExtension scaffold.
+- `renderer/demo/`: isolated anime surface shader/demo prototype.
+- `docs/PHYSICS_ARCHITECTURE.md`: open physics-backend evaluation, not a selected or integrated backend.
+
+**Status rule:** never claim source is compiled or tested without evidence. That rule does not prevent feature-first development; it prevents unsupported claims.
