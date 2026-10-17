@@ -76,7 +76,10 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 ## Phase 5 — Rendering and mobile performance
 - [x] Create isolated shader/material and procedural demo prototypes.
 - [ ] Verify shader/API semantics against the exact Godot version; preserve UV/triplanar, normal and AO behavior.
-- [x] Add native `ArutRenderProfile3D` scene node with Mobile/Balanced/High viewport presets (source compiled in the successful Android CI build; target runtime behavior still needs verification).
+- [x] Add native `ArutRenderProfile3D` scene node with Mobile/Balanced/High viewport presets.
+- [x] Add native runtime apply controls and viewport counters for visible objects/primitives, visible/shadow/canvas draw calls.
+- [x] Add the C++-registered `ArutAnimeMaterial3D` toon/PBR hybrid material with embedded shader source and Inspector texture/UV/normal/AO/roughness/specular/rim controls.
+- [ ] Compile and verify the new rendering/material source in an integration build; the feature branch remains source-only until this passes.
 - [ ] Profile actual cost on the target renderer and tune preset values.
 - [ ] Add centralized lighting/environment conventions, fog, LOD/culling, instancing and texture budgets.
 - [ ] Build a stylized anime/PBR hybrid material stack with optional outlines/rim light, face/hair controls and sensible fallbacks for the Mobile renderer.
@@ -97,7 +100,7 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 - `engine/modules/arut/`: built-in C++ components for Car3D, Character3D, RagdollDummy3D and RenderProfile3D. Source compiled in the successful Android CI run at `158ea1e`; runtime behavior is not yet verified.
 - `templates/arut_character_lab/`: importable character/ragdoll lab packaged by the Android workflow; currently uses the procedural dummy and awaits model/animation integration.
 - `native/arut_native/`: initial optional C++ GDExtension smoke-test scaffold; its smoke test does not verify the built-in character/car/render systems.
-- `renderer/demo/`: isolated anime surface shader/demo prototype.
+- `renderer/demo/`: legacy isolated shader/demo prototype; the native material feature is implemented in `engine/modules/arut/` and does not depend on that demo script.
 - `docs/OPEN_SOURCE_STACK.md`: renderer, physics, vehicle and CC0 asset evaluation.
 - `docs/ANIMATION_SYSTEM_ARCHITECTURE.md`: GASP-inspired C++ motion matching and mannequin implementation plan.
 - `docs/PHYSICS_ARCHITECTURE.md`: open physics-backend evaluation.
