@@ -48,7 +48,7 @@ void ArutRenderProfile3D::_bind_methods() {
     ADD_GROUP("Optimization", "optimization_");
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "optimization_occlusion_culling"), "set_use_occlusion_culling", "get_use_occlusion_culling");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "optimization_mesh_lod_threshold", PROPERTY_HINT_RANGE, "0,20,0.1,suffix:px"), "set_mesh_lod_threshold", "get_mesh_lod_threshold");
-    ADD_PROPERTY(PropertyInfo(Variant::INT, "optimization_shadow_atlas_size", PROPERTY_HINT_ENUM, "256,512,1024,2048,4096"), "set_positional_shadow_atlas_size", "get_positional_shadow_atlas_size");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "optimization_shadow_atlas_size", PROPERTY_HINT_ENUM, "256:256,512:512,1024:1024,2048:2048,4096:4096"), "set_positional_shadow_atlas_size", "get_positional_shadow_atlas_size");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "optimization_texture_mipmap_bias", PROPERTY_HINT_RANGE, "-4,4,0.25"), "set_texture_mipmap_bias", "get_texture_mipmap_bias");
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "optimization_debanding"), "set_use_debanding", "get_use_debanding");
 
