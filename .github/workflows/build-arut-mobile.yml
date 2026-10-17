@@ -94,10 +94,13 @@ jobs:
                   raise SystemExit("ARUT Mobile app icon must be square and at least 512x512 pixels.")
               image = source.convert("RGBA")
 
-          # The editor manifest resolves @mipmap/themed_icon from the shared Android
-          # library resources. Keep density fallbacks there, and replace the API 26+
-          # adaptive-icon XML too; otherwise Android may keep showing Godot's artwork.
-          resource_root = Path("godot/platform/android/java/lib/src/main/res")
+          # Write app-local resources as well as shared-library resources. Android merges
+          # the application and :lib resources; app-local resources intentionally win if
+          # an upstream resource with the same name is present.
+          resource_roots = [
+              Path("godot/platform/android/java/lib/src/main/res"),
+              Path("godot/platform/android/java/editor/src/main/res"),
+          ]
           density_sizes = {
               "mipmap-ldpi": 36,
               "mipmap-mdpi": 48,
@@ -114,35 +117,91 @@ jobs:
               "mipmap-xxhdpi": 324,
               "mipmap-xxxhdpi": 432,
           }
-          for directory, size in density_sizes.items():
-              target_dir = resource_root / directory
-              target_dir.mkdir(parents=True, exist_ok=True)
-              resized = image.resize((size, size), Image.Resampling.LANCZOS)
-              output = target_dir / "themed_icon.png"
-              resized.save(output, format="PNG", optimize=True)
-              print(f"Generated legacy launcher icon {output} ({size}x{size})")
 
-          for directory, size in adaptive_foreground_sizes.items():
-              target_dir = resource_root / directory
-              target_dir.mkdir(parents=True, exist_ok=True)
-              resized = image.resize((size, size), Image.Resampling.LANCZOS)
-              output = target_dir / "arut_icon_foreground.png"
-              resized.save(output, format="PNG", optimize=True)
-              print(f"Generated adaptive launcher foreground {output} ({size}x{size})")
+          for resource_root in resource_roots:
+              for directory, size in density_sizes.items():
+                  target_dir = resource_root / directory
+                  target_dir.mkdir(parents=True, exist_ok=True)
+                  resized = image.resize((size, size), Image.Resampling.LANCZOS)
+                  output = target_dir / "themed_icon.png"
+                  resized.save(output, format="PNG", optimize=True)
+                  print(f"Generated ARUT legacy launcher icon {output} ({size}x{size})")
 
-          adaptive_icon = resource_root / "mipmap-anydpi-v26" / "themed_icon.xml"
-          adaptive_icon.parent.mkdir(parents=True, exist_ok=True)
-          adaptive_icon.write_text(
-              "\n".join([
-                  '<?xml version="1.0" encoding="utf-8"?>',
-                  '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">',
-                  '    <background android:drawable="@android:color/black"/>',
-                  '    <foreground android:drawable="@mipmap/arut_icon_foreground"/>',
-                  '</adaptive-icon>',
-              ]) + "\n",
-              encoding="utf-8",
-          )
-          print(f"Generated ARUT adaptive launcher icon {adaptive_icon}")
+              for directory, size in adaptive_foreground_sizes.items():
+                  target_dir = resource_root / directory
+                  target_dir.mkdir(parents=True, exist_ok=True)
+                  resized = image.resize((size, size), Image.Resampling.LANCZOS)
+                  output = target_dir / "arut_icon_foreground.png"
+                  resized.save(output, format="PNG", optimize=True)
+                  print(f"Generated ARUT adaptive launcher foreground {output} ({size}x{size})")
+
+              adaptive_icon = resource_root / "mipmap-anydpi-v26" / "themed_icon.xml"
+              adaptive_icon.parent.mkdir(parents=True, exist_ok=True)
+              adaptive_icon.write_text(
+                  "\n".join([
+                      '<?xml version="1.0" encoding="utf-8"?>',
+                      '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">',
+                      '    <background android:drawable="@android:color/black"/>',
+                      '    <foreground android:drawable="@mipmap/arut_icon_foreground"/>',
+                      '</adaptive-icon>',
+                  ]) + "\n",
+                  encoding="utf-8",
+              )
+              print(f"Generated ARUT adaptive launcher icon {adaptive_icon}")
+
+          editor_manifest = Path("godot/platform/android/java/editor/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
+          if editor_manifest.count("@mipmap/themed_icon") < 3:
+              raise SystemExit("Android editor manifest no longer assigns @mipmap/themed_icon to the app, editor and launcher alias.")
+
+          # Verify that both the application module and shared library now contain
+          # every resource referenced by the adaptive and legacy icon variants.
+          for resource_root in resource_roots:
+              required = [
+                  resource_root / "mipmap-xxxhdpi" / "themed_icon.png",
+                  resource_root / "mipmap-xxxhdpi" / "arut_icon_foreground.png",
+                  resource_root / "mipmap-anydpi-v26" / "themed_icon.xml",
+              ]
+              missing = [str(path) for path in required if not path.is_file()]
+              if missing:
+                  raise SystemExit("ARUT icon resource generation failed: " + ", ".join(missing))
+              adaptive_xml = (resource_root / "mipmap-anydpi-v26" / "themed_icon.xml").read_text(encoding="utf-8")
+              if "@mipmap/arut_icon_foreground" not in adaptive_xml:
+                  raise SystemExit(f"Adaptive icon does not reference the ARUT foreground: {resource_root}")
+          print("ARUT launcher icon resource preflight passed for app-local and shared-library Android resources.")
+          PY
+
+      - name: Validate uploaded humanoid mannequin GLB
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import struct
+          from pathlib import Path
+
+          model_path = Path("templates/arut_character_lab/assets/mannequin/source/Humanoid Robot 01.glb")
+          if not model_path.is_file():
+              raise SystemExit(f"Missing primary mannequin source: {model_path}")
+          data = model_path.read_bytes()
+          if len(data) < 20 or data[:4] != b"glTF":
+              raise SystemExit("Primary mannequin file is not a valid GLB container.")
+          version, declared_length = struct.unpack_from("<II", data, 4)
+          json_length, json_type = struct.unpack_from("<II", data, 12)
+          if version != 2 or declared_length != len(data) or json_type != 0x4E4F534A:
+              raise SystemExit("Primary mannequin must be a complete glTF 2.0 binary with a JSON header chunk.")
+          if 20 + json_length > len(data):
+              raise SystemExit("Primary mannequin GLB JSON chunk exceeds the file length.")
+          document = json.loads(data[20:20 + json_length].decode("utf-8"))
+          skins = document.get("skins", [])
+          animations = document.get("animations", [])
+          if not skins or not animations:
+              raise SystemExit("Primary mannequin must contain at least one skin and one animation clip.")
+          joint_count = max((len(skin.get("joints", [])) for skin in skins), default=0)
+          if joint_count < 1:
+              raise SystemExit("Primary mannequin contains skin entries but no joints.")
+          print(f"Mannequin GLB preflight passed: {len(data):,} bytes; {len(document.get('meshes', []))} meshes; {len(skins)} skin(s); {joint_count} joints in the largest skin; {len(animations)} animation(s).")
+          print("Animation clips:")
+          for animation in animations:
+              print(f"  - {animation.get('name', '<unnamed>')}")
           PY
 
       - name: Add built-in ARUT C++ module

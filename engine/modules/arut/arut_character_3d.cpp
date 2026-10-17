@@ -272,7 +272,56 @@ StringName ArutCharacter3D::_resolve_animation_clip(const StringName &p_clip) co
             return available[i];
         }
     }
-    return StringName();
+    // Different licensed mannequin assets use different library/clip prefixes.
+    // If the configured exact/suffix name is absent, select a clip by its semantic
+    // locomotion category (Idle, Walk, Run/Sprint/Jog, Jump, or Fall).
+    const String requested_lower = requested.to_lower();
+    StringName best_match;
+    int32_t best_score = 0;
+    for (uint32_t i = 0; i < available.size(); ++i) {
+        const String candidate = String(available[i]);
+        const String lower = candidate.to_lower();
+        int32_t score = 0;
+
+        if (requested_lower.contains("idle") && lower.contains("idle")) {
+            score = 100;
+            if (lower == requested_lower) {
+                score += 100;
+            }
+        } else if (requested_lower.contains("walk") && lower.contains("walk")) {
+            score = 100;
+            if (lower.contains("jump")) {
+                score -= 70;
+            }
+            if (lower.contains("start") || lower.contains("stop") || lower.contains("backward") || lower.contains("turn") || lower.contains("strafe")) {
+                score -= 35;
+            }
+            if (lower == requested_lower) {
+                score += 100;
+            }
+        } else if (requested_lower.contains("run") && (lower.contains("run") || lower.contains("sprint") || lower.contains("jog"))) {
+            score = 100;
+            if (lower == requested_lower) {
+                score += 100;
+            }
+        } else if (requested_lower.contains("jump") && lower.contains("jump")) {
+            score = 100;
+            if (lower.contains("land")) {
+                score -= 35;
+            }
+            if (lower == requested_lower) {
+                score += 100;
+            }
+        } else if (requested_lower.contains("jump") && lower.contains("fall")) {
+            score = 70;
+        }
+
+        if (score > best_score) {
+            best_score = score;
+            best_match = available[i];
+        }
+    }
+    return best_match;
 }
 
 void ArutCharacter3D::_update_character_animation(bool p_force_idle) {

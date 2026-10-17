@@ -47,10 +47,10 @@ private:
     bool animation_enabled = true;
     NodePath animation_player_path = NodePath("ArutTestMannequin/Model/AnimationPlayer");
     NodePath animation_visual_root_path = NodePath("ArutTestMannequin");
-    StringName animation_idle_clip = "RobotArmature|Robot_Idle";
-    StringName animation_walk_clip = "RobotArmature|Robot_Walking";
-    StringName animation_run_clip = "RobotArmature|Robot_Running";
-    StringName animation_jump_clip = "RobotArmature|Robot_Jump";
+    StringName animation_idle_clip = "Idle";
+    StringName animation_walk_clip = "Walking";
+    StringName animation_run_clip = "Running";
+    StringName animation_jump_clip = "Jump";
     real_t animation_blend_time = 0.16;
 
     Vector2 move_input;
