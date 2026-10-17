@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="128" viewBox="0 0 640 128">
+  <g transform="translate(0 0)">
+    <path fill="#101521" d="M64 6 119 34v60l-55 28L9 94V34Z"/>
+    <path fill="#2DE0C3" d="M29 91 56 28h12L42 91Z"/>
+    <path fill="#FFFFFF" d="M53 91 80 28h12L65 91Z"/>
+    <path fill="#2DE0C3" d="M42 69h45l-5 10H38Z"/>
+    <path fill="#FFFFFF" d="M65 79h21l5 12H60Z"/>
+  </g>
+  <text x="140" y="77" fill="#FFFFFF" font-family="sans-serif" font-size="52" font-weight="800" letter-spacing="2">ARUT</text>
+  <rect x="285" y="37" width="3" height="48" fill="#2DE0C3"/>
+  <text x="309" y="77" fill="#2DE0C3" font-family="sans-serif" font-size="52" font-weight="800" letter-spacing="2">HARDT</text>
+  <text x="312" y="108" fill="#9AA7BD" font-family="sans-serif" font-size="15" font-weight="600" letter-spacing="5">ENGINE</text>
+</svg>

@@ -2,41 +2,51 @@
 
 Last updated: 2026-10-17.
 
+## Direction reset
+The engine is the product right now; PEAK/gameplay testing is not the priority. The user wants C++-first engine features and an original editor UX. Do not ask for a phone test after each feature. Aim to build a private-alpha package for five people after several coherent features exist.
+
 ## Naming
 Umbrella: **ARUT-HARDT Engine**.
 - **ARUT Mobile** — Android/mobile-first edition.
 - **HARDT Studio** — desktop editor edition.
-One shared engine core, API and project format.
+One shared core, API and project format.
 
 ## Permanent repository
 Repository: https://github.com/Thunder2700c/arut-hardt-engine
-Default branch: `main`.
-The clean engine-only foundation has been transferred here as a new commit based on this repo's own initial commit. No PEAK game levels, assets, root project or game-specific files are in the current tree.
-The temporary staging branch remains under the PEAK repository for history/recovery only. Do not develop further in it and do not merge it into PEAK main.
+Default branch: main.
+Working branch for this direction reset: `engine-first-cpp-ux`.
+The engine-only foundation has its own history. Do not continue work in the old PEAK staging branch and do not merge it into PEAK main.
 
-## Implemented in the permanent repository
-- Project README, license for original files, third-party notices and upstream version document.
-- `DEVELOPMENT_PROTOCOL.md`: mandatory durable process; read this and ROADMAP at every resume.
-- `ROADMAP.md`: milestones and truthful build/test status.
-- Manual Android editor, native extension/smoke-bundle and shader demo workflow: `.github/workflows/build-arut-mobile.yml`.
-- Manual Linux desktop editor/native extension workflow: `.github/workflows/build-hardt-studio.yml`.
+## What exists in this repo
 - Initial C++ GDExtension class `ArutRuntime` under `native/arut_native/`.
-- Isolated smoke-test project at `tests/native_smoke/`.
-- Shader prototype `renderer/demo/shaders/arut_anime_surface.gdshader` and isolated procedural demo project under `renderer/demo/`.
-- Upstream: Godot tag `4.7-stable`; godot-cpp commit `2bb1acf6f8ae1ce96ac7b9ba3a10b499c59c49ec`.
+- Isolated extension smoke-test project under `tests/native_smoke/`.
+- Shader/material prototype and demo under `renderer/demo/`.
+- Manual CI workflows for Android ARM64 editor/native extension and Linux x86_64 editor.
+- Pinned intended upstreams: Godot `4.7-stable`; godot-cpp commit `2bb1acf6f8ae1ce96ac7b9ba3a10b499c59c49ec`.
+- `DEVELOPMENT_PROTOCOL.md` is updated to engine-first, C++-first development.
+- `ROADMAP.md` is restructured around built-in native components, editor redesign and backend evaluation.
+- `docs/PHYSICS_ARCHITECTURE.md` now compares backend candidates without declaring Jolt the winner.
+- `docs/EDITOR_UX_ARCHITECTURE.md` describes a genuinely branded editor redesign.
+- `docs/ENGINE_COMPONENT_CATALOG.md` specifies first-class nodes, starting with Car3D.
+- `engine/modules/arut/` contains the first built-in native C++ module with `ArutCar3D` and `ArutCharacter3D` source. Both editor workflows copy this module into the pinned Godot source before SCons runs. This is source-level implementation only so far.
+- `engine/patches/0001-arut-editor-identity.patch` defines the initial ARUT-HARDT theme preset and window/project-manager identity; the build overlays original mark and custom node icons into the editor source.
 
-## Verification truth
-The repository contents have not yet been compiled or run as part of this engine work. The earlier APK the user installed was built from the previous Peak workflow; it does not prove the new ARUT-HARDT workflow, C++ extension or shader compiles. The new source files remain prototypes until a combined cloud build gives actual evidence.
+## Build truth
+The permanent repository's Android and Linux workflows have not been verified by a successful run in this branch. The earlier installed editor APK came from the previous PEAK workflow; it does not prove this repo's workflows or native code compiled. The renderer shader remains a prototype. Native `ArutCar3D` and `ArutCharacter3D` source now exists in `engine/modules/arut/`, but neither has been compiled or runtime-verified.
 
-## User test policy
-The user asked to avoid frequent APK builds and test only after development is roughly halfway done. Do not ask the user to compile/test now. Review and fix repository configuration and shader/demo code first. Trigger one combined cloud build at the vertical-slice gate, then give one clear phone test package.
+## Physics findings
+- Current project baseline is Godot 4.7 with built-in Godot Physics/Jolt options; Jolt is not a permanent decision.
+- Native `ArutCar3D` source provides Inspector properties, editable compact/sedan/off-road presets, internally managed wheel raycasts, spring/damper force, simple steering, drive/braking inputs and contact/speed telemetry. Native `ArutCharacter3D` source provides walk/sprint, ground acceleration/friction, air control, gravity, jump and input-action mapping. Neither is compiled or run yet; both are first-pass components, not finished gameplay systems.
+- The ARUT-HARDT theme/identity patch and custom SVG brand/node icons are written, but source application/build is not yet verified.
+- A community Godot 4.x PhysX 5 backend exists as work-in-progress and needs a source/commit, license/notice, Android ARM64 and build-path audit before adoption.
+- Bullet and ReactPhysics3D remain comparison candidates; neither is a drop-in Godot 4.7 backend.
+- Next physics milestone is evaluating the existing PhysX backend and designing native, backend-aware ARUT components—not blindly embedding another solver.
 
-## Immediate next actions
-1. Review/fix both CI workflows and native-library paths; pin all relevant build versions.
-2. Review shader syntax and demo code against Godot 4.7, keeping expensive GI/reflections off.
-3. Add a reproducible smoke-test project artifact and make its status unambiguous.
-4. Update ROADMAP only for completed work that is actually present.
-5. At the planned gate, run the Android editor/native-extension/demo build once. Inspect all job logs and artifacts; report successes/failures honestly.
-6. Only after that test gate, begin mobile rendering profiles and engine-source changes as separate small steps.
+## Next actions
+1. Add the first interaction/physical-prop C++ component and improve the built-in Car3D setup flow.
+2. Continue editor source work beyond the initial identity/theme patch: inspect node icons, add ARUT-specific editor categories and make common Inspector sections more approachable.
+3. Inspect the WIP PhysX backend revision and Android build path; decide based on evidence rather than defaults.
+4. Keep renderer development as a separate track instead of letting it crowd out components/editor work.
+5. After this first coherent component + identity batch is complete, run internal CI to catch native/API errors; do not ask the user to install/test the engine yet.
 
-Always follow `DEVELOPMENT_PROTOCOL.md`. Never overwrite the PEAK project or install anything on the user's phone without a deliberate verification step.
+Always follow `DEVELOPMENT_PROTOCOL.md`. Keep PEAK untouched and report what is written, compiled and tested accurately.

@@ -1,103 +1,93 @@
-# ARUT-HARDT Physics Architecture
+# ARUT-HARDT Physics Architecture and Backend Evaluation
 
 ## Goal
+Build engine-level physics workflows, not only a game controller. A user should be able to add a high-level native C++ `ArutCar3D` node, attach a mesh/collider, adjust Inspector properties, and get a basic vehicle without manually assembling every wheel and force calculation.
 
-Build convincing, responsive, mobile-friendly game physics inspired by the feel of GTA-style vehicles and modern military FPS movement. These are design references, not a promise of bit-for-bit replication. No proprietary engine code or data is required.
+**No final backend is selected. Jolt is one candidate, not a permanent commitment.**
 
-## What the current PEAK project already does
+## Keep four layers separate
+1. **Backend:** body/area simulation, collision detection, constraints and queries.
+2. **ARUT physics API:** surface/material conventions, common queries, telemetry and project settings.
+3. **High-level C++ components:** `ArutCar3D`, `ArutCharacter3D`, `ArutInteractable3D`, `ArutBreakable3D` and physical-interaction helpers.
+4. **Editor workflows:** node-browser categories, Inspector properties, presets, diagnostic panels and starter scenes.
 
-Inspection of the public PEAK repository found:
+The solver alone does not make vehicle creation easy. ARUT needs first-class components and an editor designed around them.
 
-- `project.godot` selects the built-in `Jolt Physics` engine.
-- `vehicles/car.tscn` uses a 1200 kg `RigidBody3D`, a chassis box collider, and four `RayCast3D` wheel probes.
-- `vehicles/VehicleController.gd` applies spring and damping forces at each wheel probe, a simple lateral-grip force, and a throttle force.
-- The existing car controller does not yet implement wheel angular speed, longitudinal tire slip, slip-angle response, a drivetrain/power curve, selectable gears, a differential, ABS/traction control, or a calibrated brake/handbrake model.
-- The player uses `CharacterBody3D`, which is appropriate for a responsive, controller-driven FPS character; it should not be converted into a free rigid body just to make movement "more realistic".
+## Candidate backends
 
-Therefore, do not replace Jolt first. Jolt is already configured and is suitable for general rigid-body collision, joints/constraints, and character-adjacent physical interactions. Realism depends on the game-specific vehicle and movement models, collision shapes, contact material tuning, animation and feedback, not the engine name alone.
+### 1. PhysX 5 — leading alternative to investigate
+NVIDIA publishes PhysX 5 as an open-source C++ SDK. The official repository documents multi-platform support, including Android ARM, and has an upstream BSD-3-Clause license file; individual SDK components/dependencies may have additional notices, which must be checked for the exact pinned revision. PhysX has mature rigid-body/joint and vehicle-related systems. GPU/CUDA features must not be assumed to work on Android.
 
-## Open-source projects worth using responsibly
+A Godot 4.x PhysX 5 backend was linked from a discussion dated 2026-09-03. The author described it as WIP, then reported an expanding set of features: static/rigid/kinematic bodies, common collision shapes, ray/shape queries, contact reporting, Area3D triggers, Joint3D families and CharacterBody3D motion testing. An optional GPU rigid-body path uses CUDA; do not assume it works on Android or on the user's Xclipse GPU. The author later described a separate fork/module-based integration route. This makes it a serious candidate to inspect, **not a ready-to-ship Android backend**. The exact commit, build recipe, CPU ARM64 path, Godot 4.7 compatibility, nested dependency notices and license files still need auditing before adoption.
 
-### 1. Jolt Physics — default general-purpose solver
-Repository: https://github.com/jrouwe/JoltPhysics
-License: MIT.
-Already integrated into Godot 4.4+ as a built-in engine module, and selected by the current PEAK project. Use it for rigid-body simulation, collision queries, constraints, and the physical response of props. Avoid embedding a second full physics solver unless a measured requirement demands it.
+- SDK: https://github.com/NVIDIA-Omniverse/PhysX
+- Godot module branch: https://github.com/uno1982/godot/tree/feature/physx5-module
+- Example/benchmark: https://github.com/uno1982/godot-physx-example
+- Discussion (2026-09-03): https://github.com/godotengine/godot-proposals/discussions/15471
 
-### 2. Godot Advanced Vehicle — vehicle-controller reference
-Repository: https://github.com/Dechode/Godot-Advanced-Vehicle
-License: MIT (the repository notes that its included models, textures and sounds have their own licenses).
-Its controller demonstrates raycast suspension, Pacejka/brush-style tire models, tire wear, drivetrain choices, differentials, clutch and gears. This is closer to the vehicle system PEAK needs than swapping out Jolt. Review and port only code that is needed, preserve its attribution/license, and exclude its demo assets unless their separate licenses are verified.
-Caution: its README recommends a 240 Hz physics setting for its own demo. Do not adopt that default for mobile. First create a reduced model and benchmark at the engine's normal physics rate, then compare 60/90/120 Hz only where supported and useful.
+### 2. Jolt Physics — strong existing option, not automatically “best”
+Godot has included Jolt as a 3D backend since Godot 4.4. Upstream Jolt has vehicle constraints, wheel abstractions, engines, transmissions, differentials and anti-roll bars. Those primitives are useful, but selecting Jolt does not itself add an easy-to-author ARUT car node. The Godot-facing API may not expose every upstream-specific feature.
 
-### 3. Project Chrono — advanced vehicle-dynamics reference
-Repository: https://github.com/projectchrono/chrono
-License: BSD-3-Clause.
-Chrono is a serious multibody/multiphysics C++ framework and includes vehicle-dynamics capabilities and tire/suspension models. It is worth studying for high-fidelity simulation or a desktop vehicle-tuning tool. Its scope and integration cost make embedding all of Chrono into an Android open-world game a poor first move. Keep it as an optional later experiment, not the default mobile physics core.
+- https://github.com/jrouwe/JoltPhysics
+- https://github.com/godot-jolt/godot-jolt
+- https://docs.godotengine.org/en/4.7/tutorials/physics/index.html
 
-## Physics architecture for the engine
+### 3. Godot Physics — built-in compatibility baseline
+Already integrated with standard Godot body, shape, area, joint and query nodes. This is the lowest-friction fallback while alternate backends are investigated. A better C++ node layer can still add useful vehicle/character behavior above it.
 
-### Layer A — rigid-body world
-- Keep the Godot-integrated Jolt backend for collisions, rigid bodies and constraints.
-- Define consistent mass, friction, bounce and collision-layer conventions.
-- Use primitive/convex collision shapes for moving bodies when possible; do not use detailed render meshes as every moving object's collider.
-- Add high-speed collision handling only for the bodies that need it, as continuous collision detection costs more.
+### 4. Bullet — mature C++ alternative
+Bullet is a widely used real-time C++ collision/rigid-body SDK with a permissive zlib license. Being open source does not make it a drop-in Godot 4.7 backend; a maintained PhysicsServer adapter and platform builds would still be required.
 
-### Layer B — vehicle dynamics (C++)
-Create an `ArutVehicleBody` / vehicle component initially as a C++ GDExtension. Promote it to a Godot engine module only if profiling or required low-level hooks prove GDExtension insufficient.
+- https://github.com/bulletphysics/bullet3
 
-Minimum planned features:
-1. Four-corner raycast suspension with spring force, damper velocity, travel limits and force applied at each contact point.
-2. Tire contact model with longitudinal slip and lateral slip angle. Start with a stable brush-inspired / saturating friction model; keep Pacejka-style curves optional.
-3. Combined grip limit (friction-circle/ellipse approximation) so longitudinal and lateral forces cannot both exceed available contact grip.
-4. Wheel angular speed, drive/brake torque, rolling resistance and tire radius.
-5. Engine torque-vs-RPM curve, gears, final-drive ratio and drivetrain mode.
-6. FWD/RWD/AWD distribution and configurable open/limited-slip/locked differential behavior.
-7. Distinct service brake and handbrake behaviour; optional ABS and traction control.
-8. Steering response by speed and approximate Ackermann geometry for front wheels.
-9. Tunable centre of mass, suspension travel, anti-roll coupling and tire/surface friction.
-10. Telemetry overlay in test scenes: speed, RPM, gear, wheel contact, suspension travel, slip and frame time.
+### 5. ReactPhysics3D — smaller focused library
+A C++ library with rigid-body dynamics, common collision shapes, joints, raycasts and sleeping, released under the zlib license. It could suit a focused subsystem or reference implementation, but is not equivalent to a complete Godot-ready backend.
 
-The first milestone is one car driving over a flat surface, a low-speed curb, a bump and a turn without jittering, flipping randomly or requiring a 240 Hz simulation.
+- https://www.reactphysics3d.com/
 
-### Layer C — first-person/action movement
-- Retain `CharacterBody3D` for player movement and use a tuned acceleration/deceleration model, ground friction, slope/step handling, air control and jump/gravity settings.
-- Keep responsive input and camera feedback distinct from physical mass simulation; feel matters more than making the FPS character a rigid body.
-- Use animation/pose systems and hit-reaction impulses for combat feedback.
-- Use ragdoll/physical-bone simulation selectively for enemies/deaths, not for every character continuously.
-- Add mass/friction-based prop interactions and impact reactions only after basic character movement is stable.
+### 6. Project Chrono — vehicle-dynamics research
+A substantial C++ multibody/multiphysics toolkit useful for high-fidelity vehicle/tire/suspension research or a desktop tuning tool. It is probably too much integration/runtime cost for the first always-on mobile backend.
 
-### Layer D — breakable/interactive props (later)
-- Use pooled debris, lightweight fracture proxies, and thresholds for breakable items.
-- Keep full rigid-body debris for near-field events only; distant destruction can use prebuilt visual swaps.
-- Don't begin city-wide destruction or soft-body simulation until the base vehicle/character physics is benchmarked.
+- https://github.com/projectchrono/chrono
 
-## Performance policy for mobile
+## Evaluation matrix
 
-- Use one solver (Jolt) as the default.
-- Start with Godot's standard fixed physics tick rate; do not jump straight to 240 ticks per second because an example project recommends it.
-- Use distance-based activation/sleeping and avoid simulating off-screen/distant debris and abandoned vehicles unnecessarily.
-- Profile in release-like builds on the actual Xclipse 920 target.
-- Record physics frame time, main-thread frame time, collision body count and worst-case contact/vehicle count.
-- Prefer predictable and tunable physics over maximum mathematical fidelity. Warzone-like character feel and GTA-like vehicle handling need carefully authored systems and tuning, not simply more simulation steps.
+| Criterion | Required evidence |
+|---|---|
+| Godot compatibility | Exact source base, adapter completeness and maintenance status |
+| Android ARM64 | Compiles and runs CPU physics without desktop-only dependencies |
+| Core simulation | Bodies, areas, shapes, queries, joints, sleeping and collision filtering |
+| Gameplay | Character controller, ragdoll/physical bones and high-speed collision support |
+| Vehicles | Useful wheel/suspension/tire/drivetrain APIs or a feasible native ARUT layer |
+| Editor | Standard nodes and Inspector continue to work |
+| Cost | CPU, memory, threading, contacts and binary size on mobile |
+| Build | Reproducible dependency downloads and pinned revisions |
+| License | Exact version and nested third-party notices verified |
 
-## Proprietary engines and reverse engineering
+## Decision path
+1. Inspect the existing Godot PhysX 5 module work before assuming Jolt is the winner.
+2. Keep Godot Physics and integrated Jolt as comparison/fallback options during that inspection.
+3. Choose one primary backend and at most one maintained alternative after Android buildability and feature coverage are understood. Do not ship several full solvers by default.
+4. Design ARUT components against standard Godot body/force/query APIs wherever possible. Declare backend requirements for specialised features.
+5. Run internal cloud builds at sensible integration milestones; do not ask the user to install an APK after every feature.
 
-Do not use decompiled, leaked, or otherwise unauthorized Unity, Unreal, IW/Call of Duty, RAGE or GTA engine source/code as a source to copy into ARUT-HARDT.
+## Native C++ Car3D node: first-pass source and planned evolution
+- Appears in the Create Node dialog under an ARUT Vehicles category.
+- Creates/manages its basic four wheel probes and suspension setup.
+- Exposes wheelbase/track, radius, suspension travel/stiffness/damping, steering, drive layout, engine force/torque, service brake, handbrake, tire grip and control actions in the Inspector.
+- Includes front/rear/all-wheel drive and compact/sedan/off-road presets.
+- Uses an inexpensive initial suspension/tire-friction model through standard engine physics APIs.
+- Exposes native C++ controls for player input/AI and telemetry so controller logic need not be written in GDScript.
+- Later grows to wheel angular speed, longitudinal/lateral slip, combined grip limits, torque curve, gearbox, differential, ABS/TCS and specialised backend vehicle APIs.
 
-- Unity's currently published Editor Source Code Terms restrict using Unity source to create a competing engine or replicate Unity features, and restrict providing that source to coding assistants/AI agents. Use independent implementations and genuinely open-source components instead.
-- Unreal Engine source is available under Epic's license, not a blanket OSI open-source license allowing its engine internals to be transplanted into an unrelated engine. Follow the applicable EULA and distribution restrictions.
-- IW/RAGE are proprietary. Tools that inspect game files or reverse engineer formats are not equivalent to reusable source implementations; assets and file formats may also be protected by separate terms.
+This is the implementation target, not a claim that the node already exists.
 
-The allowed and practical strategy is to reproduce general techniques from public technical explanations, then implement them independently or reuse code under a compatible license (such as MIT/BSD). Preserve attribution and include all required notices.
+## Other planned native components
+- `ArutCharacter3D`: FPS/third-person movement, acceleration, ground friction, steps/slopes, air control and jumping.
+- `ArutInteractable3D`: mass/friction-aware pushes, pickup/throw hooks and impact feedback.
+- `ArutBreakable3D`: damage thresholds, visual states and nearby-only debris physics.
+- `ArutRagdollProfile`: selective physical-bone/ragdoll setup.
+- `ArutPhysicsMaterial`: accessible friction, bounce, density and surface tags.
+- Physics/vehicle panel: backend, body/contact counts, timing and per-car telemetry.
 
-## Validation sequence
-
-1. Create a standalone vehicle test scene separate from PEAK.
-2. Capture baseline behaviour and frame time for the current controller.
-3. Implement one feature at a time, beginning with force calculation and tire grip.
-4. Test normal 60 Hz physics before any higher tick rate.
-5. Add drivetrain, gears, differentials and assists after handling is stable.
-6. Add an action-movement test scene for player acceleration, slope handling, jump, air control and impact response.
-7. Only request the user's combined APK/phone test after the engine's first native + visual + physics slice is ready.
-
-No physics library or vehicle controller has yet been integrated into ARUT-HARDT by this document. It is the reviewed plan, not a claim of completed implementation.
+No backend is selected or integrated by this design document.

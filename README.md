@@ -1,18 +1,22 @@
 # ARUT-HARDT Engine
 
-A Godot-based open-source engine project focused on mobile-first performance, approachable workflows, native C++ systems and stylized rendering.
+A Godot-based C++-first engine project focused on approachable native components, an original editor experience, configurable physics backends and mobile-aware rendering.
 
 ## One engine, two editions
-- **ARUT Mobile:** Android-first editor/runtime and scalable mobile graphics defaults.
-- **HARDT Studio:** desktop editor distribution, starting with Linux x86_64.
+- **ARUT Mobile:** Android-first editor/runtime and mobile authoring workflows.
+- **HARDT Studio:** desktop editor distribution, initially Linux x86_64.
 
-Both editions share the same code, project format, version and APIs. They are not separate engines.
+Both share the same core, APIs and project format. They are not separate engines.
 
-## Status
-Early foundation. This is not yet a complete engine fork or custom renderer. CI fetches the matching Godot source at build time, applies reviewed patches from `engine/patches/`, and builds the targets. Native extensions live under `native/`; renderer resources and isolated tests live under `renderer/` and `tests/`.
+## Product focus
+ARUT-HARDT is being built as an engine before it is used to develop the user's game. The first native source batch now includes C++ `ArutCar3D` and `ArutCharacter3D` classes, with editable vehicle/suspension/steering/braking settings, compact/sedan/off-road presets, and native character movement controls. This code is not compiled or runtime-verified yet. Planned follow-ons include interaction, breakable props, diagnostics, ARUT-specific editor categories and custom editor panels.
 
-This repository must not contain PEAK game assets. The PEAK game remains separate.
+The initial intended audience is a private group of five people. The current priority is functional engine features and usability—not a public launch.
 
-Read [DEVELOPMENT_PROTOCOL.md](DEVELOPMENT_PROTOCOL.md) and [ROADMAP.md](ROADMAP.md) before making changes. We will delay the first on-device user test until a combined vertical slice is ready: reproducible editor build, C++ extension smoke test, and one lightweight stylized material demo.
+## Architecture and status
+The project currently uses a source-build overlay that fetches a pinned Godot 4.7 source tree at build time, applies reviewed patches, builds native code, and packages editor artifacts. It is an early foundation, not yet a complete maintained source fork or custom renderer.
 
-Keep Godot and third-party notices in any distributable build; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Read [DEVELOPMENT_PROTOCOL.md](DEVELOPMENT_PROTOCOL.md), [ROADMAP.md](ROADMAP.md), [docs/ENGINE_COMPONENT_CATALOG.md](docs/ENGINE_COMPONENT_CATALOG.md), [docs/EDITOR_UX_ARCHITECTURE.md](docs/EDITOR_UX_ARCHITECTURE.md), and [docs/PHYSICS_ARCHITECTURE.md](docs/PHYSICS_ARCHITECTURE.md) before continuing work.
+
+## Repository boundaries
+This repository must not contain PEAK game assets or game-specific files. The game remains separate. Keep required Godot/third-party notices for any dependencies actually included; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
