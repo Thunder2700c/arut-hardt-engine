@@ -4,33 +4,39 @@ Last updated: 2026-10-17.
 
 ## Naming
 Umbrella: **ARUT-HARDT Engine**.
-- **ARUT Mobile**: Android/mobile-first edition.
-- **HARDT Studio**: desktop editor edition.
-They must remain one shared codebase and project format.
+- **ARUT Mobile** — Android/mobile-first edition.
+- **HARDT Studio** — desktop editor edition.
+One shared engine core, API and project format.
 
-## Repository situation
-The engine-only working tree is currently staged on branch `arut-hardt-engine` inside `Thunder2700c/Peak`:
-https://github.com/Thunder2700c/Peak/tree/arut-hardt-engine
+## Permanent repository
+Repository: https://github.com/Thunder2700c/arut-hardt-engine
+Default branch: `main`.
+The clean engine-only foundation has been transferred here as a new commit based on this repo's own initial commit. No PEAK game levels, assets, root project or game-specific files are in the current tree.
+The temporary staging branch remains under the PEAK repository for history/recovery only. Do not develop further in it and do not merge it into PEAK main.
 
-The branch HEAD contains engine files only (no PEAK levels, assets or root game project), but its Git history has the PEAK repository as an ancestor. Treat it as temporary staging, not the permanent engine repository. Before any public release or normal cloning, create a dedicated `Thunder2700c/arut-hardt-engine` repository and transfer only this branch's current tree to it with a fresh history. Do not merge this branch into the PEAK main branch.
-
-## Implemented in staging tree
-- Project README, MIT license for original files, upstream notices and version pin document.
-- `DEVELOPMENT_PROTOCOL.md`: mandatory durable process rules; read at every resume.
-- `ROADMAP.md`: milestone status; no unverified item should be marked built/tested.
-- Manual Android editor/native extension/demo workflow: `.github/workflows/build-arut-mobile.yml`.
+## Implemented in the permanent repository
+- Project README, license for original files, third-party notices and upstream version document.
+- `DEVELOPMENT_PROTOCOL.md`: mandatory durable process; read this and ROADMAP at every resume.
+- `ROADMAP.md`: milestones and truthful build/test status.
+- Manual Android editor, native extension/smoke-bundle and shader demo workflow: `.github/workflows/build-arut-mobile.yml`.
 - Manual Linux desktop editor/native extension workflow: `.github/workflows/build-hardt-studio.yml`.
-- C++ GDExtension class `ArutRuntime` under `native/arut_native/`.
-- Isolated runtime smoke project at `tests/native_smoke/`.
-- Shader prototype `renderer/demo/shaders/arut_anime_surface.gdshader`.
-- Isolated procedural demo project at `renderer/demo/`.
-- Upstream selection: Godot tag `4.7-stable`; godot-cpp commit `2bb1acf6f8ae1ce96ac7b9ba3a10b499c59c49ec`.
+- Initial C++ GDExtension class `ArutRuntime` under `native/arut_native/`.
+- Isolated smoke-test project at `tests/native_smoke/`.
+- Shader prototype `renderer/demo/shaders/arut_anime_surface.gdshader` and isolated procedural demo project under `renderer/demo/`.
+- Upstream: Godot tag `4.7-stable`; godot-cpp commit `2bb1acf6f8ae1ce96ac7b9ba3a10b499c59c49ec`.
 
 ## Verification truth
-Nothing in this staging branch has been compiled or run as part of this new work. The earlier editor APK the user has installed came from their existing Peak workflow; it is not proof that this staging branch's workflows, native extension, or shader work. The smoke-test and shader demo source have not yet been compiled in the target editor.
+The repository contents have not yet been compiled or run as part of this engine work. The earlier APK the user installed was built from the previous Peak workflow; it does not prove the new ARUT-HARDT workflow, C++ extension or shader compiles. The new source files remain prototypes until a combined cloud build gives actual evidence.
 
 ## User test policy
-The user wants to avoid repetitive APK compilation and will test only after the development is about halfway complete. Don't ask them to compile now. Complete the repository separation, review scripts/workflows, and finish the first shader/material vertical slice first. At that gate, run one combined cloud build and give the user one test package with clear UI steps.
+The user asked to avoid frequent APK builds and test only after development is roughly halfway done. Do not ask the user to compile/test now. Review and fix repository configuration and shader/demo code first. Trigger one combined cloud build at the vertical-slice gate, then give one clear phone test package.
 
-## Immediate next action
-Ask the user to create a new repository named `arut-hardt-engine` under their GitHub account, with a README initialized. Then transfer only the current engine branch tree into its `main` branch, check the transferred file list, and keep the PEAK repo unchanged. Once moved, work only in the new engine repository.
+## Immediate next actions
+1. Review/fix both CI workflows and native-library paths; pin all relevant build versions.
+2. Review shader syntax and demo code against Godot 4.7, keeping expensive GI/reflections off.
+3. Add a reproducible smoke-test project artifact and make its status unambiguous.
+4. Update ROADMAP only for completed work that is actually present.
+5. At the planned gate, run the Android editor/native-extension/demo build once. Inspect all job logs and artifacts; report successes/failures honestly.
+6. Only after that test gate, begin mobile rendering profiles and engine-source changes as separate small steps.
+
+Always follow `DEVELOPMENT_PROTOCOL.md`. Never overwrite the PEAK project or install anything on the user's phone without a deliberate verification step.
