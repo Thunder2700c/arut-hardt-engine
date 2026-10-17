@@ -80,7 +80,7 @@ A substantial C++ multibody/multiphysics toolkit useful for high-fidelity vehicl
 - Exposes native C++ controls for player input/AI and telemetry so controller logic need not be written in GDScript.
 - Later grows to wheel angular speed, longitudinal/lateral slip, combined grip limits, torque curve, gearbox, differential, ABS/TCS and specialised backend vehicle APIs.
 
-This is the implementation target, not a claim that the node already exists.
+The first-pass source now exists in `engine/modules/arut/arut_car_3d.h/.cpp` and is registered by the built-in module, but has not been compiled or runtime-verified. The listed drivetrain and debug additions remain future work.
 
 ## Other planned native components
 - `ArutCharacter3D`: FPS/third-person movement, acceleration, ground friction, steps/slopes, air control and jumping.
