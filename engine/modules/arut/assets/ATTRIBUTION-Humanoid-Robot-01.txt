@@ -1,0 +1,19 @@
+Humanoid Robot 01 — third-party model attribution
+
+Creator: Vavtrudner
+Source listing:
+https://sketchfab.com/3d-models/humanoid-robot-01-e6151273e4974faca26728eba40c0066
+
+License shown on the source listing at the time of selection: Creative Commons
+Attribution (CC BY). The exact version/terms should be retained from the original
+download record. Required credit:
+
+"Humanoid Robot 01" by Vavtrudner, obtained from Sketchfab, licensed under
+Creative Commons Attribution (CC BY). Source:
+https://sketchfab.com/3d-models/humanoid-robot-01-e6151273e4974faca26728eba40c0066
+
+The GLB is retained as supplied by the project owner and is not geometrically
+modified by the ARUT Character Lab scene wrapper. ARUT's character-controller
+and scene integration are separate engine code. Before public redistribution,
+verify the exact license version and attribution requirements shown with the
+specific downloaded asset.

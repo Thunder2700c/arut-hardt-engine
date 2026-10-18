@@ -1,6 +1,7 @@
 #include "arut_character_3d.h"
 
 #include "scene/animation/animation_player.h"
+#include "modules/gltf/gltf_document.h"
 #include "scene/resources/animation.h"
 
 #include <initializer_list>
@@ -26,6 +27,8 @@
 #include "scene/resources/3d/capsule_shape_3d.h"
 #include "scene/resources/3d/primitive_meshes.h"
 #include "scene/resources/material.h"
+
+PackedByteArray arut_get_builtin_mannequin_data();
 
 void ArutCharacter3D::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_walk_speed", "value"), &ArutCharacter3D::set_walk_speed);
@@ -207,11 +210,16 @@ void ArutCharacter3D::_on_ready() {
             }
         }
         if (!has_direct_visual) {
-            _create_default_dummy();
+            if (!_create_default_mannequin()) {
+                _create_default_dummy();
+            }
         }
     }
 
     character_visual_root = Object::cast_to<Node3D>(get_node_or_null(animation_visual_root_path));
+    if (character_visual_root == nullptr) {
+        character_visual_root = default_visual_root;
+    }
     Node *animation_node = get_node_or_null(animation_player_path);
     if (animation_node == nullptr) {
         animation_node = find_child("AnimationPlayer", true, false);
@@ -379,6 +387,35 @@ void ArutCharacter3D::_create_default_collision() {
     default_collision_shape->set_position(Vector3(0.0, 0.89, 0.0));
     default_collision_shape->set_shape(capsule);
     add_child(default_collision_shape);
+}
+
+bool ArutCharacter3D::_create_default_mannequin() {
+    PackedByteArray model_data = arut_get_builtin_mannequin_data();
+    if (model_data.is_empty()) {
+        ERR_PRINT("ARUT built-in mannequin data is unavailable.");
+        return false;
+    }
+    Ref<GLTFDocument> document;
+    document.instantiate();
+    Ref<GLTFState> state;
+    state.instantiate();
+    if (document->append_from_buffer(model_data, String(), state) != OK) {
+        ERR_PRINT("ARUT built-in mannequin GLB could not be parsed.");
+        return false;
+    }
+    Node *generated_scene = document->generate_scene(state);
+    Node3D *visual = Object::cast_to<Node3D>(generated_scene);
+    if (visual == nullptr) {
+        if (generated_scene != nullptr) memdelete(generated_scene);
+        ERR_PRINT("ARUT built-in mannequin did not generate a Node3D scene.");
+        return false;
+    }
+    visual->set_name("ArutMannequin");
+    visual->set_scale(Vector3(0.82, 0.82, 0.82));
+    add_child(visual);
+    default_visual_root = visual;
+    character_visual_root = visual;
+    return true;
 }
 
 void ArutCharacter3D::_create_default_dummy() {

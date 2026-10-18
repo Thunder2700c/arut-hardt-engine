@@ -1,4 +1,58 @@
 #!/usr/bin/env python
+import base64
+from pathlib import Path
+
 Import("env")
 
+def embed_builtin_mannequin(target, source, env):
+    data = Path(str(source[0])).read_bytes()
+    encoded = base64.b64encode(data).decode("ascii")
+    chunks = [encoded[i:i + 4096] for i in range(0, len(encoded), 4096)]
+    lines = [
+        '#include "core/variant/variant.h"',
+        "",
+        "PackedByteArray arut_get_builtin_mannequin_data() {",
+        "    static const char *const encoded_chunks[] = {",
+    ]
+    lines.extend('        "' + chunk + '",' for chunk in chunks)
+    lines.extend([
+        "        nullptr",
+        "    };",
+        f"    PackedByteArray decoded; decoded.resize({len(data)});",
+        "    uint8_t *output = decoded.ptrw();",
+        "    uint32_t accumulator = 0;",
+        "    int32_t bit_count = 0;",
+        "    int64_t written = 0;",
+        "    for (const char *const *chunk = encoded_chunks; *chunk != nullptr; ++chunk) {",
+        "        for (const char *cursor = *chunk; *cursor != '\\0'; ++cursor) {",
+        "            const char ch = *cursor;",
+        "            int32_t value = -1;",
+        "            if (ch >= 'A' && ch <= 'Z') value = ch - 'A';",
+        "            else if (ch >= 'a' && ch <= 'z') value = ch - 'a' + 26;",
+        "            else if (ch >= '0' && ch <= '9') value = ch - '0' + 52;",
+        "            else if (ch == '+') value = 62;",
+        "            else if (ch == '/') value = 63;",
+        "            else if (ch == '=') return written == decoded.size() ? decoded : PackedByteArray();",
+        "            if (value < 0) continue;",
+        "            accumulator = (accumulator << 6) | static_cast<uint32_t>(value);",
+        "            bit_count += 6;",
+        "            if (bit_count >= 8) {",
+        "                bit_count -= 8;",
+        "                output[written++] = static_cast<uint8_t>((accumulator >> bit_count) & 0xff);",
+        "            }",
+        "        }",
+        "    }",
+        "    return written == decoded.size() ? decoded : PackedByteArray();",
+        "}",
+        "",
+    ])
+    Path(str(target[0])).write_text("\n".join(lines), encoding="utf-8")
+    return 0
+
 env.add_source_files(env.modules_sources, "*.cpp")
+generated_mannequin = env.Command(
+    "arut_builtin_mannequin.gen.cpp",
+    "assets/arut_builtin_mannequin.glb",
+    embed_builtin_mannequin,
+)
+env.add_source_files(env.modules_sources, generated_mannequin)

@@ -106,3 +106,11 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 - `docs/PHYSICS_ARCHITECTURE.md`: open physics-backend evaluation.
 
 **Status rule:** never claim source is compiled or tested without evidence. That rule does not prevent feature-first development; it prevents unsupported claims.
+
+
+## Character animation integration (active)
+- [ ] Bundle the rigged mannequin in the built-in module so a fresh project does not depend on a Character Lab scene.
+- [ ] Verify actual GLB clip names and native idle / walk / run / jump playback in a fresh project.
+- [ ] Audit and port the MIT motion-matching runtime/editor pipeline from its Godot 4.4-era APIs into the built-in Godot 4.7 module; preserve notices and separately audit demo animation data.
+- [ ] Replace the primitive ragdoll with a skeleton-bound physical ragdoll and verify animation-to-ragdoll handoff.
+- [ ] Pass Android ARM64 build and fresh-project runtime checks before marking the character system complete.

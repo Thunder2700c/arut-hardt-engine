@@ -76,6 +76,7 @@ private:
     void _on_process(double p_delta);
     void _on_physics_process(double p_delta);
 
+    bool _create_default_mannequin();
     void _create_default_dummy();
     void _create_default_collision();
     void _create_default_camera();

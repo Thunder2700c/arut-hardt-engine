@@ -66,3 +66,8 @@ Keep PEAK separate. Do not merge into PEAK or change its main branch as a side e
 6. Validate the imported humanoid mannequin appearance, Skeleton3D hierarchy and animation clips; then continue the C++-first conventional controller and GASP-inspired motion-matching work.
 
 Always follow `DEVELOPMENT_PROTOCOL.md`. Keep PEAK untouched and report what is written, compiled and tested accurately.
+
+
+## Character animation integration — not yet verified
+
+The built-in `ArutCharacter3D` currently creates a procedural capsule-person in a fresh project; the imported robot exists only in the Character Lab. The next integration step is to package a licensed model with the native module and load its real animation library. The MIT `GuilhermeGSousa/godot-motion-matching` project is a port candidate but its Godot 4.4-era APIs must be audited for Godot 4.7. GASP is a behavioral reference unless Epic explicitly authorizes the intended reuse. Skeleton-bound ragdoll and Android/runtime verification remain incomplete.
