@@ -34,7 +34,8 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 ## Phase 2 — ARUT-HARDT editor identity and UI redesign
 - [x] Add ARUT-HARDT theme/window/project-manager identity patches, branded About/welcome text, original mark/logos, and native component icons.
 - [x] Add the source patch that sets the product-facing version name to ARUT-HARDT Engine, changes the Android run-window label, and configures the character lab project's icon path (new source changes are not yet build/visually verified).
-- [ ] Re-run the Android ARM64 workflow after removing the overlapping duplicate `0003-arut-runtime-branding.patch`; run `39051212243` failed at patch validation before C++ compilation.
+- [x] Remove the overlapping runtime-branding patch and verify the Android ARM64 editor workflow, including built-in ARUT C++ module object builds, full editor compile, Gradle package and uploaded artifact (run `39051791844`, source commit `6d7eaa11cacb49fb89b6962c9cb4639dda3b9041`).
+- [ ] Build and package Android ARM64 `template_debug` and `template_release` engine export templates that include `modules/arut/`; editor compilation alone does not make the native module available to standalone exported game APKs.
 - [ ] Search for additional product-facing Godot labels and verify the generated launcher/adaptive icon on a new Android APK; editor app icon, project icon and exported game's app icon are separate assets/settings.
 - [ ] Create original theme, icons, typography and spacing—not only different colours.
 - [ ] Establish a useful default 3D layout: node/scene panel, viewport, Inspector, file/assets panel and diagnostics.

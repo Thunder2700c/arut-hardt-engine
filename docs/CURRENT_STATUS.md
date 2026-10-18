@@ -1,6 +1,6 @@
 # Current Status — Resume Here First
 
-Last updated: 2026-10-17.
+Last updated: 2026-10-18.
 
 ## Direction reset
 
@@ -18,7 +18,7 @@ One shared core, API and project format.
 
 Repository: https://github.com/Thunder2700c/arut-hardt-engine  
 Default/canonical working branch: `main`. Keep all ongoing work on `main`; do not create feature branches or reopen superseded pull requests. Older branch refs remain on GitHub as historical work because branch deletion is not available through the connected operation set; do not use or force-reset them.  
-Most recent integration correction documented here: the Android branding patches overlapped. The redundant `0003-arut-runtime-branding.patch` is removed; keep `0003-arut-runtime-identity.patch` as the single canonical runtime identity patch. Consult GitHub `main` for the current exact HEAD.
+Latest verified integration commit (2026-10-18): `6d7eaa11cacb49fb89b6962c9cb4639dda3b9041` — removes the duplicate Android branding patch, enforces unique runtime-identity patch ownership, and has a successful Android ARM64 editor workflow run.
 
 Keep PEAK separate. Do not merge into PEAK or change its main branch as a side effect.
 
@@ -38,17 +38,15 @@ Keep PEAK separate. Do not merge into PEAK or change its main branch as a side e
 
 ## Build truth
 
-- Successful Android ARM64 workflow run: [39024274125](https://github.com/Thunder2700c/arut-hardt-engine/actions/runs/39024274125), source commit `158ea1efb2c897d52adb8f676376f59bbfc7aec5` (2026-10-17).
-- At that commit, patch checks, launcher icon step as it existed at the time, C++ preflight, five ARUT module object builds, full Android editor compile, Gradle packaging and upload passed. The native GDExtension build/packaging jobs also passed.
-- The runtime identity patch, character-lab project icon wiring, adaptive/legacy launcher-icon generation, and uploaded mannequin GLB checks were added after the successful Android run above and still need a passing build.
-- Android workflow failure: [run 39050293595](https://github.com/Thunder2700c/arut-hardt-engine/actions/runs/39050293595), source commit `680e6bee5e1f9def46514f94e1d406408e43798d` (2026-10-17), first failed at `Validate and apply ARUT-HARDT engine patches` while checking `0003-arut-runtime-branding.patch` against `platform/android/java/editor/src/main/res/values/strings.xml`. Its initial hunk lacked trailing context; commit `2bcc1a372378178ae1e8c848278c44e1fce295a5` added context, but that file was subsequently identified as redundant because the canonical `0003-arut-runtime-identity.patch` makes the same source edits.
-- Android workflow failure: [run 39051212243](https://github.com/Thunder2700c/arut-hardt-engine/actions/runs/39051212243), source commit `8eff610489518aacc583536c6e90db8d0343f023` (2026-10-17), failed at patch validation because `0003-arut-runtime-branding.patch` and `0003-arut-runtime-identity.patch` both changed the same original lines in `version.py` and `platform/android/java/editor/src/main/res/values/strings.xml`. The branding patch changed those lines first, so the identity patch could no longer match the upstream text. Remove the redundant branding patch and retain the canonical identity patch named in `engine/patches/README.md`. C++ preflight, Android compilation, Gradle packaging and artifact upload remain **unverified**. A new workflow preflight also enforces that each of these two upstream files has exactly one patch owner, so accidental duplication will be reported directly before applying the patches.
-- The user's `[ARUT] SMOKE TEST PASSED` runtime message confirms the separate C++ GDExtension smoke-test project loaded. It does not prove the built-in Car3D, Character3D, ragdoll, or RenderProfile behavior in the editor or in a character lab scene.
-- The app icon, adaptive icon, project/game icon and exported game icon are separate resource paths. Successful generation/copy steps do not replace a device-side visual verification.
-- A new source patch changes `version.py`'s human-facing name to `ARUT-HARDT Engine` while intentionally keeping `short_name = "godot"`, and changes the Android editor run-window label to `ARUT Run window`. This is **source-written, not yet built or visually verified**. Perform a wider source search for other product-facing strings; preserve Godot attribution and licence notices in About/docs.
-- `ArutCar3D`, `ArutCharacter3D`, `ArutRagdollDummy3D` and the baseline `ArutRenderProfile3D` were source-compiled at the successful commit; their in-scene behavior, node-browser visibility and phone runtime behavior remain unverified.
-- Main commit `3d0c138c245fed208b65120cacb59a0ee17220e7` ports live render-profile switching by adding independent `quality_apply_on_change`, editor-safe automatic application, and `apply_to_current_viewport()` while retaining `apply_now()` compatibility. The source commit is present, but GitHub reported no CI status or workflow run for it; this change is **not yet build-verified**.
-
+- **Successful Android ARM64 integration workflow:** [run 39051791844](https://github.com/Thunder2700c/arut-hardt-engine/actions/runs/39051791844), source commit `6d7eaa11cacb49fb89b6962c9cb4639dda3b9041` (2026-10-17). All four jobs completed successfully.
+- The Android editor job passed runtime-patch ownership preflight, all three patch checks/applications, branding asset copy, legacy/adaptive icon generation, mannequin GLB preflight, ARUT C++ header/lifecycle preflight, the five ARUT module object builds, full Android ARM64 editor compilation, Gradle `generateGodotEditor` packaging and artifact upload. Uploaded editor artifact: `arut-mobile-editor-android-arm64` (176,777,028 bytes; artifact ID 12108945339 at the time checked).
+- The separate native-extension job successfully built and packaged the Android ARM64 GDExtension debug/release smoke-test libraries. This is distinct from the built-in `engine/modules/arut/` module.
+- The run verifies that the current ARUT C++ module sources compile into the **Android editor binary**. It does not by itself prove character/car/render runtime behavior on a device, nor does it prove that games exported as standalone Android APKs contain the module.
+- **Export-template gap:** `.github/workflows/build-arut-mobile.yml` currently compiles `target=editor` with `engine/modules/arut/` copied into Godot. It does not yet compile Android `target=template_debug` and `target=template_release` engine binaries with that built-in module. Until those templates are built and made available to the export workflow/editor, do not claim standalone exported Android projects can use the first-class ARUT module classes.
+- Historical patch failures were resolved by removing the overlapping `engine/patches/0003-arut-runtime-branding.patch`; `0003-arut-runtime-identity.patch` is the only owner of `version.py` and `platform/android/java/editor/src/main/res/values/strings.xml`. The ownership preflight now catches accidental duplicate patch owners before applying the patch set. The prior failed runs were [39050293595](https://github.com/Thunder2700c/arut-hardt-engine/actions/runs/39050293595) and [39051212243](https://github.com/Thunder2700c/arut-hardt-engine/actions/runs/39051212243).
+- The workflow validates that the humanoid source GLB has a skin and animation data. It does not visually verify its imported appearance, animation playback, or runtime rig compatibility.
+- The app icon, adaptive icon, project/game icon and exported game icon are separate resources. CI confirms icon-resource generation and packaging inputs, not device-side visual appearance.
+- The prior successful Android build at [39024274125](https://github.com/Thunder2700c/arut-hardt-engine/actions/runs/39024274125) remains useful historical evidence for the earlier source revision; prefer run 39051791844 for the current patch/module-editor integration.
 ## Selected engineering direction
 
 - Renderer: keep Godot's Mobile renderer and scene/resource pipeline for Android; author an ARUT-owned anime/PBR material stack. Do not transplant Filament or bgfx as if either were a drop-in renderer. Use Forward+ for desktop high-quality profiles where appropriate, with realistic compatibility fallbacks.
@@ -60,12 +58,11 @@ Keep PEAK separate. Do not merge into PEAK or change its main branch as a side e
 
 ## Next actions
 
-1. Dispatch `Build ARUT Mobile (Android ARM64)` on current `main` after removing the duplicate `0003-arut-runtime-branding.patch`. Verify a fresh run passes all patch checks, C++ preflight/object builds, full Android editor compilation, Gradle packaging and artifact upload before reporting a successful APK/editor build.
-2. Build a mobile-first grass/foliage shader prototype in an isolated renderer demo, including wind, cutout, sensible distance/instance budgets, and preserved normals/UV behavior.
-3. Audit and complete the first-party anime/PBR material path without creating a duplicate of the existing `ArutAnimeLitMaterial3D` or replacing the current renderer-compatibility logic.
-4. Add the compact CC0 animated robot asset to the character lab and validate GLB/FBX import, Skeleton3D hierarchy and clip names. Preserve the asset license/source in the manifest.
-5. Build the real white ARUT mannequin scene using a consistent humanoid rig and curated CC0 locomotion clips, driven by the existing C++ `ArutCharacter3D` movement instead of leaving generated primitives as the primary visual.
-6. Add the conventional C++-first AnimationTree controller for idle/start/stop/walk/run/sprint/strafe/turn/jump/fall/land. Audit and port motion matching to Godot 4.7 only after the rig/controller baseline works.
-7. At a coherent integration milestone, run both `Build ARUT Mobile (Android ARM64)` and `Build HARDT Studio (Linux x86_64)`, then report exact commits, artifacts and verified scope. The workflows are manual; if the connected tools cannot dispatch them, provide the precise UI steps rather than claiming a run.
+1. Build Android ARM64 `target=template_debug` and `target=template_release` Godot engine export templates with `engine/modules/arut/` included. Package and make those templates available to ARUT Mobile export; verify the exact Godot 4.7 Android template naming and installation path.
+2. Run a native C++ component smoke-test through a standalone Android export using the newly built templates. Until then, the editor build is verified, but exported-game integration/runtime is not.
+3. Build and verify the Linux x86_64 HARDT Studio editor at a coherent milestone.
+4. Build a mobile-first grass/foliage shader prototype in an isolated renderer demo, including wind, cutout, sensible distance/instance budgets, and preserved normals/UV behavior.
+5. Audit and complete the first-party anime/PBR material path without creating a duplicate of the existing `ArutAnimeLitMaterial3D` or replacing the current renderer-compatibility logic.
+6. Validate the imported humanoid mannequin appearance, Skeleton3D hierarchy and animation clips; then continue the C++-first conventional controller and GASP-inspired motion-matching work.
 
 Always follow `DEVELOPMENT_PROTOCOL.md`. Keep PEAK untouched and report what is written, compiled and tested accurately.
