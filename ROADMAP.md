@@ -109,7 +109,7 @@ Priority: build a usable engine, not make PEAK test every prototype. Features ar
 
 
 ## Character animation integration (active)
-- [ ] Bundle the rigged mannequin in the built-in module so a fresh project does not depend on a Character Lab scene.
+- [x] Source integration: embed the rigged mannequin in the built-in module and instantiate it from native `ArutCharacter3D` (Android compilation/runtime still pending).
 - [ ] Verify actual GLB clip names and native idle / walk / run / jump playback in a fresh project.
 - [ ] Audit and port the MIT motion-matching runtime/editor pipeline from its Godot 4.4-era APIs into the built-in Godot 4.7 module; preserve notices and separately audit demo animation data.
 - [ ] Replace the primitive ragdoll with a skeleton-bound physical ragdoll and verify animation-to-ragdoll handoff.

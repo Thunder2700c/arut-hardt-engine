@@ -12,6 +12,8 @@ def embed_builtin_mannequin(target, source, env):
         '#include "core/variant/variant.h"',
         "",
         "PackedByteArray arut_get_builtin_mannequin_data() {",
+        "    static PackedByteArray cached;",
+        "    if (!cached.is_empty()) return cached;",
         "    static const char *const encoded_chunks[] = {",
     ]
     lines.extend('        "' + chunk + '",' for chunk in chunks)
@@ -32,7 +34,7 @@ def embed_builtin_mannequin(target, source, env):
         "            else if (ch >= '0' && ch <= '9') value = ch - '0' + 52;",
         "            else if (ch == '+') value = 62;",
         "            else if (ch == '/') value = 63;",
-        "            else if (ch == '=') return written == decoded.size() ? decoded : PackedByteArray();",
+        "            else if (ch == '=') { if (written != decoded.size()) return PackedByteArray(); cached = decoded; return cached; }",
         "            if (value < 0) continue;",
         "            accumulator = (accumulator << 6) | static_cast<uint32_t>(value);",
         "            bit_count += 6;",
@@ -42,7 +44,9 @@ def embed_builtin_mannequin(target, source, env):
         "            }",
         "        }",
         "    }",
-        "    return written == decoded.size() ? decoded : PackedByteArray();",
+        "    if (written != decoded.size()) return PackedByteArray();",
+        "    cached = decoded;",
+        "    return cached;",
         "}",
         "",
     ])

@@ -215,8 +215,16 @@ jobs:
           from pathlib import Path
 
           model_path = Path("templates/arut_character_lab/assets/mannequin/source/Humanoid Robot 01.glb")
-          if not model_path.is_file():
-              raise SystemExit(f"Missing primary mannequin source: {model_path}")
+          module_model_path = Path("engine/modules/arut/assets/arut_builtin_mannequin.glb")
+          source_credit = Path("templates/arut_character_lab/assets/mannequin/source/ATTRIBUTION-Humanoid-Robot-01.txt")
+          module_credit = Path("engine/modules/arut/assets/ATTRIBUTION-Humanoid-Robot-01.txt")
+          for required in (model_path, module_model_path, source_credit, module_credit):
+              if not required.is_file():
+                  raise SystemExit(f"Missing mannequin source or attribution: {required}")
+          if model_path.read_bytes() != module_model_path.read_bytes():
+              raise SystemExit("Built-in mannequin asset differs from the audited Character Lab source.")
+          if source_credit.read_text(encoding="utf-8") != module_credit.read_text(encoding="utf-8"):
+              raise SystemExit("Built-in mannequin attribution differs from the source attribution.")
           data = model_path.read_bytes()
           if len(data) < 20 or data[:4] != b"glTF":
               raise SystemExit("Primary mannequin file is not a valid GLB container.")
@@ -239,6 +247,9 @@ jobs:
           for animation in animations:
               print(f"  - {animation.get('name', '<unnamed>')}")
           PY
+
+      - name: Validate native mannequin embedding generator syntax
+        run: python -m py_compile engine/modules/arut/SCsub
 
       - name: Add built-in ARUT C++ module
         shell: bash
