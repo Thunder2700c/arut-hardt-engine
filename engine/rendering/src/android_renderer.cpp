@@ -6,6 +6,8 @@
 #include <array>
 #include <cstring>
 #include <limits>
+#include <cstdio>
+#include <vector>
 
 extern "C" void arut_android_log(int priority, const char* message) noexcept;
 
@@ -217,6 +219,87 @@ bool AndroidRenderer::create_swapchain() noexcept {
     return result == VK_SUCCESS;
 }
 
+std::uint32_t AndroidRenderer::find_memory_type(std::uint32_t type_bits, VkMemoryPropertyFlags properties) const noexcept {
+    VkPhysicalDeviceMemoryProperties memory{};
+    vkGetPhysicalDeviceMemoryProperties(physical_device_, &memory);
+    for (std::uint32_t i = 0; i < memory.memoryTypeCount; ++i) {
+        if ((type_bits & (1U << i)) != 0U &&
+            (memory.memoryTypes[i].propertyFlags & properties) == properties) return i;
+    }
+    return UINT32_MAX;
+}
+
+bool AndroidRenderer::create_depth_resources() noexcept {
+    constexpr std::array<VkFormat, 3> candidates{
+        VK_FORMAT_D32_SFLOAT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D16_UNORM
+    };
+    for (const VkFormat candidate : candidates) {
+        VkFormatProperties properties{};
+        vkGetPhysicalDeviceFormatProperties(physical_device_, candidate, &properties);
+        if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0U) {
+            depth_format_ = candidate;
+            break;
+        }
+    }
+    if (depth_format_ == VK_FORMAT_UNDEFINED) {
+        log_error("No supported depth attachment format");
+        return false;
+    }
+
+    VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    image.imageType = VK_IMAGE_TYPE_2D;
+    image.format = depth_format_;
+    image.extent = {extent_.width, extent_.height, 1};
+    image.mipLevels = 1;
+    image.arrayLayers = 1;
+    image.samples = VK_SAMPLE_COUNT_1_BIT;
+    image.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkResult result = vkCreateImage(device_, &image, nullptr, &depth_image_);
+    if (result != VK_SUCCESS) {
+        log_error("vkCreateImage for depth attachment failed", result);
+        return false;
+    }
+
+    VkMemoryRequirements requirements{};
+    vkGetImageMemoryRequirements(device_, depth_image_, &requirements);
+    const std::uint32_t memory_type = find_memory_type(requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (memory_type == UINT32_MAX) {
+        log_error("No device-local memory type for depth attachment");
+        return false;
+    }
+    VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    allocation.allocationSize = requirements.size;
+    allocation.memoryTypeIndex = memory_type;
+    result = vkAllocateMemory(device_, &allocation, nullptr, &depth_memory_);
+    if (result != VK_SUCCESS) {
+        log_error("vkAllocateMemory for depth attachment failed", result);
+        return false;
+    }
+    result = vkBindImageMemory(device_, depth_image_, depth_memory_, 0);
+    if (result != VK_SUCCESS) {
+        log_error("vkBindImageMemory for depth attachment failed", result);
+        return false;
+    }
+
+    VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    view.image = depth_image_;
+    view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view.format = depth_format_;
+    view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    if (depth_format_ == VK_FORMAT_D24_UNORM_S8_UINT) view.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+    view.subresourceRange.levelCount = 1;
+    view.subresourceRange.layerCount = 1;
+    result = vkCreateImageView(device_, &view, nullptr, &depth_view_);
+    if (result != VK_SUCCESS) {
+        log_error("vkCreateImageView for depth attachment failed", result);
+        return false;
+    }
+    return true;
+}
+
 bool AndroidRenderer::create_render_targets() noexcept {
     image_views_.resize(images_.size(), VK_NULL_HANDLE);
     for (std::size_t i = 0; i < images_.size(); ++i) {
@@ -229,23 +312,34 @@ bool AndroidRenderer::create_render_targets() noexcept {
         view.subresourceRange.layerCount = 1;
         if (vkCreateImageView(device_, &view, nullptr, &image_views_[i]) != VK_SUCCESS) return false;
     }
-    VkAttachmentDescription attachment{};
-    attachment.format = color_format_;
-    attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    if (!create_depth_resources()) return false;
+    std::array<VkAttachmentDescription, 2> attachments{};
+    attachments[0].format = color_format_;
+    attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    attachments[1].format = depth_format_;
+    attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     VkAttachmentReference color_ref{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference depth_ref{1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
     VkSubpassDescription subpass{};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &color_ref;
+    subpass.pDepthStencilAttachment = &depth_ref;
     VkRenderPassCreateInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
-    pass.attachmentCount = 1;
-    pass.pAttachments = &attachment;
+    pass.attachmentCount = static_cast<std::uint32_t>(attachments.size());
+    pass.pAttachments = attachments.data();
     pass.subpassCount = 1;
     pass.pSubpasses = &subpass;
     if (vkCreateRenderPass(device_, &pass, nullptr, &render_pass_) != VK_SUCCESS) return false;
@@ -254,8 +348,9 @@ bool AndroidRenderer::create_render_targets() noexcept {
     for (std::size_t i = 0; i < image_views_.size(); ++i) {
         VkFramebufferCreateInfo fb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
         fb.renderPass = render_pass_;
-        fb.attachmentCount = 1;
-        fb.pAttachments = &image_views_[i];
+        const std::array<VkImageView, 2> framebuffer_attachments{image_views_[i], depth_view_};
+        fb.attachmentCount = static_cast<std::uint32_t>(framebuffer_attachments.size());
+        fb.pAttachments = framebuffer_attachments.data();
         fb.width = extent_.width;
         fb.height = extent_.height;
         fb.layers = 1;
@@ -301,14 +396,15 @@ bool AndroidRenderer::draw_frame() noexcept {
     vkResetCommandBuffer(command_buffers_[image_index], 0);
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     if (vkBeginCommandBuffer(command_buffers_[image_index], &begin) != VK_SUCCESS) return false;
-    VkClearValue clear{};
-    clear.color = {{0.025F, 0.045F, 0.075F, 1.0F}};
+    std::array<VkClearValue, 2> clears{};
+    clears[0].color = {{0.025F, 0.045F, 0.075F, 1.0F}};
+    clears[1].depthStencil = {1.0F, 0};
     VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
     pass.renderPass = render_pass_;
     pass.framebuffer = framebuffers_[image_index];
     pass.renderArea.extent = extent_;
-    pass.clearValueCount = 1;
-    pass.pClearValues = &clear;
+    pass.clearValueCount = static_cast<std::uint32_t>(clears.size());
+    pass.pClearValues = clears.data();
     vkCmdBeginRenderPass(command_buffers_[image_index], &pass, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdEndRenderPass(command_buffers_[image_index]);
     if (vkEndCommandBuffer(command_buffers_[image_index]) != VK_SUCCESS) return false;
@@ -345,6 +441,9 @@ void AndroidRenderer::destroy_swapchain() noexcept {
         for (auto fb : framebuffers_) if (fb) vkDestroyFramebuffer(device_, fb, nullptr);
         if (render_pass_) vkDestroyRenderPass(device_, render_pass_, nullptr);
         for (auto view : image_views_) if (view) vkDestroyImageView(device_, view, nullptr);
+        if (depth_view_) vkDestroyImageView(device_, depth_view_, nullptr);
+        if (depth_image_) vkDestroyImage(device_, depth_image_, nullptr);
+        if (depth_memory_) vkFreeMemory(device_, depth_memory_, nullptr);
         if (swapchain_) vkDestroySwapchainKHR(device_, swapchain_, nullptr);
     }
     in_flight_ = VK_NULL_HANDLE;
@@ -352,6 +451,10 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     render_finished_.clear();
     command_pool_ = VK_NULL_HANDLE;
     render_pass_ = VK_NULL_HANDLE;
+    depth_view_ = VK_NULL_HANDLE;
+    depth_image_ = VK_NULL_HANDLE;
+    depth_memory_ = VK_NULL_HANDLE;
+    depth_format_ = VK_FORMAT_UNDEFINED;
     swapchain_ = VK_NULL_HANDLE;
     framebuffers_.clear();
     image_views_.clear();
