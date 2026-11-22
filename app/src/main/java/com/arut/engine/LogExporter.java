@@ -89,7 +89,7 @@ public final class LogExporter {
         if (previous != null && previous.isFile()) {
             try (InputStream old = new FileInputStream(previous)) {
                 copy(old, output);
-                output.write("\\n--- current runtime.log ---\\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                output.write("\n--- current runtime.log ---\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
             }
         }
         copy(current, output);
