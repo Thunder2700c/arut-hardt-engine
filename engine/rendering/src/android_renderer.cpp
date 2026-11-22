@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <android/asset_manager.h>
+#include "arut/rendering/mesh.hpp"
 
 extern "C" void arut_android_log(int priority, const char* message) noexcept;
 
@@ -40,7 +41,9 @@ bool AndroidRenderer::initialize(ANativeWindow* window, AAssetManager* assets) n
     assets_ = assets;
     if (!window || !assets_ || !create_instance() || !create_surface(window) ||
         !select_device() || !create_device() || !create_swapchain() ||
-        !create_render_targets() || !create_triangle_geometry() || !create_triangle_pipeline() || !create_commands_and_sync()) {
+        !create_render_targets() || !create_triangle_geometry() || !create_triangle_pipeline() ||
+        !create_pbr_geometry() || !create_fallback_texture() || !create_pbr_pipeline() ||
+        !create_pbr_descriptors() || !create_commands_and_sync()) {
         shutdown();
         return false;
     }
@@ -547,6 +550,345 @@ bool AndroidRenderer::create_triangle_pipeline() noexcept {
         return false;
     }
     arut_android_log(ANDROID_LOG_INFO, "First-triangle Vulkan graphics pipeline created.");
+    return true;
+}
+
+
+bool AndroidRenderer::create_pbr_geometry() noexcept {
+    const auto mesh = arut::rendering::make_unit_cube();
+    if (mesh.vertices.empty() || mesh.indices.empty()) return false;
+    const VkDeviceSize vertex_bytes = mesh.vertices.size() * sizeof(arut::rendering::MeshVertex);
+    const VkDeviceSize index_bytes = mesh.indices.size() * sizeof(std::uint32_t);
+    if (!create_buffer(vertex_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, cube_vertex_buffer_, cube_vertex_memory_) ||
+        !create_buffer(index_bytes, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, cube_index_buffer_, cube_index_memory_)) return false;
+    void* mapped = nullptr;
+    VkResult result = vkMapMemory(device_, cube_vertex_memory_, 0, vertex_bytes, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) { log_error("Map PBR cube vertex buffer failed", result); return false; }
+    std::memcpy(mapped, mesh.vertices.data(), static_cast<std::size_t>(vertex_bytes));
+    vkUnmapMemory(device_, cube_vertex_memory_);
+    mapped = nullptr;
+    result = vkMapMemory(device_, cube_index_memory_, 0, index_bytes, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) { log_error("Map PBR cube index buffer failed", result); return false; }
+    std::memcpy(mapped, mesh.indices.data(), static_cast<std::size_t>(index_bytes));
+    vkUnmapMemory(device_, cube_index_memory_);
+    cube_index_count_ = static_cast<std::uint32_t>(mesh.indices.size());
+    return true;
+}
+
+bool AndroidRenderer::create_fallback_texture() noexcept {
+    VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    image.imageType = VK_IMAGE_TYPE_2D;
+    image.format = VK_FORMAT_R8G8B8A8_UNORM;
+    image.extent = {1, 1, 1};
+    image.mipLevels = 1;
+    image.arrayLayers = 1;
+    image.samples = VK_SAMPLE_COUNT_1_BIT;
+    image.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkResult result = vkCreateImage(device_, &image, nullptr, &fallback_image_);
+    if (result != VK_SUCCESS) { log_error("Create fallback texture image failed", result); return false; }
+    VkMemoryRequirements requirements{};
+    vkGetImageMemoryRequirements(device_, fallback_image_, &requirements);
+    const std::uint32_t memory_type = find_memory_type(requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (memory_type == UINT32_MAX) { log_error("No device-local memory for fallback texture"); return false; }
+    VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    allocation.allocationSize = requirements.size;
+    allocation.memoryTypeIndex = memory_type;
+    result = vkAllocateMemory(device_, &allocation, nullptr, &fallback_memory_);
+    if (result != VK_SUCCESS) { log_error("Allocate fallback texture memory failed", result); return false; }
+    result = vkBindImageMemory(device_, fallback_image_, fallback_memory_, 0);
+    if (result != VK_SUCCESS) { log_error("Bind fallback texture memory failed", result); return false; }
+
+    VkBuffer staging = VK_NULL_HANDLE;
+    VkDeviceMemory staging_memory = VK_NULL_HANDLE;
+    if (!create_buffer(4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, staging, staging_memory)) return false;
+    const std::array<std::uint8_t, 4> white{255, 255, 255, 255};
+    void* mapped = nullptr;
+    result = vkMapMemory(device_, staging_memory, 0, 4, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        vkDestroyBuffer(device_, staging, nullptr); vkFreeMemory(device_, staging_memory, nullptr);
+        log_error("Map fallback texture staging buffer failed", result); return false;
+    }
+    std::memcpy(mapped, white.data(), white.size());
+    vkUnmapMemory(device_, staging_memory);
+
+    VkCommandPool pool = VK_NULL_HANDLE;
+    VkCommandPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+    pool_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+    pool_info.queueFamilyIndex = graphics_family_;
+    result = vkCreateCommandPool(device_, &pool_info, nullptr, &pool);
+    if (result != VK_SUCCESS) {
+        vkDestroyBuffer(device_, staging, nullptr); vkFreeMemory(device_, staging_memory, nullptr);
+        log_error("Create texture upload command pool failed", result); return false;
+    }
+    VkCommandBuffer command = VK_NULL_HANDLE;
+    VkCommandBufferAllocateInfo command_info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    command_info.commandPool = pool;
+    command_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    command_info.commandBufferCount = 1;
+    result = vkAllocateCommandBuffers(device_, &command_info, &command);
+    if (result == VK_SUCCESS) {
+        VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        result = vkBeginCommandBuffer(command, &begin);
+    }
+    if (result == VK_SUCCESS) {
+        VkImageMemoryBarrier to_transfer{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        to_transfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        to_transfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        to_transfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        to_transfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        to_transfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        to_transfer.image = fallback_image_;
+        to_transfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        to_transfer.subresourceRange.levelCount = 1;
+        to_transfer.subresourceRange.layerCount = 1;
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &to_transfer);
+        VkBufferImageCopy copy{};
+        copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copy.imageSubresource.layerCount = 1;
+        copy.imageExtent = {1, 1, 1};
+        vkCmdCopyBufferToImage(command, staging, fallback_image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        VkImageMemoryBarrier to_shader{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        to_shader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        to_shader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        to_shader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        to_shader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        to_shader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        to_shader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        to_shader.image = fallback_image_;
+        to_shader.subresourceRange = to_transfer.subresourceRange;
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                             0, nullptr, 0, nullptr, 1, &to_shader);
+        result = vkEndCommandBuffer(command);
+    }
+    if (result == VK_SUCCESS) {
+        VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+        submit.commandBufferCount = 1;
+        submit.pCommandBuffers = &command;
+        result = vkQueueSubmit(graphics_queue_, 1, &submit, VK_NULL_HANDLE);
+        if (result == VK_SUCCESS) result = vkQueueWaitIdle(graphics_queue_);
+    }
+    vkDestroyCommandPool(device_, pool, nullptr);
+    vkDestroyBuffer(device_, staging, nullptr);
+    vkFreeMemory(device_, staging_memory, nullptr);
+    if (result != VK_SUCCESS) { log_error("Upload fallback texture failed", result); return false; }
+
+    VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    view.image = fallback_image_;
+    view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view.format = VK_FORMAT_R8G8B8A8_UNORM;
+    view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    view.subresourceRange.levelCount = 1;
+    view.subresourceRange.layerCount = 1;
+    result = vkCreateImageView(device_, &view, nullptr, &fallback_view_);
+    if (result != VK_SUCCESS) { log_error("Create fallback texture view failed", result); return false; }
+    VkSamplerCreateInfo sampler{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    sampler.magFilter = VK_FILTER_LINEAR;
+    sampler.minFilter = VK_FILTER_LINEAR;
+    sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler.maxLod = 0.0F;
+    result = vkCreateSampler(device_, &sampler, nullptr, &fallback_sampler_);
+    if (result != VK_SUCCESS) { log_error("Create fallback texture sampler failed", result); return false; }
+    return true;
+}
+
+bool AndroidRenderer::create_pbr_pipeline() noexcept {
+    const auto load_shader = [this](const char* path, std::vector<std::uint32_t>& words) -> bool {
+        AAsset* asset = AAssetManager_open(assets_, path, AASSET_MODE_BUFFER);
+        if (!asset) { char message[256]{}; std::snprintf(message, sizeof(message), "Missing PBR shader asset: %s", path); log_error(message); return false; }
+        const off_t length = AAsset_getLength(asset);
+        if (length <= 0 || (length % 4) != 0) { AAsset_close(asset); log_error("Invalid PBR SPIR-V asset size"); return false; }
+        words.resize(static_cast<std::size_t>(length) / sizeof(std::uint32_t));
+        const int read = AAsset_read(asset, words.data(), static_cast<std::size_t>(length));
+        AAsset_close(asset);
+        if (read != length || words.empty() || words.front() != 0x07230203U) { log_error("PBR SPIR-V read or magic validation failed"); return false; }
+        return true;
+    };
+    std::vector<std::uint32_t> vertex_code, fragment_code;
+    if (!load_shader("shaders/mobile_pbr_forward.vert.spv", vertex_code) ||
+        !load_shader("shaders/mobile_pbr_forward.frag.spv", fragment_code)) return false;
+    VkShaderModuleCreateInfo module_info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    module_info.codeSize = vertex_code.size() * sizeof(std::uint32_t);
+    module_info.pCode = vertex_code.data();
+    VkShaderModule vertex_module = VK_NULL_HANDLE, fragment_module = VK_NULL_HANDLE;
+    VkResult result = vkCreateShaderModule(device_, &module_info, nullptr, &vertex_module);
+    if (result != VK_SUCCESS) { log_error("Create PBR vertex shader module failed", result); return false; }
+    module_info.codeSize = fragment_code.size() * sizeof(std::uint32_t);
+    module_info.pCode = fragment_code.data();
+    result = vkCreateShaderModule(device_, &module_info, nullptr, &fragment_module);
+    if (result != VK_SUCCESS) { vkDestroyShaderModule(device_, vertex_module, nullptr); log_error("Create PBR fragment shader module failed", result); return false; }
+
+    const std::array<VkDescriptorSetLayoutBinding, 1> frame_bindings{{
+        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}
+    }};
+    VkDescriptorSetLayoutCreateInfo set_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    set_info.bindingCount = static_cast<std::uint32_t>(frame_bindings.size());
+    set_info.pBindings = frame_bindings.data();
+    result = vkCreateDescriptorSetLayout(device_, &set_info, nullptr, &frame_set_layout_);
+    if (result != VK_SUCCESS) { vkDestroyShaderModule(device_, fragment_module, nullptr); vkDestroyShaderModule(device_, vertex_module, nullptr); log_error("Create frame descriptor layout failed", result); return false; }
+
+    const std::array<VkDescriptorSetLayoutBinding, 4> material_bindings{{
+        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+        {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+        {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+        {3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}
+    }};
+    set_info.bindingCount = static_cast<std::uint32_t>(material_bindings.size());
+    set_info.pBindings = material_bindings.data();
+    result = vkCreateDescriptorSetLayout(device_, &set_info, nullptr, &material_set_layout_);
+    if (result != VK_SUCCESS) { vkDestroyShaderModule(device_, fragment_module, nullptr); vkDestroyShaderModule(device_, vertex_module, nullptr); log_error("Create material descriptor layout failed", result); return false; }
+
+    const std::array<VkDescriptorSetLayout, 2> layouts{frame_set_layout_, material_set_layout_};
+    VkPushConstantRange push{};
+    push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    push.offset = 0;
+    push.size = 64;
+    VkPipelineLayoutCreateInfo pipeline_layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    pipeline_layout.setLayoutCount = static_cast<std::uint32_t>(layouts.size());
+    pipeline_layout.pSetLayouts = layouts.data();
+    pipeline_layout.pushConstantRangeCount = 1;
+    pipeline_layout.pPushConstantRanges = &push;
+    result = vkCreatePipelineLayout(device_, &pipeline_layout, nullptr, &pbr_pipeline_layout_);
+    if (result != VK_SUCCESS) { vkDestroyShaderModule(device_, fragment_module, nullptr); vkDestroyShaderModule(device_, vertex_module, nullptr); log_error("Create PBR pipeline layout failed", result); return false; }
+
+    const std::array<VkPipelineShaderStageCreateInfo, 2> stages{{
+        {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vertex_module, "main", nullptr},
+        {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_module, "main", nullptr}
+    }};
+    const VkVertexInputBindingDescription binding{0, sizeof(arut::rendering::MeshVertex), VK_VERTEX_INPUT_RATE_VERTEX};
+    const std::array<VkVertexInputAttributeDescription, 4> attributes{{
+        {0, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, position))},
+        {1, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, normal))},
+        {2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, tangent))},
+        {3, 0, VK_FORMAT_R32G32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, uv))}
+    }};
+    VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    vertex_input.vertexBindingDescriptionCount = 1; vertex_input.pVertexBindingDescriptions = &binding;
+    vertex_input.vertexAttributeDescriptionCount = static_cast<std::uint32_t>(attributes.size()); vertex_input.pVertexAttributeDescriptions = attributes.data();
+    VkPipelineInputAssemblyStateCreateInfo assembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+    assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    VkPipelineViewportStateCreateInfo viewport{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO}; viewport.viewportCount = 1; viewport.scissorCount = 1;
+    constexpr std::array<VkDynamicState, 2> dynamics{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dynamic{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO}; dynamic.dynamicStateCount = 2; dynamic.pDynamicStates = dynamics.data();
+    VkPipelineRasterizationStateCreateInfo raster{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+    raster.polygonMode = VK_POLYGON_MODE_FILL; raster.cullMode = VK_CULL_MODE_BACK_BIT; raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; raster.lineWidth = 1.0F;
+    VkPipelineMultisampleStateCreateInfo multisample{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO}; multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    VkPipelineDepthStencilStateCreateInfo depth{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
+    depth.depthTestEnable = VK_TRUE; depth.depthWriteEnable = VK_TRUE; depth.depthCompareOp = VK_COMPARE_OP_LESS;
+    VkPipelineColorBlendAttachmentState blend_attachment{}; blend_attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    VkPipelineColorBlendStateCreateInfo blend{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO}; blend.attachmentCount = 1; blend.pAttachments = &blend_attachment;
+    VkGraphicsPipelineCreateInfo pipeline{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+    pipeline.stageCount = 2; pipeline.pStages = stages.data(); pipeline.pVertexInputState = &vertex_input; pipeline.pInputAssemblyState = &assembly;
+    pipeline.pViewportState = &viewport; pipeline.pRasterizationState = &raster; pipeline.pMultisampleState = &multisample;
+    pipeline.pDepthStencilState = &depth; pipeline.pColorBlendState = &blend; pipeline.pDynamicState = &dynamic;
+    pipeline.layout = pbr_pipeline_layout_; pipeline.renderPass = render_pass_; pipeline.subpass = 0;
+    result = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr, &pbr_pipeline_);
+    vkDestroyShaderModule(device_, fragment_module, nullptr);
+    vkDestroyShaderModule(device_, vertex_module, nullptr);
+    if (result != VK_SUCCESS) { log_error("Create mobile PBR graphics pipeline failed", result); return false; }
+    arut_android_log(ANDROID_LOG_INFO, "Mobile forward PBR Vulkan pipeline created.");
+    return true;
+}
+
+bool AndroidRenderer::create_pbr_descriptors() noexcept {
+    struct alignas(16) FrameData final {
+        float view_projection[16];
+        float camera_position[4];
+        float light_direction[4];
+        float light_radiance[4];
+    };
+    struct alignas(16) MaterialData final {
+        float base_color[4];
+        float emissive_metallic[4];
+        float roughness_normal_occlusion_alpha[4];
+        std::uint32_t flags[4];
+    };
+    static_assert(sizeof(FrameData) == 112);
+    static_assert(sizeof(MaterialData) == 64);
+    if (!create_buffer(sizeof(FrameData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, frame_uniform_buffer_, frame_uniform_memory_) ||
+        !create_buffer(sizeof(MaterialData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, material_uniform_buffer_, material_uniform_memory_)) return false;
+
+    const FrameData frame{
+        {0}, {2.2F, 1.8F, 2.8F, 1.0F}, {0.45F, -1.0F, 0.35F, 0.0F}, {3.0F, 2.8F, 2.5F, 0.0F}
+    };
+    const auto view = arut::rendering::look_at_rh({frame.camera_position[0], frame.camera_position[1], frame.camera_position[2]},
+                                                  {0.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F});
+    const auto projection = arut::rendering::perspective_rh_zo(0.785398163F,
+        static_cast<float>(extent_.width) / static_cast<float>(std::max(1U, extent_.height)), 0.1F, 100.0F);
+    const auto vp = arut::rendering::multiply(projection, view);
+    FrameData frame_upload = frame;
+    std::copy(vp.value.begin(), vp.value.end(), frame_upload.view_projection);
+    void* mapped = nullptr;
+    VkResult result = vkMapMemory(device_, frame_uniform_memory_, 0, sizeof(FrameData), 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) { log_error("Map frame uniform buffer failed", result); return false; }
+    std::memcpy(mapped, &frame_upload, sizeof(FrameData)); vkUnmapMemory(device_, frame_uniform_memory_);
+
+    const MaterialData material{{0.78F, 0.34F, 0.16F, 1.0F}, {0.0F, 0.0F, 0.0F, 0.05F},
+                                {0.48F, 1.0F, 1.0F, 0.5F}, {0U, 0U, 0U, 0U}};
+    mapped = nullptr;
+    result = vkMapMemory(device_, material_uniform_memory_, 0, sizeof(MaterialData), 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) { log_error("Map material uniform buffer failed", result); return false; }
+    std::memcpy(mapped, &material, sizeof(MaterialData)); vkUnmapMemory(device_, material_uniform_memory_);
+
+    const std::array<VkDescriptorPoolSize, 2> sizes{{
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3}
+    }};
+    VkDescriptorPoolCreateInfo pool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    pool.maxSets = 2; pool.poolSizeCount = static_cast<std::uint32_t>(sizes.size()); pool.pPoolSizes = sizes.data();
+    result = vkCreateDescriptorPool(device_, &pool, nullptr, &pbr_descriptor_pool_);
+    if (result != VK_SUCCESS) { log_error("Create PBR descriptor pool failed", result); return false; }
+    const std::array<VkDescriptorSetLayout, 2> layouts{frame_set_layout_, material_set_layout_};
+    std::array<VkDescriptorSet, 2> sets{};
+    VkDescriptorSetAllocateInfo allocate{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    allocate.descriptorPool = pbr_descriptor_pool_; allocate.descriptorSetCount = 2; allocate.pSetLayouts = layouts.data();
+    result = vkAllocateDescriptorSets(device_, &allocate, sets.data());
+    if (result != VK_SUCCESS) { log_error("Allocate PBR descriptor sets failed", result); return false; }
+    frame_descriptor_set_ = sets[0]; material_descriptor_set_ = sets[1];
+
+    VkDescriptorBufferInfo frame_info{frame_uniform_buffer_, 0, sizeof(FrameData)};
+    VkDescriptorBufferInfo material_info{material_uniform_buffer_, 0, sizeof(MaterialData)};
+    const VkDescriptorImageInfo image_info{fallback_sampler_, fallback_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    std::array<VkWriteDescriptorSet, 5> writes{};
+    writes[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &frame_info, nullptr};
+    writes[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &material_info, nullptr};
+    for (std::uint32_t i = 0; i < 3; ++i)
+        writes[i + 2] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, i + 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &image_info, nullptr, nullptr};
+    vkUpdateDescriptorSets(device_, static_cast<std::uint32_t>(writes.size()), writes.data(), 0, nullptr);
+    arut_android_log(ANDROID_LOG_INFO, "PBR frame/material descriptors and fallback texture bound.");
+    return true;
+}
+
+bool AndroidRenderer::update_pbr_frame_data() noexcept {
+    struct alignas(16) FrameData final {
+        float view_projection[16];
+        float camera_position[4];
+        float light_direction[4];
+        float light_radiance[4];
+    };
+    const std::array<float, 3> camera{2.2F, 1.8F, 2.8F};
+    const auto view = arut::rendering::look_at_rh(camera, {0.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F});
+    const auto projection = arut::rendering::perspective_rh_zo(0.785398163F,
+        static_cast<float>(extent_.width) / static_cast<float>(std::max(1U, extent_.height)), 0.1F, 100.0F);
+    const auto vp = arut::rendering::multiply(projection, view);
+    FrameData frame{};
+    std::copy(vp.value.begin(), vp.value.end(), frame.view_projection);
+    frame.camera_position[0] = camera[0]; frame.camera_position[1] = camera[1]; frame.camera_position[2] = camera[2]; frame.camera_position[3] = 1.0F;
+    frame.light_direction[0] = 0.45F; frame.light_direction[1] = -1.0F; frame.light_direction[2] = 0.35F;
+    frame.light_radiance[0] = 3.0F; frame.light_radiance[1] = 2.8F; frame.light_radiance[2] = 2.5F;
+    void* mapped = nullptr;
+    const VkResult result = vkMapMemory(device_, frame_uniform_memory_, 0, sizeof(FrameData), 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) { log_error("Update PBR frame uniform failed", result); return false; }
+    std::memcpy(mapped, &frame, sizeof(FrameData));
+    vkUnmapMemory(device_, frame_uniform_memory_);
     return true;
 }
 
