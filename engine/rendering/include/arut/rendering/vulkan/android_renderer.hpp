@@ -42,6 +42,7 @@ private:
     bool create_shadow_resources() noexcept;
     bool create_shadow_pipeline() noexcept;
     bool create_environment_cubemap() noexcept;
+    bool create_brdf_lut() noexcept;
     bool create_fallback_texture() noexcept;
     bool load_texture_asset(const char* path, VkFormat format, bool source_is_srgb,
                             VkImage& image, VkDeviceMemory& memory, VkImageView& view,
@@ -105,6 +106,11 @@ private:
     VkDeviceMemory environment_memory_{VK_NULL_HANDLE};
     VkImageView environment_view_{VK_NULL_HANDLE};
     VkSampler environment_sampler_{VK_NULL_HANDLE};
+    VkImage brdf_lut_image_{VK_NULL_HANDLE};
+    VkDeviceMemory brdf_lut_memory_{VK_NULL_HANDLE};
+    VkImageView brdf_lut_view_{VK_NULL_HANDLE};
+    VkSampler brdf_lut_sampler_{VK_NULL_HANDLE};
+    std::uint32_t brdf_lut_mip_levels_{0};
     std::uint32_t environment_mip_levels_{0};
     std::uint32_t base_color_mip_levels_{0};
     VkImage depth_image_{VK_NULL_HANDLE};
