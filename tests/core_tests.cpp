@@ -253,8 +253,8 @@ int main() {
     for (const auto value : invalid_projection.value) assert(near(value, 0.0F));
 
     const std::array<arut::rendering::EnvironmentProbeInfluence, 2> overlapping_probes{{
-        {{{-2.0F, -2.0F, -2.0F, 2.0F, 2.0F, 2.0F}}, 4.0F, 1},
-        {{{-1.0F, -1.0F, -1.0F, 1.0F, 1.0F, 1.0F}}, 4.0F, 1}
+        {{-2.0F, -2.0F, -2.0F, 2.0F, 2.0F, 2.0F}, 4.0F, 1},
+        {{-1.0F, -1.0F, -1.0F, 1.0F, 1.0F, 1.0F}, 4.0F, 1}
     }};
     std::vector<float> probe_weights;
     assert(arut::rendering::evaluate_environment_probe_weights(
@@ -265,8 +265,8 @@ int main() {
         overlapping_probes, 5.0F, 0.0F, 0.0F, probe_weights));
     assert(near(probe_weights[0], 1.0F) && near(probe_weights[1], 0.0F));
     const std::array<arut::rendering::EnvironmentProbeInfluence, 2> priority_probes{{
-        {{{-5.0F, -5.0F, -5.0F, 5.0F, 5.0F, 5.0F}}, 0.0F, 1},
-        {{{-1.0F, -1.0F, -1.0F, 1.0F, 1.0F, 1.0F}}, 0.0F, 5}
+        {{-5.0F, -5.0F, -5.0F, 5.0F, 5.0F, 5.0F}, 0.0F, 1},
+        {{-1.0F, -1.0F, -1.0F, 1.0F, 1.0F, 1.0F}, 0.0F, 5}
     }};
     assert(arut::rendering::evaluate_environment_probe_weights(
         priority_probes, 0.0F, 0.0F, 0.0F, probe_weights));
