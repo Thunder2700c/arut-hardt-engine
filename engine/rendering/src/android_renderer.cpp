@@ -47,7 +47,7 @@ bool AndroidRenderer::initialize(ANativeWindow* window, AAssetManager* assets) n
         !select_device() || !create_device() || !create_swapchain() ||
         !create_render_targets() || !create_triangle_geometry() || !create_triangle_pipeline() ||
         !create_pbr_geometry() || !create_fallback_texture() || !create_environment_cubemap() ||
-        !create_pbr_pipeline() || !create_shadow_resources() || !create_shadow_pipeline() ||
+        !create_brdf_lut() || !create_pbr_pipeline() || !create_shadow_resources() || !create_shadow_pipeline() ||
         !create_pbr_descriptors() || !create_commands_and_sync()) {
         shutdown();
         return false;
@@ -911,6 +911,22 @@ bool AndroidRenderer::create_environment_cubemap() noexcept {
     }
     environment_mip_levels_ = static_cast<std::uint32_t>(mip_chain.size());
     arut_android_log(ANDROID_LOG_INFO, "Procedural sky/ground environment cubemap uploaded with roughness mips.");
+    return true;
+}
+
+bool AndroidRenderer::create_brdf_lut() noexcept {
+    arut::rendering::Rgba8Image lut{};
+    if (!arut::rendering::build_brdf_integration_lut(64U, 128U, lut)) {
+        log_error("Split-sum BRDF integration LUT generation failed");
+        return false;
+    }
+    if (!upload_texture_rgba8(lut, VK_FORMAT_R8G8B8A8_UNORM, false,
+                              brdf_lut_image_, brdf_lut_memory_, brdf_lut_view_,
+                              brdf_lut_sampler_, brdf_lut_mip_levels_)) {
+        log_error("Split-sum BRDF integration LUT upload failed");
+        return false;
+    }
+    arut_android_log(ANDROID_LOG_INFO, "64x64 split-sum GGX BRDF integration LUT generated and uploaded.");
     return true;
 }
 
@@ -1959,7 +1975,7 @@ bool AndroidRenderer::recreate_swapchain() noexcept {
     destroy_swapchain();
     return create_swapchain() && create_render_targets() && create_triangle_geometry() &&
            create_triangle_pipeline() && create_pbr_geometry() && create_fallback_texture() &&
-           create_environment_cubemap() && create_pbr_pipeline() && create_shadow_resources() && create_shadow_pipeline() &&
+           create_environment_cubemap() && create_brdf_lut() && create_pbr_pipeline() && create_shadow_resources() && create_shadow_pipeline() &&
            create_pbr_descriptors() && create_commands_and_sync();
 }
 
