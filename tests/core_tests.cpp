@@ -4,9 +4,11 @@
 #include "arut/rendering/image.hpp"
 #include "arut/rendering/render_quality.hpp"
 
+#include <array>
 #include <cassert>
 #include <cmath>
 #include <string_view>
+#include <vector>
 
 namespace {
 bool near(float a, float b, float epsilon = 1.0e-4F) {
