@@ -29,6 +29,7 @@ jobs:
           glslangValidator -V --target-env vulkan1.0 -o build/shaders/mobile_pbr_forward.vert.spv engine/rendering/shaders/mobile_pbr_forward.vert
           glslangValidator -V --target-env vulkan1.0 -o build/shaders/mobile_pbr_forward.frag.spv engine/rendering/shaders/mobile_pbr_forward.frag
           glslangValidator -V --target-env vulkan1.0 -o build/shaders/mobile_shadow_depth.vert.spv engine/rendering/shaders/mobile_shadow_depth.vert
+          glslangValidator -V --target-env vulkan1.0 -o build/shaders/visibility_cull.comp.spv engine/rendering/shaders/visibility_cull.comp
           glslangValidator -V --target-env vulkan1.0 -o build/shaders/first_triangle.vert.spv engine/rendering/shaders/first_triangle.vert
           glslangValidator -V --target-env vulkan1.0 -o build/shaders/first_triangle.frag.spv engine/rendering/shaders/first_triangle.frag
 
