@@ -12,6 +12,9 @@ struct Vec3 final { float x, y, z; };
 [[nodiscard]] Vec3 operator*(Vec3 value, float scalar) noexcept {
     return {value.x*scalar, value.y*scalar, value.z*scalar};
 }
+[[nodiscard]] Vec3 operator-(Vec3 a, Vec3 b) noexcept {
+    return {a.x-b.x, a.y-b.y, a.z-b.z};
+}
 [[nodiscard]] Vec3 normalize(Vec3 value) noexcept {
     const float length_squared = dot(value, value);
     if (!(length_squared > 1.0e-12F) || !std::isfinite(length_squared)) return {0.0F, 0.0F, 1.0F};
