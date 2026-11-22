@@ -46,16 +46,23 @@ bool AndroidRenderer::initialize(ANativeWindow* window, AAssetManager* assets) n
     assets_ = assets;
     if (!window || !assets_ || !create_instance() || !create_surface(window) ||
         !select_device() || !create_device() || !create_swapchain() ||
-        !create_render_targets() || !create_triangle_geometry() || !create_triangle_pipeline() ||
-        !create_pbr_geometry() || !create_fallback_texture() || !create_environment_cubemap() ||
-        !create_brdf_lut() || !create_pbr_pipeline() || !create_shadow_resources() || !create_shadow_pipeline() ||
-        !create_pbr_descriptors() || !create_commands_and_sync()) {
+        !create_frame_resources()) {
         shutdown();
         return false;
     }
     char ready_message[256]{}; std::snprintf(ready_message, sizeof(ready_message), "Vulkan swapchain ready: %ux%u, images=%zu", extent_.width, extent_.height, images_.size());
     arut_android_log(ANDROID_LOG_INFO, ready_message);
     return true;
+}
+
+bool AndroidRenderer::create_frame_resources() noexcept {
+    return create_render_targets() &&
+           create_triangle_geometry() && create_triangle_pipeline() &&
+           create_pbr_geometry() && create_fallback_texture() &&
+           create_environment_cubemap() && create_brdf_lut() &&
+           create_pbr_pipeline() && create_shadow_resources() &&
+           create_shadow_pipeline() && create_pbr_descriptors() &&
+           create_commands_and_sync();
 }
 
 bool AndroidRenderer::create_instance() noexcept {
@@ -2064,10 +2071,25 @@ void AndroidRenderer::destroy_swapchain() noexcept {
 bool AndroidRenderer::recreate_swapchain() noexcept {
     if (!device_) return false;
     destroy_swapchain();
-    return create_swapchain() && create_render_targets() && create_triangle_geometry() &&
-           create_triangle_pipeline() && create_pbr_geometry() && create_fallback_texture() &&
-           create_environment_cubemap() && create_brdf_lut() && create_pbr_pipeline() && create_shadow_resources() && create_shadow_pipeline() &&
-           create_pbr_descriptors() && create_commands_and_sync();
+    return create_swapchain() && create_frame_resources();
+}
+
+bool AndroidRenderer::set_quality_tier(arut::rendering::RenderQualityTier tier) noexcept {
+    quality_ = arut::rendering::quality_config(tier);
+    if (device_ == VK_NULL_HANDLE || window_ == nullptr || assets_ == nullptr) return true;
+    const VkResult idle = vkDeviceWaitIdle(device_);
+    if (idle != VK_SUCCESS) {
+        log_error("Wait for device idle before changing quality tier failed", idle);
+        return false;
+    }
+    destroy_swapchain();
+    if (create_swapchain() && create_frame_resources()) {
+        arut_android_log(ANDROID_LOG_INFO, "Renderer quality tier changed and GPU resources recreated.");
+        return true;
+    }
+    log_error("Renderer resource recreation after quality-tier change failed");
+    shutdown();
+    return false;
 }
 
 void AndroidRenderer::shutdown() noexcept {
