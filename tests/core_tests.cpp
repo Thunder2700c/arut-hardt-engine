@@ -262,7 +262,7 @@ int main() {
     assert(probe_weights.size() == 2U);
     assert(near(probe_weights[0], 0.5F) && near(probe_weights[1], 0.5F));
     assert(arut::rendering::evaluate_environment_probe_weights(
-        overlapping_probes, 4.0F, 0.0F, 0.0F, probe_weights));
+        overlapping_probes, 5.0F, 0.0F, 0.0F, probe_weights));
     assert(near(probe_weights[0], 1.0F) && near(probe_weights[1], 0.0F));
     const std::array<arut::rendering::EnvironmentProbeInfluence, 2> priority_probes{{
         {{{-5.0F, -5.0F, -5.0F, 5.0F, 5.0F, 5.0F}}, 0.0F, 1},
