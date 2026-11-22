@@ -44,7 +44,7 @@ Exit gate: APK installs and starts on a physical ARM64 device, handles lifecycle
 - [ ] Compile the Android-native renderer and validate on device (deferred until the agreed testing stage).
 Exit gate: Android renders a textured 3D scene with validation and frame/GPU timing.
 
-## Phase 3 — Rendering and materials (implementation in progress)
+## Phase 3 — Rendering and materials (implementation complete; device validation pending)
 - [x] Define a PBR material data contract (base colour, metallic, roughness, emissive, normal scale, occlusion and alpha cutoff).
 - [x] Add finite-value handling and safe material parameter normalization.
 - [x] Define Low/Medium/High/Ultra mobile quality presets with render scale, shadow budget and light limits.
@@ -79,7 +79,7 @@ Exit gate: Android renders a textured 3D scene with validation and frame/GPU tim
 - [x] Track persistent renderer-owned Vulkan buffer/image allocation sizes in runtime profiling logs.
 - [x] Add optional VK_EXT_memory_budget device-local heap usage/budget queries and separate visibility, shadow and main-scene GPU timestamp intervals.
 - [x] Export main-pass timing and optional driver heap usage/budget values in Android runtime profile logs.
-- [ ] Add per-material GPU timing and broader renderer pass instrumentation.
+- [ ] Add per-material GPU timing after Phase 4 introduces material handles/batching; deferred because the current validation scene has one material and cannot produce meaningful per-material comparisons.
 - [ ] Validate graceful quality fallback on two Android GPU families.
 Exit gate: PBR test scene works across two Android GPU families with graceful fallback and measured CPU/GPU costs.
 
