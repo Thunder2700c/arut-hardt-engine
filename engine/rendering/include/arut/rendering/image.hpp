@@ -49,7 +49,7 @@ struct Rgba8Mip final {
     std::vector<std::uint8_t> pixels;
 };
 
-// Supports PNG, JPEG, BMP and TGA. Decoded images are normalized to four channels.
+// Supports Radiance RGBE HDR input. RGB values remain linear and may exceed 1.0.
 [[nodiscard]] ImageDecodeResult decode_image_rgba32f(
     std::span<const std::uint8_t> encoded, Rgba32fImage& output) noexcept;
 
