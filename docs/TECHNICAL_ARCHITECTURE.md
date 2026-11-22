@@ -1,6 +1,6 @@
 # ARUT-HARDT Technical Architecture
 
-Status: Architecture baseline, revision 0.2. Android platform bootstrap exists; renderer and gameplay systems remain future work.
+Status: Architecture baseline, revision 0.3. Android runtime and Vulkan swapchain bootstrap exist. Phase 3 now contains CPU PBR reference code and mobile forward shader source; shader compilation and Vulkan pipeline integration remain pending.
 
 ## Platform targets
 Android ARM64 is the primary runtime. Windows and Linux are secondary development/runtime targets. The editor is initially desktop-based. Commercial engines are design references only; no proprietary source, shaders or assets are used.
@@ -29,7 +29,7 @@ The initial app uses android.app.NativeActivity and NDK native_app_glue. The ada
 11. Tools: desktop editor, importers, inspectors, world tools and profiling.
 
 ## Android-first graphics
-Query device, driver, extensions, formats, limits and memory budgets at runtime. Enable optional capabilities only after feature checks. Start with a mobile forward path. Ray tracing, virtualized geometry and expensive GI are optional experiments.
+Query device, driver, extensions, formats, limits and memory budgets at runtime. Enable optional capabilities only after feature checks. Start with a mobile forward metallic-roughness path using GGX distribution, Schlick Fresnel and Smith geometry. The initial shader contract is documented in `docs/PBR_PIPELINE.md`; CPU reference functions are in `engine/rendering/include/arut/rendering/pbr_brdf.hpp`. Shader compilation and Vulkan pipeline integration are blocked on completing Phase 2 geometry/depth/camera foundations. Ray tracing, virtualized geometry and expensive GI are optional experiments.
 
 ## World and performance
 Separate high-precision world coordinates from local float render/physics coordinates. Stream cells asynchronously with cancellation, prioritization and safe eviction. Use tiered simulation at distance. Keep rendering and simulation clocks separate; physics uses a fixed step. Frame pacing and input latency are first-class Android concerns.
