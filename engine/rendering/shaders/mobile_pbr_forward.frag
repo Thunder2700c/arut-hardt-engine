@@ -14,7 +14,10 @@ layout(set = 0, binding = 0, std140) uniform FrameData {
     vec4 cameraPosition;
     vec4 directionalLightDirection;
     vec4 directionalLightRadiance;
+    mat4 lightViewProjection;
 } frameData;
+
+layout(set = 0, binding = 1) uniform sampler2DShadow directionalShadowMap;
 
 layout(set = 1, binding = 0, std140) uniform MaterialData {
     vec4 baseColorFactor;
@@ -52,6 +55,26 @@ float geometrySchlickGGX(float nDotV, float roughness) {
 
 float geometrySmith(float nDotV, float nDotL, float roughness) {
     return geometrySchlickGGX(nDotV, roughness) * geometrySchlickGGX(nDotL, roughness);
+}
+
+float directionalShadowVisibility(vec3 normal, vec3 lightDirection) {
+    vec4 lightClip = frameData.lightViewProjection * vec4(inWorldPosition, 1.0);
+    if (lightClip.w <= 0.0) return 1.0;
+    vec3 projected = lightClip.xyz / lightClip.w;
+    vec2 uv = projected.xy * 0.5 + 0.5;
+    if (projected.z < 0.0 || projected.z > 1.0 ||
+        any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 1.0;
+
+    vec2 texel = 1.0 / vec2(textureSize(directionalShadowMap, 0));
+    float bias = max(0.0007, 0.0025 * (1.0 - max(dot(normal, lightDirection), 0.0)));
+    float visibility = 0.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            visibility += texture(directionalShadowMap,
+                vec3(uv + vec2(float(x), float(y)) * texel, projected.z - bias));
+        }
+    }
+    return visibility / 9.0;
 }
 
 vec3 acesToneMap(vec3 color) {
@@ -96,7 +119,8 @@ void main() {
     vec3 specular = (d * g * f) / max(1e-4, 4.0 * nDotV * nDotL);
     vec3 diffuseWeight = (1.0 - f) * (1.0 - metallic);
     vec3 diffuse = diffuseWeight * base.rgb / PI;
-    vec3 direct = (diffuse + specular) * frameData.directionalLightRadiance.rgb * nDotL;
+    float shadowVisibility = directionalShadowVisibility(n, l);
+    vec3 direct = (diffuse + specular) * frameData.directionalLightRadiance.rgb * nDotL * shadowVisibility;
 
     // Ambient term is deliberately a placeholder until the IBL phase is integrated.
     // AO texture sampling is intentionally deferred until the material descriptor contract
