@@ -5,6 +5,7 @@
 #include "arut/rendering/environment.hpp"
 #include "arut/rendering/brdf_lut.hpp"
 #include "arut/rendering/visibility.hpp"
+#include "arut/rendering/shadow.hpp"
 #include "arut/rendering/render_quality.hpp"
 
 #include <algorithm>
@@ -206,6 +207,16 @@ int main() {
     assert(arut::rendering::sphere_visible(frustum, {{0.0F, 0.0F, 0.0F}, 0.5F}));
     assert(!arut::rendering::sphere_visible(frustum, {{100.0F, 0.0F, 0.0F}, 0.5F}));
     assert(!arut::rendering::sphere_visible(frustum, {{0.0F, 0.0F, 5.0F}, 0.5F}));
+    arut::rendering::Mat4 unsnapped = arut::rendering::Mat4::identity();
+    unsnapped.value[12] = 0.1234F;
+    unsnapped.value[13] = -0.2876F;
+    const auto snapped = arut::rendering::stabilize_shadow_matrix(unsnapped, 1024U);
+    const float texel = 2.0F / 1024.0F;
+    assert(near(snapped.value[12] / texel, std::round(snapped.value[12] / texel)));
+    assert(near(snapped.value[13] / texel, std::round(snapped.value[13] / texel)));
+    assert(near(arut::rendering::cascade_blend_factor(89.0F, 100.0F), 0.0F));
+    assert(near(arut::rendering::cascade_blend_factor(95.0F, 100.0F), 0.5F));
+    assert(near(arut::rendering::cascade_blend_factor(100.0F, 100.0F), 1.0F));
     const auto shadow_projection = arut::rendering::orthographic_rh_zo(-4.0F, 4.0F, -4.0F, 4.0F, 0.1F, 20.0F);
     assert(near(shadow_projection.value[0], 0.25F));
     assert(near(shadow_projection.value[5], -0.25F));
