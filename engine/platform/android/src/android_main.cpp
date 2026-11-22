@@ -9,6 +9,14 @@
 #include <cinttypes>
 #include <cstdint>
 #include <cstddef>
+#include <cstdio>
+#include <cstring>
+#include <ctime>
+#include <mutex>
+#include <cerrno>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <chrono>
 #include <stdarg.h>
 extern "C" std::uint32_t arut_tasks_abi_version() noexcept;
 namespace {
@@ -21,15 +29,62 @@ struct RuntimeState final {
  std::uint64_t lifecycle_events{0};
  std::uint64_t input_events{0};
 };
+std::mutex g_log_mutex;
+FILE* g_log_file = nullptr;
+char g_log_path[1024]{};
+constexpr long kMaxLogBytes = 2L * 1024L * 1024L;
+
+void open_file_log(const char* internal_data_path) {
+ if (!internal_data_path || !*internal_data_path) return;
+ char directory[1024]{};
+ std::snprintf(directory, sizeof(directory), "%s/logs", internal_data_path);
+ if (mkdir(directory, 0700) != 0 && errno != EEXIST) return;
+ std::snprintf(g_log_path, sizeof(g_log_path), "%s/runtime.log", directory);
+ g_log_file = std::fopen(g_log_path, "a");
+ if (g_log_file) {
+  std::setvbuf(g_log_file, nullptr, _IOLBF, 0);
+ }
+}
+
+void write_log(int priority, const char* level, const char* format, va_list args) {
+ char message[2048]{};
+ std::vsnprintf(message, sizeof(message), format, args);
+ __android_log_write(priority, kLogTag, message);
+ std::lock_guard<std::mutex> lock(g_log_mutex);
+ if (!g_log_file) return;
+ timespec now{};
+ clock_gettime(CLOCK_REALTIME, &now);
+ std::tm local{};
+ localtime_r(&now.tv_sec, &local);
+ char timestamp[40]{};
+ std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S", &local);
+ std::fprintf(g_log_file, "%s.%03ld %s %s\\n", timestamp, now.tv_nsec / 1000000L, level, message);
+ std::fflush(g_log_file);
+ const long position = std::ftell(g_log_file);
+ if (position > kMaxLogBytes) {
+  std::fclose(g_log_file);
+  g_log_file = nullptr;
+  char previous[1050]{};
+  std::snprintf(previous, sizeof(previous), "%s.1", g_log_path);
+  std::remove(previous);
+  std::rename(g_log_path, previous);
+  g_log_file = std::fopen(g_log_path, "a");
+ }
+}
+
 void log_info(const char* format, ...) {
  va_list args; va_start(args, format);
- __android_log_vprint(ANDROID_LOG_INFO, kLogTag, format, args);
+ write_log(ANDROID_LOG_INFO, "INFO", format, args);
  va_end(args);
 }
 void log_warn(const char* format, ...) {
  va_list args; va_start(args, format);
- __android_log_vprint(ANDROID_LOG_WARN, kLogTag, format, args);
+ write_log(ANDROID_LOG_WARN, "WARN", format, args);
  va_end(args);
+}
+void close_file_log() {
+ std::lock_guard<std::mutex> lock(g_log_mutex);
+ if (g_log_file) { std::fflush(g_log_file); std::fclose(g_log_file); g_log_file = nullptr; }
 }
 void handle_app_command(android_app* app, std::int32_t command) {
  auto* state = static_cast<RuntimeState*>(app->userData);
@@ -86,6 +141,7 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
 namespace arut::platform::android {
 void run(android_app* app) {
  RuntimeState state{};
+ open_file_log(app->activity ? app->activity->internalDataPath : nullptr);
  app->userData = &state;
  app->onAppCmd = handle_app_command;
  app->onInputEvent = handle_input;
@@ -93,17 +149,41 @@ void run(android_app* app) {
  log_info("%.*s %u.%u.%u starting (NativeActivity).",
   static_cast<int>(arut::core::name().size()), arut::core::name().data(), v.major, v.minor, v.patch);
  log_info("Rust systems ABI version: 0x%06x", arut_tasks_abi_version());
+ if (g_log_file) log_info("Persistent runtime log: %s", g_log_path);
+ else log_warn("Persistent runtime log unavailable; logcat remains active.");
+ auto metrics_start = std::chrono::steady_clock::now();
+ std::uint64_t frame_count = 0;
+ double frame_ms_total = 0.0;
+ double frame_ms_max = 0.0;
  while (app->destroyRequested == 0) {
+  const auto frame_start = std::chrono::steady_clock::now();
   android_poll_source* source = nullptr;
   const bool can_render = state.resumed && state.has_window && state.focused && state.renderer.ready();
   const int timeout = can_render ? 16 : (state.has_window ? 100 : -1);
   const int ident = ALooper_pollOnce(timeout, nullptr, nullptr, reinterpret_cast<void**>(&source));
   if (ident >= 0 && source) source->process(app, source);
   if (ident == ALOOPER_POLL_ERROR) log_warn("Android looper returned an error.");
-  if (state.resumed && state.has_window && state.focused && state.renderer.ready() && !state.renderer.draw_frame())
-   log_warn("Vulkan frame submission/presentation failed.");
+  if (state.resumed && state.has_window && state.focused && state.renderer.ready()) {
+   if (!state.renderer.draw_frame()) log_warn("Vulkan frame submission/presentation failed.");
+   else {
+    const double elapsed = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frame_start).count();
+    frame_ms_total += elapsed;
+    frame_ms_max = std::max(frame_ms_max, elapsed);
+    ++frame_count;
+   }
+  }
+  const auto metrics_now = std::chrono::steady_clock::now();
+  const double metrics_seconds = std::chrono::duration<double>(metrics_now - metrics_start).count();
+  if (metrics_seconds >= 5.0) {
+   if (frame_count > 0) log_info("PERF window=%.2fs fps=%.2f frame_avg_ms=%.3f frame_max_ms=%.3f frames=%" PRIu64,
+    metrics_seconds, static_cast<double>(frame_count) / metrics_seconds,
+    frame_ms_total / static_cast<double>(frame_count), frame_ms_max, frame_count);
+   else log_info("PERF window=%.2fs renderer_idle=true", metrics_seconds);
+   metrics_start = metrics_now; frame_count = 0; frame_ms_total = 0.0; frame_ms_max = 0.0;
+  }
  }
  log_info("Runtime shutdown. lifecycle=%" PRIu64 " input=%" PRIu64, state.lifecycle_events, state.input_events);
+ close_file_log();
 }
 }
 void android_main(android_app* app) {
