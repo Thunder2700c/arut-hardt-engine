@@ -1642,7 +1642,8 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
         float camera_position[4];
         float light_direction[4];
         float light_radiance[4];
-        float light_view_projection[16];
+        float light_view_projection[4][16];
+        float cascade_splits[4];
     };
     struct alignas(16) MaterialData final {
         float base_color[4];
@@ -1650,7 +1651,7 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
         float roughness_normal_occlusion_alpha[4];
         std::uint32_t flags[4];
     };
-    static_assert(sizeof(FrameData) == 176);
+    static_assert(sizeof(FrameData) == 384);
     static_assert(sizeof(MaterialData) == 64);
     if (!load_texture_asset("textures/demo_base_color.png", VK_FORMAT_R8G8B8A8_SRGB, true,
                             base_color_image_, base_color_memory_, base_color_view_,
@@ -1664,23 +1665,65 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     if (!create_buffer(sizeof(FrameData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, frame_uniform_buffer_, frame_uniform_memory_) ||
         !create_buffer(sizeof(MaterialData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, material_uniform_buffer_, material_uniform_memory_)) return false;
 
-    const FrameData frame{
-        {0}, {2.2F, 1.8F, 2.8F, 1.0F}, {0.45F, -1.0F, 0.35F, 0.0F},
-        {3.0F, 2.8F, 2.5F, 0.0F}, {0}
-    };
-    const auto view = arut::rendering::look_at_rh({frame.camera_position[0], frame.camera_position[1], frame.camera_position[2]},
-                                                  {0.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F});
+    FrameData frame{};
+    const std::array<float, 3> camera{2.2F, 1.8F, 2.8F};
+    frame.camera_position[0] = camera[0];
+    frame.camera_position[1] = camera[1];
+    frame.camera_position[2] = camera[2];
+    frame.camera_position[3] = 1.0F;
+    frame.light_direction[0] = 0.45F;
+    frame.light_direction[1] = -1.0F;
+    frame.light_direction[2] = 0.35F;
+    frame.light_radiance[0] = 3.0F;
+    frame.light_radiance[1] = 2.8F;
+    frame.light_radiance[2] = 2.5F;
+
+    const auto view = arut::rendering::look_at_rh(camera, {0.0F, 0.0F, 0.0F},
+                                                  {0.0F, 1.0F, 0.0F});
     const auto projection = arut::rendering::perspective_rh_zo(0.785398163F,
         static_cast<float>(extent_.width) / static_cast<float>(std::max(1U, extent_.height)), 0.1F, 100.0F);
-    const auto vp = arut::rendering::multiply(projection, view);
-    const auto light_view = arut::rendering::look_at_rh({-4.0F, 6.0F, -4.0F},
-                                                        {0.0F, 0.0F, 0.0F},
-                                                        {0.0F, 1.0F, 0.0F});
-    const auto light_projection = arut::rendering::orthographic_rh_zo(-4.0F, 4.0F, -4.0F, 4.0F, 0.1F, 20.0F);
-    const auto light_vp = arut::rendering::multiply(light_projection, light_view);
+    const auto view_projection = arut::rendering::multiply(projection, view);
+    std::copy(view_projection.value.begin(), view_projection.value.end(), frame.view_projection);
+
+    const std::array<float, 3> forward = arut::rendering::normalize3(
+        {-camera[0], -camera[1], -camera[2]});
+    const std::array<float, 3> direction_to_light =
+        arut::rendering::normalize3({-0.45F, 1.0F, -0.35F});
+    const std::array<float, 4> cascade_ends{8.0F, 20.0F, 45.0F, 80.0F};
+    for (std::uint32_t cascade = 0; cascade < 4U; ++cascade) {
+        float start_distance = cascade == 0U ? 0.0F : cascade_ends[cascade - 1U];
+        float end_distance = cascade_ends[cascade];
+        if (shadow_cascade_count_ == 1U) {
+            start_distance = 0.0F;
+            end_distance = 80.0F;
+        } else if (shadow_cascade_count_ == 2U && cascade == 1U) {
+            end_distance = 80.0F;
+        }
+        const float midpoint = (start_distance + end_distance) * 0.5F;
+        const std::array<float, 3> center{
+            camera[0] + forward[0] * midpoint,
+            camera[1] + forward[1] * midpoint,
+            camera[2] + forward[2] * midpoint
+        };
+        const float radius = std::max(2.0F, (end_distance - start_distance) * 0.5F + 1.0F);
+        const std::array<float, 3> light_eye{
+            center[0] + direction_to_light[0] * radius * 3.0F,
+            center[1] + direction_to_light[1] * radius * 3.0F,
+            center[2] + direction_to_light[2] * radius * 3.0F
+        };
+        const auto light_view = arut::rendering::look_at_rh(
+            light_eye, center, {0.0F, 1.0F, 0.0F});
+        const auto light_projection = arut::rendering::orthographic_rh_zo(
+            -radius, radius, -radius, radius, 0.1F, radius * 8.0F);
+        const auto light_view_projection = arut::rendering::multiply(light_projection, light_view);
+        std::copy(light_view_projection.value.begin(), light_view_projection.value.end(),
+                  frame.light_view_projection[cascade]);
+    }
+    frame.cascade_splits[0] = shadow_cascade_count_ > 1U ? cascade_ends[0] : 100000.0F;
+    frame.cascade_splits[1] = shadow_cascade_count_ > 2U ? cascade_ends[1] : 100000.0F;
+    frame.cascade_splits[2] = shadow_cascade_count_ > 3U ? cascade_ends[2] : 100000.0F;
+    frame.cascade_splits[3] = 100000.0F;
     FrameData frame_upload = frame;
-    std::copy(vp.value.begin(), vp.value.end(), frame_upload.view_projection);
-    std::copy(light_vp.value.begin(), light_vp.value.end(), frame_upload.light_view_projection);
     void* mapped = nullptr;
     VkResult result = vkMapMemory(device_, frame_uniform_memory_, 0, sizeof(FrameData), 0, &mapped);
     if (result != VK_SUCCESS || !mapped) { log_error("Map frame uniform buffer failed", result); return false; }
