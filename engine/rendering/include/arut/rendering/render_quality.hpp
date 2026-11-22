@@ -73,6 +73,7 @@ struct RenderProfileSnapshot final {
     std::uint32_t triangles{0};
     std::uint64_t gpu_memory_bytes{0};
     bool gpu_timing_available{false};
+    bool gpu_visibility_enabled{false};
 };
 
 } // namespace arut::rendering
