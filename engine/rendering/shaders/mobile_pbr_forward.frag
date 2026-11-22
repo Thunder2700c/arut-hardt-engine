@@ -18,6 +18,7 @@ layout(set = 0, binding = 0, std140) uniform FrameData {
 } frameData;
 
 layout(set = 0, binding = 1) uniform sampler2DShadow directionalShadowMap;
+layout(set = 0, binding = 2) uniform samplerCube environmentMap;
 
 layout(set = 1, binding = 0, std140) uniform MaterialData {
     vec4 baseColorFactor;
@@ -122,10 +123,22 @@ void main() {
     float shadowVisibility = directionalShadowVisibility(n, l);
     vec3 direct = (diffuse + specular) * frameData.directionalLightRadiance.rgb * nDotL * shadowVisibility;
 
-    // Ambient term is deliberately a placeholder until the IBL phase is integrated.
-    // AO texture sampling is intentionally deferred until the material descriptor contract
-    // includes an occlusion image. Do not pretend the strength scalar is an occlusion map.
-    vec3 ambient = base.rgb * 0.025 * (1.0 - metallic);
+    // Diffuse irradiance is approximated by the broadest environment mip; specular
+    // reflections use the roughness-selected box-filtered environment mip. This is a
+    // lightweight split-sum foundation; GGX convolution and a BRDF LUT remain future work.
+    float environmentMaxLod = float(max(textureQueryLevels(environmentMap) - 1, 0));
+    vec3 diffuseIrradiance = textureLod(environmentMap, n, environmentMaxLod).rgb;
+    vec3 reflectionDirection = reflect(-v, n);
+    vec3 prefilteredEnvironment = textureLod(
+        environmentMap, reflectionDirection, roughness * environmentMaxLod).rgb;
+    vec3 fresnelRoughness = f0 + (max(vec3(1.0 - roughness), f0) - f0) *
+                            pow(1.0 - nDotV, 5.0);
+    vec3 diffuseEnvironment = diffuseIrradiance * base.rgb *
+                              (1.0 - fresnelRoughness) * (1.0 - metallic);
+    float approximateBrdfScale = 1.0 - 0.45 * roughness;
+    vec3 specularEnvironment = prefilteredEnvironment *
+                               (fresnelRoughness * approximateBrdfScale + vec3(0.025 * roughness));
+    vec3 ambient = (diffuseEnvironment + specularEnvironment) * 0.35;
     vec3 displayLinear = acesToneMap(direct + ambient + materialData.emissiveMetallic.rgb);
     // Current Android swapchain selects UNORM formats, so encode for display here.
     outColor = vec4(pow(displayLinear, vec3(1.0 / 2.2)), base.a);
