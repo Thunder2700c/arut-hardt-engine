@@ -1,6 +1,6 @@
 # ARUT-HARDT Technical Architecture
 
-Status: Architecture baseline, revision 0.4. Android runtime and Vulkan swapchain bootstrap exist. A first-triangle graphics pipeline, host-visible vertex buffer and depth attachment are implemented in source. Phase 3 contains CPU PBR reference code and mobile forward shader source; PBR-specific descriptor and pipeline integration remain pending.
+Status: Architecture baseline, revision 0.5. Android runtime and Vulkan swapchain bootstrap exist. The renderer source contains an indexed PBR mesh path, decoded material textures, GGX environment/BRDF integration, cosine-convolved diffuse irradiance, quality-selected directional cascades, CPU visibility culling and optional GPU timestamps. Host and Android ARM64 native compile checks run without APK packaging; physical GPU behaviour remains unverified.
 
 ## Platform targets
 Android ARM64 is the primary runtime. Windows and Linux are secondary development/runtime targets. The editor is initially desktop-based. Commercial engines are design references only; no proprietary source, shaders or assets are used.
