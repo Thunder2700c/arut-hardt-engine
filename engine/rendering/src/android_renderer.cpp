@@ -583,10 +583,17 @@ bool AndroidRenderer::draw_frame() noexcept {
         log_error("vkAcquireNextImageKHR failed", result);
         return false;
     }
-    vkResetFences(device_, 1, &in_flight_);
-    vkResetCommandBuffer(command_buffers_[image_index], 0);
+    result = vkResetCommandBuffer(command_buffers_[image_index], 0);
+    if (result != VK_SUCCESS) {
+        log_error("vkResetCommandBuffer failed", result);
+        return false;
+    }
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    if (vkBeginCommandBuffer(command_buffers_[image_index], &begin) != VK_SUCCESS) return false;
+    result = vkBeginCommandBuffer(command_buffers_[image_index], &begin);
+    if (result != VK_SUCCESS) {
+        log_error("vkBeginCommandBuffer failed", result);
+        return false;
+    }
     std::array<VkClearValue, 2> clears{};
     clears[0].color = {{0.025F, 0.045F, 0.075F, 1.0F}};
     clears[1].depthStencil = {1.0F, 0};
@@ -612,7 +619,18 @@ bool AndroidRenderer::draw_frame() noexcept {
     vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 1, &triangle_vertex_buffer_, &vertex_offset);
     vkCmdDraw(command_buffers_[image_index], 3, 1, 0, 0);
     vkCmdEndRenderPass(command_buffers_[image_index]);
-    if (vkEndCommandBuffer(command_buffers_[image_index]) != VK_SUCCESS) return false;
+    result = vkEndCommandBuffer(command_buffers_[image_index]);
+    if (result != VK_SUCCESS) {
+        log_error("vkEndCommandBuffer failed", result);
+        return false;
+    }
+    // Reset only after command recording succeeds; otherwise the next frame could wait
+    // forever on a fence that was reset but never submitted.
+    result = vkResetFences(device_, 1, &in_flight_);
+    if (result != VK_SUCCESS) {
+        log_error("vkResetFences failed", result);
+        return false;
+    }
     const VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     submit.waitSemaphoreCount = 1;
@@ -623,7 +641,18 @@ bool AndroidRenderer::draw_frame() noexcept {
     submit.signalSemaphoreCount = 1;
     submit.pSignalSemaphores = &render_finished_[image_index];
     result = vkQueueSubmit(graphics_queue_, 1, &submit, in_flight_);
-    if (result != VK_SUCCESS) { log_error("vkQueueSubmit failed", result); return false; }
+    if (result != VK_SUCCESS) {
+        log_error("vkQueueSubmit failed", result);
+        // A failed submit will not signal the reset fence. Restore a signaled fence
+        // so the runtime cannot deadlock on the next frame while reporting the failure.
+        vkDestroyFence(device_, in_flight_, nullptr);
+        VkFenceCreateInfo recovery{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+        recovery.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        in_flight_ = VK_NULL_HANDLE;
+        if (vkCreateFence(device_, &recovery, nullptr, &in_flight_) != VK_SUCCESS)
+            log_error("Failed to recreate frame fence after submit failure");
+        return false;
+    }
     VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     present.waitSemaphoreCount = 1;
     present.pWaitSemaphores = &render_finished_[image_index];
