@@ -1413,31 +1413,6 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     return true;
 }
 
-bool AndroidRenderer::update_pbr_frame_data() noexcept {
-    struct alignas(16) FrameData final {
-        float view_projection[16];
-        float camera_position[4];
-        float light_direction[4];
-        float light_radiance[4];
-    };
-    const std::array<float, 3> camera{2.2F, 1.8F, 2.8F};
-    const auto view = arut::rendering::look_at_rh(camera, {0.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F});
-    const auto projection = arut::rendering::perspective_rh_zo(0.785398163F,
-        static_cast<float>(extent_.width) / static_cast<float>(std::max(1U, extent_.height)), 0.1F, 100.0F);
-    const auto vp = arut::rendering::multiply(projection, view);
-    FrameData frame{};
-    std::copy(vp.value.begin(), vp.value.end(), frame.view_projection);
-    frame.camera_position[0] = camera[0]; frame.camera_position[1] = camera[1]; frame.camera_position[2] = camera[2]; frame.camera_position[3] = 1.0F;
-    frame.light_direction[0] = 0.45F; frame.light_direction[1] = -1.0F; frame.light_direction[2] = 0.35F;
-    frame.light_radiance[0] = 3.0F; frame.light_radiance[1] = 2.8F; frame.light_radiance[2] = 2.5F;
-    void* mapped = nullptr;
-    const VkResult result = vkMapMemory(device_, frame_uniform_memory_, 0, sizeof(FrameData), 0, &mapped);
-    if (result != VK_SUCCESS || !mapped) { log_error("Update PBR frame uniform failed", result); return false; }
-    std::memcpy(mapped, &frame, sizeof(FrameData));
-    vkUnmapMemory(device_, frame_uniform_memory_);
-    return true;
-}
-
 bool AndroidRenderer::create_commands_and_sync() noexcept {
     VkCommandPoolCreateInfo pool{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -1651,9 +1626,10 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     if (device_ != VK_NULL_HANDLE) {
         if (in_flight_) vkDestroyFence(device_, in_flight_, nullptr);
         if (timestamp_query_pool_) vkDestroyQueryPool(device_, timestamp_query_pool_, nullptr);
+        if (shadow_pipeline_) vkDestroyPipeline(device_, shadow_pipeline_, nullptr);
         if (pbr_pipeline_) vkDestroyPipeline(device_, pbr_pipeline_, nullptr);
-        if (pbr_pipeline_layout_) vkDestroyPipelineLayout(device_, pbr_pipeline_layout_, nullptr);
         if (pbr_descriptor_pool_) vkDestroyDescriptorPool(device_, pbr_descriptor_pool_, nullptr);
+        if (pbr_pipeline_layout_) vkDestroyPipelineLayout(device_, pbr_pipeline_layout_, nullptr);
         if (frame_set_layout_) vkDestroyDescriptorSetLayout(device_, frame_set_layout_, nullptr);
         if (material_set_layout_) vkDestroyDescriptorSetLayout(device_, material_set_layout_, nullptr);
         if (frame_uniform_buffer_) vkDestroyBuffer(device_, frame_uniform_buffer_, nullptr);
@@ -1687,6 +1663,12 @@ void AndroidRenderer::destroy_swapchain() noexcept {
         if (depth_view_) vkDestroyImageView(device_, depth_view_, nullptr);
         if (depth_image_) vkDestroyImage(device_, depth_image_, nullptr);
         if (depth_memory_) vkFreeMemory(device_, depth_memory_, nullptr);
+        if (shadow_framebuffer_) vkDestroyFramebuffer(device_, shadow_framebuffer_, nullptr);
+        if (shadow_render_pass_) vkDestroyRenderPass(device_, shadow_render_pass_, nullptr);
+        if (shadow_sampler_) vkDestroySampler(device_, shadow_sampler_, nullptr);
+        if (shadow_view_) vkDestroyImageView(device_, shadow_view_, nullptr);
+        if (shadow_image_) vkDestroyImage(device_, shadow_image_, nullptr);
+        if (shadow_memory_) vkFreeMemory(device_, shadow_memory_, nullptr);
         if (swapchain_) vkDestroySwapchainKHR(device_, swapchain_, nullptr);
     }
     in_flight_ = VK_NULL_HANDLE;
@@ -1727,6 +1709,15 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     depth_image_ = VK_NULL_HANDLE;
     depth_memory_ = VK_NULL_HANDLE;
     depth_format_ = VK_FORMAT_UNDEFINED;
+    shadow_format_ = VK_FORMAT_UNDEFINED;
+    shadow_image_ = VK_NULL_HANDLE;
+    shadow_memory_ = VK_NULL_HANDLE;
+    shadow_view_ = VK_NULL_HANDLE;
+    shadow_sampler_ = VK_NULL_HANDLE;
+    shadow_render_pass_ = VK_NULL_HANDLE;
+    shadow_framebuffer_ = VK_NULL_HANDLE;
+    shadow_pipeline_ = VK_NULL_HANDLE;
+    shadow_enabled_ = false;
     swapchain_ = VK_NULL_HANDLE;
     framebuffers_.clear();
     image_views_.clear();
@@ -1739,7 +1730,8 @@ bool AndroidRenderer::recreate_swapchain() noexcept {
     destroy_swapchain();
     return create_swapchain() && create_render_targets() && create_triangle_geometry() &&
            create_triangle_pipeline() && create_pbr_geometry() && create_fallback_texture() &&
-           create_pbr_pipeline() && create_pbr_descriptors() && create_commands_and_sync();
+           create_pbr_pipeline() && create_shadow_resources() && create_shadow_pipeline() &&
+           create_pbr_descriptors() && create_commands_and_sync();
 }
 
 void AndroidRenderer::shutdown() noexcept {
