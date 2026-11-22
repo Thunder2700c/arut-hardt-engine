@@ -62,12 +62,15 @@ Exit gate: Android renders a textured 3D scene with validation and frame/GPU tim
 - [x] Add a per-instance model-matrix vertex stream and indexed instanced cube drawing.
 - [x] Add CPU frustum extraction and bounding-sphere culling for test instances.
 - [x] Add CPU-generated indexed indirect draw commands for instanced main and shadow passes.
-- [ ] Add GPU compute visibility and GPU-generated indirect commands.
+- [x] Add an optional Vulkan compute frustum-culling path that compacts visible instance transforms and atomically writes indexed indirect draw arguments.
+- [x] Add CPU fallback for devices without a compute-capable graphics queue or a valid compute shader/pipeline.
+- [x] Synchronize compute output for vertex fetch, indirect command reads and host profiling readback; add compute ABI/workgroup tests.
+- [ ] Validate GPU/CPU visible-instance parity and performance on physical Android GPUs.
 - [x] Add a procedural six-face sky/ground environment cubemap, GGX importance-sampled specular mips and PBR diffuse/specular environment sampling.
 - [x] Add a CPU split-sum GGX BRDF integration LUT baker, upload it as a sampled Vulkan texture and use it in the PBR specular environment response.
 - [x] Add a separately convolved diffuse irradiance cubemap using cosine-weighted hemisphere sampling.
 - [ ] Add HDR environment asset import, environment probes and blending.
-- [x] Connect profile snapshots to CPU frame time, GPU timestamp queries, shadow-pass time, draw calls, visible objects and triangle counts.
+- [x] Connect profile snapshots to CPU frame time, separate GPU visibility/shadow/full-frame timestamp intervals, draw calls, visible objects and triangle counts.
 - [x] Track persistent renderer-owned Vulkan buffer/image allocation sizes in runtime profiling logs.
 - [ ] Add native driver-budget queries and multi-pass/per-material breakdowns.
 - [ ] Validate graceful quality fallback on two Android GPU families.
