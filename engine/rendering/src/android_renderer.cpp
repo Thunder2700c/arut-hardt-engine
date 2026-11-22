@@ -28,6 +28,7 @@ AndroidRenderer::~AndroidRenderer() { shutdown(); }
 
 bool AndroidRenderer::initialize(ANativeWindow* window) noexcept {
     shutdown();
+    window_ = window;
     if (!window || !create_instance() || !create_surface(window) ||
         !select_device() || !create_device() || !create_swapchain() ||
         !create_render_targets() || !create_commands_and_sync()) {
@@ -153,10 +154,10 @@ bool AndroidRenderer::create_swapchain() noexcept {
     if (caps.currentExtent.width != std::numeric_limits<std::uint32_t>::max()) {
         extent_ = caps.currentExtent;
     } else {
-        const auto width = static_cast<std::uint32_t>(std::max(1, ANativeWindow_getWidth(nullptr)));
-        (void)width;
-        extent_.width = std::clamp(1U, caps.minImageExtent.width, caps.maxImageExtent.width);
-        extent_.height = std::clamp(1U, caps.minImageExtent.height, caps.maxImageExtent.height);
+        const auto width = static_cast<std::uint32_t>(std::max(1, ANativeWindow_getWidth(window_)));
+        const auto height = static_cast<std::uint32_t>(std::max(1, ANativeWindow_getHeight(window_)));
+        extent_.width = std::clamp(width, caps.minImageExtent.width, caps.maxImageExtent.width);
+        extent_.height = std::clamp(height, caps.minImageExtent.height, caps.maxImageExtent.height);
     }
     // Android surface capabilities normally provide currentExtent. The fallback is updated
     // by the caller through the native window dimensions before swapchain creation.
@@ -357,6 +358,7 @@ void AndroidRenderer::shutdown() noexcept {
     device_ = VK_NULL_HANDLE;
     surface_ = VK_NULL_HANDLE;
     instance_ = VK_NULL_HANDLE;
+    window_ = nullptr;
     physical_device_ = VK_NULL_HANDLE;
     graphics_queue_ = VK_NULL_HANDLE;
     present_queue_ = VK_NULL_HANDLE;
