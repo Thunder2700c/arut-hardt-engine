@@ -54,6 +54,7 @@ private:
     bool create_frame_resources() noexcept;
     bool create_gpu_visibility_resources() noexcept;
     bool record_gpu_visibility(VkCommandBuffer command_buffer) noexcept;
+    void update_stress_camera(float delta_seconds) noexcept;
     bool create_triangle_pipeline() noexcept;
     bool create_triangle_geometry() noexcept;
     bool create_pbr_pipeline() noexcept;
