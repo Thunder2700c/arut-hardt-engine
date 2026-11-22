@@ -1,1 +1,1 @@
-One-time marker for the explicitly authorized Phase 3 Android debug APK validation build.
+Phase 3 validation APK build for HDR probe and GPU/CPU frustum-culling scene.
