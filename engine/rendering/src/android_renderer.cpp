@@ -387,12 +387,18 @@ bool AndroidRenderer::create_shadow_resources() noexcept {
     constexpr std::array<VkFormat, 3> candidates{
         VK_FORMAT_D32_SFLOAT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D16_UNORM
     };
+    shadow_cascade_count_ = quality_.shadows
+        ? std::clamp<std::uint32_t>(quality_.shadow_cascades, 1U, 4U) : 1U;
+    shadow_extent_ = quality_.shadows
+        ? VkExtent2D{quality_.shadow_map_resolution, quality_.shadow_map_resolution}
+        : VkExtent2D{1U, 1U};
+    shadow_enabled_ = false;
     for (const VkFormat candidate : candidates) {
         VkFormatProperties properties{};
         vkGetPhysicalDeviceFormatProperties(physical_device_, candidate, &properties);
         const VkFormatFeatureFlags required =
             VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
-        if ((properties.optimalTilingFeatures & required) == required) {
+        if (quality_.shadows && (properties.optimalTilingFeatures & required) == required) {
             shadow_format_ = candidate;
             shadow_enabled_ = true;
             break;
@@ -420,7 +426,7 @@ bool AndroidRenderer::create_shadow_resources() noexcept {
     image.format = shadow_format_;
     image.extent = {shadow_extent_.width, shadow_extent_.height, 1};
     image.mipLevels = 1;
-    image.arrayLayers = 1;
+    image.arrayLayers = 4;
     image.samples = VK_SAMPLE_COUNT_1_BIT;
     image.tiling = VK_IMAGE_TILING_OPTIMAL;
     image.usage = shadow_enabled_
@@ -454,30 +460,35 @@ bool AndroidRenderer::create_shadow_resources() noexcept {
     if (!shadow_enabled_) {
         VkBuffer staging = VK_NULL_HANDLE;
         VkDeviceMemory staging_memory = VK_NULL_HANDLE;
-        std::array<std::uint8_t, 4> fully_lit_depth_bytes{};
+        std::array<std::uint8_t, 4> one_layer_depth_bytes{};
+        std::vector<std::uint8_t> fully_lit_depth_bytes;
         VkDeviceSize fallback_depth_size = 0;
         if (shadow_format_ == VK_FORMAT_D32_SFLOAT) {
             const float fully_lit_depth = 1.0F;
-            std::memcpy(fully_lit_depth_bytes.data(), &fully_lit_depth, sizeof(fully_lit_depth));
+            std::memcpy(one_layer_depth_bytes.data(), &fully_lit_depth, sizeof(fully_lit_depth));
             fallback_depth_size = sizeof(fully_lit_depth);
         } else if (shadow_format_ == VK_FORMAT_D24_UNORM_S8_UINT) {
             const std::uint32_t fully_lit_depth = 0x00ffffffU;
-            std::memcpy(fully_lit_depth_bytes.data(), &fully_lit_depth, sizeof(fully_lit_depth));
+            std::memcpy(one_layer_depth_bytes.data(), &fully_lit_depth, sizeof(fully_lit_depth));
             fallback_depth_size = sizeof(fully_lit_depth);
         } else if (shadow_format_ == VK_FORMAT_D16_UNORM) {
             const std::uint16_t fully_lit_depth = 0xffffU;
-            std::memcpy(fully_lit_depth_bytes.data(), &fully_lit_depth, sizeof(fully_lit_depth));
+            std::memcpy(one_layer_depth_bytes.data(), &fully_lit_depth, sizeof(fully_lit_depth));
             fallback_depth_size = sizeof(fully_lit_depth);
         } else {
             log_error("Unsupported sampled depth fallback format");
             return false;
         }
-        if (!create_buffer(fallback_depth_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, staging, staging_memory))
+        fully_lit_depth_bytes.resize(static_cast<std::size_t>(fallback_depth_size) * 4U);
+        for (std::uint32_t layer = 0; layer < 4U; ++layer)
+            std::memcpy(fully_lit_depth_bytes.data() + static_cast<std::size_t>(layer) * fallback_depth_size,
+                        one_layer_depth_bytes.data(), static_cast<std::size_t>(fallback_depth_size));
+        if (!create_buffer(fallback_depth_size * 4U, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, staging, staging_memory))
             return false;
         void* mapped = nullptr;
-        result = vkMapMemory(device_, staging_memory, 0, fallback_depth_size, 0, &mapped);
+        result = vkMapMemory(device_, staging_memory, 0, fallback_depth_size * 4U, 0, &mapped);
         if (result == VK_SUCCESS && mapped) {
-            std::memcpy(mapped, fully_lit_depth_bytes.data(), static_cast<std::size_t>(fallback_depth_size));
+            std::memcpy(mapped, fully_lit_depth_bytes.data(), static_cast<std::size_t>(fallback_depth_size) * 4U);
             vkUnmapMemory(device_, staging_memory);
         } else {
             vkDestroyBuffer(device_, staging, nullptr);
@@ -513,12 +524,12 @@ bool AndroidRenderer::create_shadow_resources() noexcept {
             to_transfer.image = shadow_image_;
             to_transfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
             to_transfer.subresourceRange.levelCount = 1;
-            to_transfer.subresourceRange.layerCount = 1;
+            to_transfer.subresourceRange.layerCount = 4;
             vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                  0, 0, nullptr, 0, nullptr, 1, &to_transfer);
             VkBufferImageCopy copy{};
             copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-            copy.imageSubresource.layerCount = 1;
+            copy.imageSubresource.layerCount = 4;
             copy.imageExtent = {1, 1, 1};
             vkCmdCopyBufferToImage(command, staging, shadow_image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
             VkImageMemoryBarrier to_shader{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
@@ -587,11 +598,11 @@ bool AndroidRenderer::create_shadow_resources() noexcept {
 
     VkImageViewCreateInfo view_info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
     view_info.image = shadow_image_;
-    view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view_info.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
     view_info.format = shadow_format_;
     view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
     view_info.subresourceRange.levelCount = 1;
-    view_info.subresourceRange.layerCount = 1;
+    view_info.subresourceRange.layerCount = 4;
     result = vkCreateImageView(device_, &view_info, nullptr, &shadow_view_);
     if (result != VK_SUCCESS) {
         log_error("Create directional shadow depth view failed", result);
@@ -615,19 +626,37 @@ bool AndroidRenderer::create_shadow_resources() noexcept {
     }
 
     if (shadow_enabled_) {
-        VkFramebufferCreateInfo framebuffer{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-        framebuffer.renderPass = shadow_render_pass_;
-        framebuffer.attachmentCount = 1;
-        framebuffer.pAttachments = &shadow_view_;
-        framebuffer.width = shadow_extent_.width;
-        framebuffer.height = shadow_extent_.height;
-        framebuffer.layers = 1;
-        result = vkCreateFramebuffer(device_, &framebuffer, nullptr, &shadow_framebuffer_);
-        if (result != VK_SUCCESS) {
-            log_error("Create directional shadow framebuffer failed", result);
-            return false;
+        for (std::uint32_t layer = 0; layer < 4U; ++layer) {
+            VkImageViewCreateInfo layer_view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+            layer_view.image = shadow_image_;
+            layer_view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            layer_view.format = shadow_format_;
+            layer_view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            layer_view.subresourceRange.baseArrayLayer = layer;
+            layer_view.subresourceRange.layerCount = 1;
+            layer_view.subresourceRange.levelCount = 1;
+            result = vkCreateImageView(device_, &layer_view, nullptr, &shadow_layer_views_[layer]);
+            if (result != VK_SUCCESS) {
+                log_error("Create directional shadow layer view failed", result);
+                return false;
+            }
+            VkFramebufferCreateInfo framebuffer{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+            framebuffer.renderPass = shadow_render_pass_;
+            framebuffer.attachmentCount = 1;
+            framebuffer.pAttachments = &shadow_layer_views_[layer];
+            framebuffer.width = shadow_extent_.width;
+            framebuffer.height = shadow_extent_.height;
+            framebuffer.layers = 1;
+            result = vkCreateFramebuffer(device_, &framebuffer, nullptr, &shadow_framebuffers_[layer]);
+            if (result != VK_SUCCESS) {
+                log_error("Create directional shadow cascade framebuffer failed", result);
+                return false;
+            }
         }
-        arut_android_log(ANDROID_LOG_INFO, "Single-map directional shadow resources enabled.");
+        char message[160]{};
+        std::snprintf(message, sizeof(message), "Directional cascaded shadows enabled: cascades=%u resolution=%ux%u",
+                      shadow_cascade_count_, shadow_extent_.width, shadow_extent_.height);
+        arut_android_log(ANDROID_LOG_INFO, message);
     }
     return true;
 }
