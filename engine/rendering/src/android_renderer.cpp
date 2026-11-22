@@ -2381,6 +2381,7 @@ arut::rendering::RenderProfileSnapshot AndroidRenderer::profile_snapshot() const
     snapshot.visible_objects = last_visible_objects_;
     snapshot.triangles = last_triangles_;
     snapshot.gpu_timing_available = timestamp_queries_available_;
+    snapshot.gpu_visibility_enabled = gpu_visibility_enabled_;
     snapshot.gpu_memory_bytes = tracked_gpu_memory_bytes_;
     return snapshot;
 }
