@@ -49,6 +49,33 @@ int main() {
     assert(world.active({1, 0}));
     assert(!world.active({-1, 0}));
 
+    WorldPartition streamed_partition(128.0F);
+    WorldCellStreamer streamer;
+    std::size_t unloaded_cells = 0U;
+    const auto loader = [](WorldCell cell, WorldCellContent& content) {
+        content.cell = cell;
+        content.terrain = TerrainSystem::build(128.0F, 8U);
+        const float offset_x = static_cast<float>(cell.x) * 128.0F;
+        const float offset_z = static_cast<float>(cell.z) * 128.0F;
+        for (auto& vertex : content.terrain.vertices) {
+            vertex.x += offset_x;
+            vertex.z += offset_z;
+        }
+        return true;
+    };
+    const auto unloader = [&unloaded_cells](WorldCell, WorldCellContent&) {
+        ++unloaded_cells;
+    };
+    const auto first_stream = streamer.update(streamed_partition, 0.0F, 0.0F, 1U, loader, unloader);
+    assert(first_stream.loaded == 9U && first_stream.unloaded == 0U);
+    assert(first_stream.failed == 0U && first_stream.resident == 9U);
+    assert(streamer.find({0, 0}) != nullptr);
+    const auto second_stream = streamer.update(streamed_partition, 128.0F, 0.0F, 1U, loader, unloader);
+    assert(second_stream.loaded == 3U && second_stream.unloaded == 3U);
+    assert(second_stream.resident == 9U && unloaded_cells == 3U);
+    assert(streamer.find({-1, 0}) == nullptr);
+    assert(streamer.find({2, 0}) != nullptr);
+
     bool invalid_radius_rejected = false;
     try { (void)world.update_streaming(0.0F, 0.0F, 1000U); }
     catch (const std::length_error&) { invalid_radius_rejected = true; }
