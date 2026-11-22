@@ -1,5 +1,6 @@
 #include "arut/core/version.hpp"
 #include "arut/rendering/pbr_brdf.hpp"
+#include "arut/rendering/mesh.hpp"
 #include "arut/rendering/render_quality.hpp"
 
 #include <cassert>
@@ -55,5 +56,21 @@ int main() {
 
     const Vec3 mapped = tone_map_aces({4.0F, 1.0F, 0.25F});
     assert(mapped.x <= 1.0F && mapped.x > mapped.y && mapped.y > mapped.z);
+    const auto cube = arut::rendering::make_unit_cube();
+    assert(cube.vertices.size() == 24);
+    assert(cube.indices.size() == 36);
+    for (const auto index : cube.indices) assert(index < cube.vertices.size());
+    for (const auto& vertex : cube.vertices) {
+        const float normal_length = vertex.normal[0] * vertex.normal[0] +
+                                    vertex.normal[1] * vertex.normal[1] +
+                                    vertex.normal[2] * vertex.normal[2];
+        assert(near(normal_length, 1.0F));
+    }
+    const auto projection = arut::rendering::perspective_rh_zo(1.04719755F, 16.0F / 9.0F, 0.1F, 100.0F);
+    assert(projection.value[0] > 0.0F);
+    assert(projection.value[5] < 0.0F);
+    assert(near(projection.value[11], -1.0F));
+    const auto invalid_projection = arut::rendering::perspective_rh_zo(1.0F, 0.0F, 0.1F, 100.0F);
+    for (const auto value : invalid_projection.value) assert(near(value, 0.0F));
     return 0;
 }
