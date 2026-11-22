@@ -144,9 +144,11 @@ int main() {
     const auto hdr_result = arut::rendering::decode_image_rgba32f(hdr_pixel, decoded_hdr);
     assert(hdr_result && decoded_hdr.valid());
     assert(decoded_hdr.width == 1U && decoded_hdr.height == 1U);
-    assert(near(decoded_hdr.pixels[0], 1.0F));
-    assert(near(decoded_hdr.pixels[1], 0.5F));
-    assert(near(decoded_hdr.pixels[2], 0.25F));
+    // RGBE decoding uses the midpoint of each 8-bit mantissa interval.
+    assert(near(decoded_hdr.pixels[0], 1.00390625F));
+    assert(near(decoded_hdr.pixels[1], 0.50390625F));
+    assert(near(decoded_hdr.pixels[2], 0.25390625F));
+    assert(decoded_hdr.pixels[0] > 1.0F);
     assert(near(decoded_hdr.pixels[3], 1.0F));
 
     arut::rendering::Rgba8Image decoded{};
