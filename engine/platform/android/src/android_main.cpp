@@ -190,7 +190,8 @@ void handle_app_command(android_app* app, std::int32_t command) {
       app->window, app->activity->assetManager,
       std::span<const arut::core::CubeRenderInstance>{
        state->cube_render_extraction_system.instances().data(),
-       state->cube_render_extraction_system.instances().size()})) {
+       state->cube_render_extraction_system.instances().size()},
+      state->terrain_mesh)) {
      log_warn("Vulkan renderer unavailable; activity remains alive.");
     }
    }
