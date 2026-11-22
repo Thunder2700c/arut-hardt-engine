@@ -136,6 +136,25 @@ int main() {
     assert(arut::rendering::build_rgba8_mip_chain(decoded, true, srgb_mips));
     assert(srgb_mips.size() == 2 && srgb_mips[1].width == 1 && srgb_mips[1].height == 1);
     assert(srgb_mips[1].pixels[0] >= 187 && srgb_mips[1].pixels[0] <= 189);
+    constexpr std::array<std::uint8_t, 34> normal_tga{{
+        0,0,2,0,0,0,0,0,0,0,0,0,2,0,2,0,32,40,
+        255,128,128,255,255,128,128,255,255,128,128,255,255,128,128,255
+    }};
+    arut::rendering::Rgba8Image decoded_normal{};
+    assert(arut::rendering::decode_image_rgba8(normal_tga, decoded_normal));
+    assert(decoded_normal.width == 2 && decoded_normal.height == 2);
+    assert(decoded_normal.pixels[0] == 128 && decoded_normal.pixels[1] == 128 &&
+           decoded_normal.pixels[2] == 255 && decoded_normal.pixels[3] == 255);
+
+    constexpr std::array<std::uint8_t, 34> metallic_roughness_tga{{
+        0,0,2,0,0,0,0,0,0,0,0,0,2,0,2,0,32,40,
+        64,180,0,255,64,180,0,255,64,180,0,255,64,180,0,255
+    }};
+    arut::rendering::Rgba8Image decoded_mr{};
+    assert(arut::rendering::decode_image_rgba8(metallic_roughness_tga, decoded_mr));
+    assert(decoded_mr.pixels[0] == 0 && decoded_mr.pixels[1] == 180 &&
+           decoded_mr.pixels[2] == 64 && decoded_mr.pixels[3] == 255);
+
     std::vector<arut::rendering::Rgba8Mip> linear_mips;
     assert(arut::rendering::build_rgba8_mip_chain(decoded, false, linear_mips));
     assert(linear_mips[1].pixels[0] >= 127 && linear_mips[1].pixels[0] <= 128);
