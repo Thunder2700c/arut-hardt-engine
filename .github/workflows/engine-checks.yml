@@ -1,0 +1,27 @@
+name: Engine code checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  host-checks:
+    name: C++ and Rust host checks (no APK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Configure C++20 tests
+        run: cmake -S . -B build -DARUT_BUILD_RUNTIME=OFF -DARUT_BUILD_TESTS=ON
+      - name: Build C++ tests
+        run: cmake --build build --parallel 2
+      - name: Run C++ tests
+        run: ctest --test-dir build --output-on-failure
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run Rust workspace tests
+        run: cargo test --workspace --locked
