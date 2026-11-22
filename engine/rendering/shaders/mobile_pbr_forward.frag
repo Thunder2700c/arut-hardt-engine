@@ -20,6 +20,7 @@ layout(set = 0, binding = 0, std140) uniform FrameData {
 layout(set = 0, binding = 1) uniform sampler2DShadow directionalShadowMap;
 layout(set = 0, binding = 2) uniform samplerCube environmentMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfIntegrationLut;
+layout(set = 0, binding = 4) uniform samplerCube diffuseIrradianceMap;
 
 layout(set = 1, binding = 0, std140) uniform MaterialData {
     vec4 baseColorFactor;
@@ -124,10 +125,10 @@ void main() {
     float shadowVisibility = directionalShadowVisibility(n, l);
     vec3 direct = (diffuse + specular) * frameData.directionalLightRadiance.rgb * nDotL * shadowVisibility;
 
-    // Diffuse irradiance is approximated by the broadest environment mip. Specular IBL
+    // Diffuse IBL uses a cosine-convolved irradiance cubemap. Specular IBL
     // uses GGX-prefiltered environment mips and a split-sum BRDF integration LUT.
     float environmentMaxLod = float(max(textureQueryLevels(environmentMap) - 1, 0));
-    vec3 diffuseIrradiance = textureLod(environmentMap, n, environmentMaxLod).rgb;
+    vec3 diffuseIrradiance = texture(diffuseIrradianceMap, n).rgb;
     vec3 reflectionDirection = reflect(-v, n);
     vec3 prefilteredEnvironment = textureLod(
         environmentMap, reflectionDirection, roughness * environmentMaxLod).rgb;
