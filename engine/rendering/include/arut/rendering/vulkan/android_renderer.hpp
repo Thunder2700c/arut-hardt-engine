@@ -33,6 +33,8 @@ public:
     bool set_quality_tier(arut::rendering::RenderQualityTier tier) noexcept;
     bool set_environment_probes(std::span<const arut::rendering::EnvironmentProbeInfluence> probes) noexcept;
     bool draw_frame() noexcept;
+    bool set_terrain_cells(std::span<const arut::core::TerrainMesh> terrain_meshes) noexcept;
+    [[nodiscard]] std::array<float, 3> camera_position() const noexcept { return camera_position_; }
     // action: 0=down, 1=move, 2=up. Coordinates are in window pixels.
     void set_touch_input(std::int32_t action, std::int32_t pointer_id,
                          float x, float y, float width, float height) noexcept;
