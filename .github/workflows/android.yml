@@ -15,6 +15,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare build diagnostics
+        run: |
+          mkdir -p build-logs
+          {
+            echo "project=ARUT-HARDT"
+            echo "commit=$GITHUB_SHA"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "runner=$RUNNER_OS"
+            echo "started_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > build-logs/build-info.txt
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -28,8 +39,9 @@ jobs:
 
       - name: Install Android SDK packages
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          yes | sdkmanager --licenses > build-logs/sdk-licenses.log 2>&1
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1" > build-logs/sdk-install.log 2>&1 || { cat build-logs/sdk-install.log; exit 1; }
+          cat build-logs/sdk-install.log
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
           echo "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
 
@@ -40,18 +52,45 @@ jobs:
       - name: Build Rust ARM64 static library
         env:
           CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: aarch64-linux-android26-clang
-        run: cargo build --workspace --locked --release --target aarch64-linux-android
+        run: |
+          cargo build --workspace --locked --release --target aarch64-linux-android > build-logs/rust-build.log 2>&1 || { cat build-logs/rust-build.log; exit 1; }
+          cat build-logs/rust-build.log
 
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
 
+      - name: Record build toolchain
+        run: |
+          {
+            java -version 2>&1
+            rustc --version
+            cargo --version
+            gradle --version
+            "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --version
+            echo "ndk=27.2.12479018"
+            echo "sdk_platform=android-35"
+            echo "abi=arm64-v8a"
+          } >> build-logs/build-info.txt
+
       - name: Build debug APK
-        run: gradle --no-daemon :app:assembleDebug
+        run: |
+          gradle --no-daemon :app:assembleDebug > build-logs/android-build.log 2>&1 || { cat build-logs/android-build.log; exit 1; }
+          cat build-logs/android-build.log
 
       - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: arut-hardt-android-arm64-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload build logs even on failure
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: arut-hardt-build-logs-${{ github.run_id }}
+          path: build-logs/
+          if-no-files-found: warn
+          retention-days: 30
