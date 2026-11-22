@@ -59,7 +59,8 @@ bool AndroidRenderer::initialize(ANativeWindow* window, AAssetManager* assets) n
 bool AndroidRenderer::create_frame_resources() noexcept {
     return create_render_targets() &&
            create_triangle_geometry() && create_triangle_pipeline() &&
-           create_pbr_geometry() && create_fallback_texture() &&
+           create_pbr_geometry() && create_gpu_visibility_resources() &&
+           create_fallback_texture() &&
            create_environment_cubemap() && create_brdf_lut() &&
            create_pbr_pipeline() && create_shadow_resources() &&
            create_shadow_pipeline() && create_pbr_descriptors() &&
@@ -122,6 +123,8 @@ bool AndroidRenderer::select_device() noexcept {
             physical_device_ = candidate;
             graphics_family_ = graphics;
             present_family_ = present;
+            compute_queue_supported_ =
+                (families[graphics].queueFlags & VK_QUEUE_COMPUTE_BIT) != 0U;
             VkPhysicalDeviceProperties properties{};
             vkGetPhysicalDeviceProperties(candidate, &properties);
             timestamp_valid_bits_ = families[graphics].timestampValidBits;
