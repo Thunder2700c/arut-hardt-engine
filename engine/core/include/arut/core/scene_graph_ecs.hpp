@@ -40,8 +40,13 @@ public:
     void update(World& world) override {
         // Remove nodes whose owning ECS entities have been destroyed.
         for (auto it = entities_.begin(); it != entities_.end();) {
-            if (!world.alive(it->first)) {
+            const Entity entity = it->first;
+            const bool no_longer_in_scene =
+                !world.alive(entity) || !world.has<SceneLocalTransformComponent>(entity);
+            if (no_longer_in_scene || !graph_.alive(it->second)) {
                 if (graph_.alive(it->second)) (void)graph_.destroy_subtree(it->second);
+                if (world.alive(entity))
+                    (void)world.remove<SceneGraphBindingComponent>(entity);
                 it = entities_.erase(it);
             } else {
                 ++it;
