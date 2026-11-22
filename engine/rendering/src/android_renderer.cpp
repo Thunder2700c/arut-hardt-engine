@@ -57,8 +57,36 @@ bool has_device_extension(VkPhysicalDevice device, const char* name) {
 
 AndroidRenderer::~AndroidRenderer() { shutdown(); }
 
-bool AndroidRenderer::initialize(ANativeWindow* window, AAssetManager* assets) noexcept {
+bool AndroidRenderer::initialize(
+    ANativeWindow* window, AAssetManager* assets,
+    std::span<const arut::core::CubeRenderInstance> ecs_instances) noexcept {
     shutdown();
+    visibility_instances_.clear();
+    visibility_source_instance_count_ = 0U;
+    if (ecs_instances.size() != arut::core::CubeSpawnSystem::target_count) {
+        log_error("Renderer rejected stress scene: expected exactly 5000 ECS render instances");
+        return false;
+    }
+    try {
+        visibility_instances_.reserve(ecs_instances.size());
+        for (const auto& source : ecs_instances) {
+            arut::rendering::GpuVisibilityInstance instance{};
+            instance.bounds = source.bounds;
+            instance.model = source.model;
+            visibility_instances_.push_back(instance);
+        }
+    } catch (...) {
+        visibility_instances_.clear();
+        log_error("Renderer could not copy ECS render-instance data");
+        return false;
+    }
+    visibility_source_instance_count_ = static_cast<std::uint32_t>(visibility_instances_.size());
+    char source_message[160]{};
+    std::snprintf(source_message, sizeof(source_message),
+                  "Renderer input accepted: source=ECS CubeSpawnSystem instances=%u",
+                  visibility_source_instance_count_);
+    arut_android_log(ANDROID_LOG_INFO, source_message);
+
     window_ = window;
     assets_ = assets;
     if (!window || !assets_ || !create_instance() || !create_surface(window) ||
@@ -67,7 +95,10 @@ bool AndroidRenderer::initialize(ANativeWindow* window, AAssetManager* assets) n
         shutdown();
         return false;
     }
-    char ready_message[256]{}; std::snprintf(ready_message, sizeof(ready_message), "Vulkan swapchain ready: %ux%u, images=%zu", extent_.width, extent_.height, images_.size());
+    char ready_message[256]{};
+    std::snprintf(ready_message, sizeof(ready_message),
+                  "Vulkan swapchain ready: %ux%u, images=%zu",
+                  extent_.width, extent_.height, images_.size());
     arut_android_log(ANDROID_LOG_INFO, ready_message);
     return true;
 }
@@ -1834,45 +1865,11 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
     vkUnmapMemory(device_, cube_index_memory_);
     cube_index_count_ = static_cast<std::uint32_t>(mesh.indices.size());
 
-    const auto make_instance = [](float x, float y, float z, float scale, float yaw) {
-        arut::rendering::Mat4 model = arut::rendering::Mat4::identity();
-        const float cosine = std::cos(yaw);
-        const float sine = std::sin(yaw);
-        model.value[0] = cosine * scale;
-        model.value[2] = -sine * scale;
-        model.value[5] = scale;
-        model.value[8] = sine * scale;
-        model.value[10] = cosine * scale;
-        model.value[12] = x;
-        model.value[13] = y;
-        model.value[14] = z;
-        return model;
-    };
-    // Dedicated mobile stress scene: 20 x 10 x 25 = 5,000 instanced cubes.
-    // The same immutable source list feeds the CPU reference and GPU compute path.
-    constexpr std::uint32_t grid_x = 20U, grid_y = 10U, grid_z = 25U;
-    constexpr float spacing = 2.0F;
-    visibility_instances_.clear();
-    visibility_instances_.reserve(static_cast<std::size_t>(grid_x) * grid_y * grid_z);
-    for (std::uint32_t iy = 0; iy < grid_y; ++iy) {
-        for (std::uint32_t iz = 0; iz < grid_z; ++iz) {
-            for (std::uint32_t ix = 0; ix < grid_x; ++ix) {
-                const float x = (static_cast<float>(ix) - (grid_x - 1U) * 0.5F) * spacing;
-                const float y = (static_cast<float>(iy) - (grid_y - 1U) * 0.5F) * spacing;
-                const float z = (static_cast<float>(iz) - (grid_z - 1U) * 0.5F) * spacing;
-                const float variation = static_cast<float>((ix * 17U + iy * 31U + iz * 13U) % 7U);
-                const float scale = 0.34F + variation * 0.025F;
-                const float yaw = static_cast<float>((ix + iz * 3U) % 16U) * 0.196349541F;
-                arut::rendering::GpuVisibilityInstance instance{};
-                instance.bounds = {x, y, z, scale * 0.866025404F};
-                instance.model = make_instance(x, y, z, scale, yaw).value;
-                visibility_instances_.push_back(instance);
-            }
-        }
-    }
+    // Instance transforms and bounds are supplied by the ECS render-extraction system.
+    // The renderer only uploads/culls/draws this immutable input; it never creates entities.
     visibility_source_instance_count_ = static_cast<std::uint32_t>(visibility_instances_.size());
-    if (visibility_source_instance_count_ != 5000U) {
-        log_error("Stress scene generation failed: expected 5000 cubes");
+    if (visibility_source_instance_count_ != arut::core::CubeSpawnSystem::target_count) {
+        log_error("Stress scene input invalid: expected 5000 ECS-owned cube instances");
         return false;
     }
     const std::array<float, 3> camera{0.0F, 0.0F, 18.0F};
@@ -1960,7 +1957,7 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
 
     char message[192]{};
     std::snprintf(message, sizeof(message),
-                  "STRESS SCENE: vertices=%zu indices=%u source_instances=%u CPU_visible=%u culled=%u grid=20x10x25",
+                  "STRESS SCENE: source=ECS vertices=%zu indices=%u source_instances=%u CPU_visible=%u culled=%u grid=20x10x25",
                   mesh.vertices.size(), cube_index_count_, visibility_source_instance_count_,
                   instance_count_, visibility_source_instance_count_ - instance_count_);
     arut_android_log(ANDROID_LOG_INFO, message);
