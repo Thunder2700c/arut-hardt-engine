@@ -25,11 +25,13 @@ class World final {
     struct PoolBase {
         virtual ~PoolBase() = default;
         virtual void erase(Entity entity) = 0;
+        [[nodiscard]] virtual std::type_index type() const noexcept = 0;
     };
 
     template <typename T>
     class Pool final : public PoolBase {
     public:
+        [[nodiscard]] std::type_index type() const noexcept override { return typeid(T); }
         std::vector<Entity> entities;
         std::vector<T> values;
         std::vector<std::uint32_t> sparse;
@@ -109,7 +111,9 @@ public:
                 throw std::length_error("entity index capacity exhausted");
             index = static_cast<std::uint32_t>(generations_.size());
             generations_.push_back(0U);
+            is_allocated_.push_back(0U);
         }
+        is_allocated_[index] = 1U;
         ++alive_count_;
         return {index, generations_[index]};
     }
@@ -118,6 +122,7 @@ public:
         if (!alive(entity)) return false;
         for (auto& pool : pools_) if (pool) pool->erase(entity);
         ++generations_[entity.index];
+        is_allocated_[entity.index] = 0U;
         free_indices_.push_back(entity.index);
         --alive_count_;
         return true;
