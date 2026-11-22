@@ -1,6 +1,6 @@
 # ARUT-HARDT Technical Architecture
 
-Status: Architecture baseline, revision 0.5. Android runtime and Vulkan swapchain bootstrap exist. The renderer source contains an indexed PBR mesh path, decoded material textures, GGX environment/BRDF integration, cosine-convolved diffuse irradiance, quality-selected directional cascades, CPU visibility culling and optional GPU timestamps. Host and Android ARM64 native compile checks run without APK packaging; physical GPU behaviour remains unverified.
+Status: Architecture baseline, revision 0.5. Android runtime and Vulkan swapchain bootstrap exist. The renderer source contains an indexed PBR mesh path, decoded material textures, GGX environment/BRDF integration, cosine-convolved diffuse irradiance, quality-selected directional cascades, optional GPU compute frustum culling with CPU fallback, indirect draws and separate GPU pass timestamps. Host and Android ARM64 native compile checks run without APK packaging; physical GPU behaviour remains unverified.
 
 ## Platform targets
 Android ARM64 is the primary runtime. Windows and Linux are secondary development/runtime targets. The editor is initially desktop-based. Commercial engines are design references only; no proprietary source, shaders or assets are used.
