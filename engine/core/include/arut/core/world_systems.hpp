@@ -265,6 +265,17 @@ public:
         return found == resident_.end() ? nullptr : &found->second;
     }
     [[nodiscard]] std::size_t resident_count() const noexcept { return resident_.size(); }
+    [[nodiscard]] std::vector<TerrainMesh> collect_terrain_meshes(
+        const WorldPartition& partition) const {
+        std::vector<TerrainMesh> meshes;
+        const auto cells = partition.active_cells();
+        meshes.reserve(cells.size());
+        for (const auto cell : cells) {
+            const auto* content = find(cell);
+            if (content) meshes.push_back(content->terrain);
+        }
+        return meshes;
+    }
 
 private:
     std::unordered_map<WorldCell, WorldCellContent, WorldCellHash> resident_;
