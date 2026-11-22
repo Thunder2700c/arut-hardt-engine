@@ -62,14 +62,7 @@ float geometrySmith(float nDotV, float nDotL, float roughness) {
     return geometrySchlickGGX(nDotV, roughness) * geometrySchlickGGX(nDotL, roughness);
 }
 
-float directionalShadowVisibility(vec3 normal, vec3 lightDirection) {
-    float viewDistance = dot(inWorldPosition - frameData.cameraPosition.xyz,
-                             normalize(frameData.cameraForward.xyz));
-    int cascade = 0;
-    if (viewDistance > frameData.cascadeSplits.x) cascade = 1;
-    if (viewDistance > frameData.cascadeSplits.y) cascade = 2;
-    if (viewDistance > frameData.cascadeSplits.z) cascade = 3;
-
+float sampleDirectionalShadowCascade(int cascade, vec3 normal, vec3 lightDirection) {
     vec4 lightClip = frameData.lightViewProjection[cascade] * vec4(inWorldPosition, 1.0);
     if (lightClip.w <= 0.0) return 1.0;
     vec3 projected = lightClip.xyz / lightClip.w;
@@ -87,6 +80,27 @@ float directionalShadowVisibility(vec3 normal, vec3 lightDirection) {
         }
     }
     return visibility / 9.0;
+}
+
+float directionalShadowVisibility(vec3 normal, vec3 lightDirection) {
+    float viewDistance = dot(inWorldPosition - frameData.cameraPosition.xyz,
+                             normalize(frameData.cameraForward.xyz));
+    int cascade = 0;
+    if (viewDistance > frameData.cascadeSplits.x) cascade = 1;
+    if (viewDistance > frameData.cascadeSplits.y) cascade = 2;
+    if (viewDistance > frameData.cascadeSplits.z) cascade = 3;
+
+    float visibility = sampleDirectionalShadowCascade(cascade, normal, lightDirection);
+    if (cascade < 3) {
+        float split = frameData.cascadeSplits[cascade];
+        float blendStart = split * 0.90;
+        if (viewDistance > blendStart && split < 99999.0) {
+            float blend = clamp((viewDistance - blendStart) / max(0.001, split - blendStart), 0.0, 1.0);
+            float nextVisibility = sampleDirectionalShadowCascade(cascade + 1, normal, lightDirection);
+            visibility = mix(visibility, nextVisibility, blend);
+        }
+    }
+    return visibility;
 }
 
 vec3 acesToneMap(vec3 color) {
