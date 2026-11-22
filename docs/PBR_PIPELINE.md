@@ -1,6 +1,6 @@
 # Mobile PBR Pipeline
 
-Status: implementation in progress. The Android Vulkan source now includes a forward metallic-roughness PBR pipeline, a bundled sRGB base-colour texture with CPU-generated mip levels and Vulkan upload, instanced geometry, CPU frustum culling, a single directional shadow map and optional GPU timestamp profiling. Host and Android ARM64 native compilation are checked by CI without building an APK. Physical-device rendering remains deferred.
+Status: implementation in progress. The Android Vulkan source now includes a forward metallic-roughness PBR pipeline, a bundled sRGB base-colour texture with CPU-generated mip levels and Vulkan upload, a procedural six-face environment cubemap with GGX importance-sampled specular mips, instanced geometry, CPU frustum culling, a single directional shadow map and optional GPU timestamp profiling. Host and Android ARM64 native compilation are checked by CI without building an APK. Physical-device rendering remains deferred.
 
 ## Shading model
 The forward shader uses linear-light material and lighting inputs, tangent-space normal mapping, GGX/Trowbridge-Reitz normal distribution, Schlick Fresnel, Schlick-GGX/Smith geometry, Cook-Torrance direct lighting and ACES tone mapping. Base-colour uses an sRGB image format; metallic/roughness and normal maps remain fallback-bound until those assets are added. The output applies a transfer function for the current UNORM swapchain path.
@@ -11,6 +11,7 @@ The forward shader uses linear-light material and lighting inputs, tangent-space
 - Frame uniform contains view-projection, camera position, directional-light direction/radiance and light view-projection matrices.
 - The shadow depth vertex shader uses the same frame uniform and instance transform stream.
 - The material uses a model-matrix instance stream rather than a per-object push constant.
+- Set 0 binding 2: procedural linear-light environment cubemap with six faces and GGX-prefiltered roughness mips.
 
 The shader interface is currently an engine-internal prototype, not a stable external material asset format.
 
