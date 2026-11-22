@@ -26,6 +26,8 @@ private:
     bool create_device() noexcept;
     bool create_swapchain() noexcept;
     bool create_render_targets() noexcept;
+    bool create_depth_resources() noexcept;
+    std::uint32_t find_memory_type(std::uint32_t type_bits, VkMemoryPropertyFlags properties) const noexcept;
     bool create_commands_and_sync() noexcept;
     void destroy_swapchain() noexcept;
     bool recreate_swapchain() noexcept;
@@ -45,6 +47,10 @@ private:
     std::vector<VkImage> images_;
     std::vector<VkImageView> image_views_;
     VkRenderPass render_pass_{VK_NULL_HANDLE};
+    VkImage depth_image_{VK_NULL_HANDLE};
+    VkDeviceMemory depth_memory_{VK_NULL_HANDLE};
+    VkImageView depth_view_{VK_NULL_HANDLE};
+    VkFormat depth_format_{VK_FORMAT_UNDEFINED};
     std::vector<VkFramebuffer> framebuffers_;
     VkCommandPool command_pool_{VK_NULL_HANDLE};
     std::vector<VkCommandBuffer> command_buffers_;
