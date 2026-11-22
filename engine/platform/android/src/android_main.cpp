@@ -169,7 +169,7 @@ void handle_app_command(android_app* app, std::int32_t command) {
    state->has_window = app->window != nullptr;
    if (state->has_window) {
     log_info("Window created: %dx%d", ANativeWindow_getWidth(app->window), ANativeWindow_getHeight(app->window));
-    if (!state->renderer.initialize(app->window)) log_warn("Vulkan renderer unavailable; activity remains alive.");
+    if (!state->renderer.initialize(app->window, app->activity->assetManager)) log_warn("Vulkan renderer unavailable; activity remains alive.");
    }
    break;
   case APP_CMD_TERM_WINDOW:
