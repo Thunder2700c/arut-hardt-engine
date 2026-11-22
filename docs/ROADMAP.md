@@ -71,7 +71,9 @@ Exit gate: Android renders a textured 3D scene with validation and frame/GPU tim
 - [x] Add a separately convolved diffuse irradiance cubemap using cosine-weighted hemisphere sampling.
 - [x] Add a tested CPU environment-probe influence contract with smooth AABB edge fades, normalized overlap weights and priority resolution.
 - [x] Decode bounded Radiance RGBE images to linear RGBA32F and convert equirectangular HDR radiance into a seam-wrapped six-face RGBA32F cubemap.
-- [ ] Integrate HDR cubemaps into Vulkan RGBA16F storage/sampling, GPU probe storage and runtime probe blending.
+- [x] Add HDR float GGX specular prefiltering and cosine-convolved diffuse irradiance; convert the results to validated RGBA16F and support Vulkan cubemap upload with an RGBA8 procedural fallback.
+- [x] Add optional Android loading of `environments/default.hdr` and connect the HDR import/convolution/upload path to the active PBR descriptors.
+- [ ] Add GPU environment-probe arrays/storage, probe selection and runtime probe blending.
 - [x] Connect profile snapshots to CPU frame time, separate GPU visibility/shadow/full-frame timestamp intervals, draw calls, visible objects and triangle counts.
 - [x] Track persistent renderer-owned Vulkan buffer/image allocation sizes in runtime profiling logs.
 - [ ] Add native driver-budget queries and multi-pass/per-material breakdowns.
