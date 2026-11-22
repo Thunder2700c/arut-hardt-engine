@@ -35,6 +35,15 @@ void log_error(const char* message, VkResult result = VK_SUCCESS) {
     char buffer[512]{}; std::snprintf(buffer, sizeof(buffer), "%s (VkResult=%d)", message, static_cast<int>(result));
     arut_android_log(ANDROID_LOG_ERROR, buffer);
 }
+bool has_instance_extension(const char* name) {
+    std::uint32_t count = 0;
+    if (vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr) != VK_SUCCESS) return false;
+    std::vector<VkExtensionProperties> extensions(count);
+    if (vkEnumerateInstanceExtensionProperties(nullptr, &count, extensions.data()) != VK_SUCCESS) return false;
+    return std::any_of(extensions.begin(), extensions.end(), [name](const auto& e) {
+        return std::strcmp(e.extensionName, name) == 0;
+    });
+}
 bool has_device_extension(VkPhysicalDevice device, const char* name) {
     std::uint32_t count = 0;
     if (vkEnumerateDeviceExtensionProperties(device, nullptr, &count, nullptr) != VK_SUCCESS) return false;
@@ -320,9 +329,13 @@ bool AndroidRenderer::record_gpu_visibility(VkCommandBuffer command_buffer) noex
 }
 
 bool AndroidRenderer::create_instance() noexcept {
-    const std::array<const char*, 2> extensions{
+    std::vector<const char*> extensions{
         VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_ANDROID_SURFACE_EXTENSION_NAME
     };
+    properties2_extension_enabled_ =
+        has_instance_extension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    if (properties2_extension_enabled_)
+        extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
     VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
     app.pApplicationName = "ARUT-HARDT";
     app.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
@@ -380,6 +393,8 @@ bool AndroidRenderer::select_device() noexcept {
             physical_device_ = candidate;
             graphics_family_ = graphics;
             present_family_ = present;
+            memory_budget_extension_enabled_ = properties2_extension_enabled_ &&
+                has_device_extension(candidate, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
             compute_queue_supported_ =
                 (families[graphics].queueFlags & VK_QUEUE_COMPUTE_BIT) != 0U;
             VkPhysicalDeviceProperties properties{};
@@ -408,12 +423,14 @@ bool AndroidRenderer::create_device() noexcept {
         queues[i].queueCount = 1;
         queues[i].pQueuePriorities = &priority;
     }
-    const char* extension = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+    std::vector<const char*> extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    if (memory_budget_extension_enabled_)
+        extensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
     VkDeviceCreateInfo info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
     info.queueCreateInfoCount = queue_count;
     info.pQueueCreateInfos = queues.data();
-    info.enabledExtensionCount = 1;
-    info.ppEnabledExtensionNames = &extension;
+    info.enabledExtensionCount = static_cast<std::uint32_t>(extensions.size());
+    info.ppEnabledExtensionNames = extensions.data();
     const VkResult result = vkCreateDevice(physical_device_, &info, nullptr, &device_);
     if (result != VK_SUCCESS) {
         log_error("vkCreateDevice failed", result);
@@ -2580,9 +2597,11 @@ bool AndroidRenderer::draw_frame() noexcept {
                 ? UINT64_MAX : ((std::uint64_t{1} << timestamp_valid_bits_) - 1U);
             const std::uint64_t visibility_ticks = (timestamps[1] - timestamps[0]) & mask;
             const std::uint64_t shadow_ticks = (timestamps[2] - timestamps[1]) & mask;
+            const std::uint64_t main_pass_ticks = (timestamps[3] - timestamps[2]) & mask;
             const std::uint64_t frame_ticks = (timestamps[3] - timestamps[0]) & mask;
             last_visibility_pass_ms_ = static_cast<double>(visibility_ticks) * timestamp_period_ns_ / 1000000.0;
             last_shadow_pass_ms_ = static_cast<double>(shadow_ticks) * timestamp_period_ns_ / 1000000.0;
+            last_main_pass_ms_ = static_cast<double>(main_pass_ticks) * timestamp_period_ns_ / 1000000.0;
             last_gpu_frame_ms_ = static_cast<double>(frame_ticks) * timestamp_period_ns_ / 1000000.0;
         }
         timestamp_data_pending_ = false;
@@ -2751,12 +2770,33 @@ arut::rendering::RenderProfileSnapshot AndroidRenderer::profile_snapshot() const
     snapshot.gpu_frame_ms = last_gpu_frame_ms_;
     snapshot.visibility_pass_ms = last_visibility_pass_ms_;
     snapshot.shadow_pass_ms = last_shadow_pass_ms_;
+    snapshot.main_pass_ms = last_main_pass_ms_;
     snapshot.draw_calls = last_draw_calls_;
     snapshot.visible_objects = last_visible_objects_;
     snapshot.triangles = last_triangles_;
     snapshot.gpu_timing_available = timestamp_queries_available_;
     snapshot.gpu_visibility_enabled = gpu_visibility_enabled_;
     snapshot.gpu_memory_bytes = tracked_gpu_memory_bytes_;
+    if (memory_budget_extension_enabled_ && instance_ != VK_NULL_HANDLE) {
+        const auto get_memory_properties = reinterpret_cast<
+            PFN_vkGetPhysicalDeviceMemoryProperties2KHR>(
+                vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceMemoryProperties2KHR"));
+        if (get_memory_properties) {
+            VkPhysicalDeviceMemoryBudgetPropertiesEXT budget{
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT};
+            VkPhysicalDeviceMemoryProperties2 properties{
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2};
+            properties.pNext = &budget;
+            get_memory_properties(physical_device_, &properties);
+            for (std::uint32_t heap = 0; heap < properties.memoryProperties.memoryHeapCount; ++heap) {
+                if ((properties.memoryProperties.memoryHeaps[heap].flags &
+                     VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0U) continue;
+                snapshot.gpu_memory_budget_bytes += budget.heapBudget[heap];
+                snapshot.gpu_memory_usage_bytes += budget.heapUsage[heap];
+            }
+            snapshot.gpu_memory_budget_available = true;
+        }
+    }
     return snapshot;
 }
 
