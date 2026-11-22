@@ -1,0 +1,56 @@
+#version 450
+
+// One invocation tests one sphere. Visible model matrices are compacted into
+// the vertex-rate instance stream while instanceCount is atomically accumulated
+// directly in a VkDrawIndexedIndirectCommand-compatible storage buffer.
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+struct VisibilityInstance {
+    vec4 bounds;
+    mat4 model;
+};
+
+layout(set = 0, binding = 0, std430) readonly buffer InputInstances {
+    VisibilityInstance instances[];
+} inputData;
+
+layout(set = 0, binding = 1, std430) writeonly buffer VisibleModels {
+    mat4 models[];
+} outputData;
+
+layout(set = 0, binding = 2, std430) buffer DrawArguments {
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int vertexOffset;
+    uint firstInstance;
+} drawArgs;
+
+layout(push_constant, std430) uniform VisibilityPushConstants {
+    vec4 frustumPlanes[6];
+    uint instanceCount;
+    uvec3 padding;
+} pushData;
+
+void main() {
+    const uint instanceIndex = gl_GlobalInvocationID.x;
+    if (instanceIndex >= pushData.instanceCount) {
+        return;
+    }
+
+    const VisibilityInstance instance = inputData.instances[instanceIndex];
+    const vec3 center = instance.bounds.xyz;
+    const float radius = max(instance.bounds.w, 0.0);
+
+    for (uint planeIndex = 0u; planeIndex < 6u; ++planeIndex) {
+        const vec4 plane = pushData.frustumPlanes[planeIndex];
+        const float signedDistance = dot(plane.xyz, center) + plane.w;
+        if (signedDistance < -radius) {
+            return;
+        }
+    }
+
+    const uint destination = atomicAdd(drawArgs.instanceCount, 1u);
+    outputData.models[destination] = instance.model;
+}
