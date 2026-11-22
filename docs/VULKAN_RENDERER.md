@@ -14,11 +14,13 @@ Status: the source contains a mobile forward PBR path, real base-colour texture 
 9. Compute a camera frustum, cull sample instances with bounding spheres, and upload visible model matrices to an instance-rate vertex stream.
 
 ## Per-frame commands
-1. Reset and begin the command buffer.
-2. If a sampled depth format is also depth-attachment capable, clear and render the directional shadow map using the shared indexed instanced mesh.
-3. Transition the shadow map to depth-read-only layout at the end of the shadow render pass.
-4. Begin the main colour/depth pass, bind PBR pipeline, frame/material descriptor sets, mesh and visible instance buffers, and issue an indexed instanced draw.
-5. Submit and present. Optional Vulkan timestamp queries measure total GPU frame time and shadow-pass GPU time separately.
+1. Wait for the previous frame fence and read back the completed indirect instance count for diagnostics.
+2. Reset and begin the command buffer.
+3. When GPU visibility is enabled, reset the indirect instance count, dispatch one compute invocation per source sphere, compact visible model matrices, and atomically populate the indexed indirect command. CPU-generated culling remains the fallback.
+4. Insert compute-to-vertex/indirect barriers and a compute-to-host dependency for the next frame's counter readback.
+5. Render the active directional shadow cascades using the shared indexed indirect command.
+6. Begin the main PBR colour/depth pass and issue the indexed indirect draw.
+7. Submit and present. Optional Vulkan timestamp queries measure GPU visibility, cascaded shadows and total frame time separately.
 
 ## Shader contracts
 - PBR vertex locations 0–3: position, normal, tangent, UV.
@@ -32,10 +34,10 @@ Status: the source contains a mobile forward PBR path, real base-colour texture 
 - Shadow vertex stage uses frame set 0 binding 0 and vertex locations 0, 4–7.
 
 ## Visibility and quality
-CPU culling uses Vulkan zero-to-one clip-space frustum planes and bounding spheres, then populates a host-visible indirect command for indexed main/shadow draws. Directional shadows use a four-layer depth array with 1/2/4 active cascades; camera-forward depth selects the cascade. Low/Medium/High/Ultra presets select 512/512/1024/1536 shadow resolution. Diffuse environment lighting uses a separate cosine-convolved irradiance cubemap. Specular IBL uses GGX-prefiltered environment mips and the uploaded split-sum BRDF LUT. HDR environment import, cascade stabilization/split blending and GPU/indirect culling remain pending.
+GPU culling uses a Vulkan compute shader to test source bounding spheres, compact visible model matrices into a vertex-rate buffer and atomically populate the indexed indirect command. The CPU culler and CPU-authored indirect command remain the fallback. Shader ABI and workgroup sizing have host tests. Directional shadows use a four-layer depth array with 1/2/4 active cascades; camera-forward depth selects the cascade. Low/Medium/High/Ultra presets select 512/512/1024/1536 shadow resolution. Diffuse environment lighting uses a separate cosine-convolved irradiance cubemap. Specular IBL uses GGX-prefiltered environment mips and the uploaded split-sum BRDF LUT. HDR environment import, cascade stabilization/split blending and GPU/indirect culling remain pending.
 
 ## Diagnostics
-Runtime profile logs include CPU frame duration, GPU timestamp duration when available, shadow-pass duration, draw calls, visible instances and triangle count. Unsupported timestamp queries are gracefully disabled. GPU memory totals and detailed per-material breakdowns remain pending.
+Runtime profile logs include CPU frame duration, separate GPU visibility-compute and cascaded-shadow durations, total GPU frame duration when available, engine-owned persistent Vulkan allocation bytes, draw calls, visible instances and triangle count. Unsupported timestamp queries are gracefully disabled. GPU memory totals and detailed per-material breakdowns remain pending.
 
 ## Limits
 - The scene is a small renderer test fixture, not a game world.
