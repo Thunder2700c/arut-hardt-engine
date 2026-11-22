@@ -2,6 +2,7 @@
 #include "arut/rendering/pbr_brdf.hpp"
 #include "arut/rendering/mesh.hpp"
 #include "arut/rendering/image.hpp"
+#include "arut/rendering/visibility.hpp"
 #include "arut/rendering/render_quality.hpp"
 
 #include <array>
@@ -106,6 +107,15 @@ int main() {
     arut::rendering::Rgba8Image invalid_image{};
     assert(!arut::rendering::decode_image_rgba8({}, invalid_image));
     assert(invalid_image.pixels.empty());
+    const auto cull_view = arut::rendering::look_at_rh({0.0F, 0.0F, 3.0F},
+                                                       {0.0F, 0.0F, 0.0F},
+                                                       {0.0F, 1.0F, 0.0F});
+    const auto cull_projection = arut::rendering::perspective_rh_zo(1.04719755F, 1.0F, 0.1F, 50.0F);
+    const auto frustum = arut::rendering::extract_vulkan_frustum(
+        arut::rendering::multiply(cull_projection, cull_view));
+    assert(arut::rendering::sphere_visible(frustum, {{0.0F, 0.0F, 0.0F}, 0.5F}));
+    assert(!arut::rendering::sphere_visible(frustum, {{100.0F, 0.0F, 0.0F}, 0.5F}));
+    assert(!arut::rendering::sphere_visible(frustum, {{0.0F, 0.0F, 5.0F}, 0.5F}));
     const auto invalid_projection = arut::rendering::perspective_rh_zo(1.0F, 0.0F, 0.1F, 100.0F);
     for (const auto value : invalid_projection.value) assert(near(value, 0.0F));
     return 0;
