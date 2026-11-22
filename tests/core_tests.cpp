@@ -119,6 +119,39 @@ int main() {
     assert(scene_sync.bound_entity_count() == 1U);
     assert(scene_sync.graph().node_count() == 1U);
 
+    // Removing the transform component removes the scene node and its ECS binding.
+    const auto detached_entity = scene_world.create();
+    scene_world.emplace<arut::core::SceneLocalTransformComponent>(detached_entity);
+    scene_sync.update(scene_world);
+    assert(scene_sync.bound_entity_count() == 2U);
+    assert(scene_world.remove<arut::core::SceneLocalTransformComponent>(detached_entity));
+    scene_sync.update(scene_world);
+    assert(scene_sync.bound_entity_count() == 1U);
+    assert(!scene_world.has<arut::core::SceneGraphBindingComponent>(detached_entity));
+
+    // Parent changes are reflected, and cycle attempts are rejected without corrupting links.
+    const auto second_root_entity = scene_world.create();
+    scene_world.emplace<arut::core::SceneLocalTransformComponent>(second_root_entity);
+    scene_sync.update(scene_world);
+    scene_world.emplace<arut::core::SceneParentComponent>(
+        scene_root_entity, arut::core::SceneParentComponent{second_root_entity});
+    scene_sync.update(scene_world);
+    const auto root_binding =
+        scene_world.get<arut::core::SceneGraphBindingComponent>(scene_root_entity).node;
+    const auto second_root_binding =
+        scene_world.get<arut::core::SceneGraphBindingComponent>(second_root_entity).node;
+    assert(scene_sync.graph().parent(root_binding) == second_root_binding);
+    scene_world.emplace<arut::core::SceneParentComponent>(
+        second_root_entity, arut::core::SceneParentComponent{scene_root_entity});
+    bool cycle_rejected = false;
+    try {
+        scene_sync.update(scene_world);
+    } catch (const std::logic_error&) {
+        cycle_rejected = true;
+    }
+    assert(cycle_rejected);
+    assert(scene_sync.graph().parent(root_binding) == second_root_binding);
+
     constexpr auto current = arut::core::version();
     static_assert(current.major == 0);
     static_assert(current.minor == 1);
