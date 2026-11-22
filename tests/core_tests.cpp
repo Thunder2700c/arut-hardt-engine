@@ -150,6 +150,21 @@ int main() {
     assert(near(decoded_hdr.pixels[2], 0.25390625F));
     assert(decoded_hdr.pixels[0] > 1.0F);
     assert(near(decoded_hdr.pixels[3], 1.0F));
+    arut::rendering::EnvironmentCubeF32Mip hdr_cube{};
+    assert(arut::rendering::build_environment_cube_from_equirectangular(
+        decoded_hdr, 2U, hdr_cube));
+    assert(hdr_cube.width == 2U && hdr_cube.height == 2U);
+    assert(hdr_cube.pixels.size() == 2U * 2U * 6U * 4U);
+    for (std::size_t i = 0; i < hdr_cube.pixels.size(); i += 4U) {
+        assert(near(hdr_cube.pixels[i], decoded_hdr.pixels[0]));
+        assert(near(hdr_cube.pixels[i + 1U], decoded_hdr.pixels[1]));
+        assert(near(hdr_cube.pixels[i + 2U], decoded_hdr.pixels[2]));
+        assert(near(hdr_cube.pixels[i + 3U], 1.0F));
+    }
+    arut::rendering::EnvironmentCubeF32Mip invalid_hdr_cube{};
+    assert(!arut::rendering::build_environment_cube_from_equirectangular(
+        decoded_hdr, 0U, invalid_hdr_cube));
+    assert(invalid_hdr_cube.pixels.empty());
 
     arut::rendering::Rgba8Image decoded{};
     const auto decode_result = arut::rendering::decode_image_rgba8(png_2x2, decoded);
