@@ -1,4 +1,5 @@
 #include "arut/rendering/environment.hpp"
+#include "arut/rendering/image.hpp"
 
 #include <algorithm>
 #include <array>
@@ -132,6 +133,91 @@ struct Vec3 final { float x, y, z; };
     const Vec3 bitangent = cross(normal, tangent);
     return normalize(tangent * half_tangent.x + bitangent * half_tangent.y + normal * half_tangent.z);
 }
+
+[[nodiscard]] std::array<float, 4> sample_equirectangular(
+    const Rgba32fImage& image, Vec3 direction) noexcept {
+    constexpr float inverse_two_pi = 0.15915494309189533577F;
+    constexpr float inverse_pi = 0.31830988618379067154F;
+    const Vec3 d = normalize(direction);
+    float u = std::atan2(d.z, d.x) * inverse_two_pi + 0.5F;
+    u -= std::floor(u);
+    const float v = std::acos(std::clamp(d.y, -1.0F, 1.0F)) * inverse_pi;
+
+    const float px = u * static_cast<float>(image.width) - 0.5F;
+    const float py = std::clamp(
+        v * static_cast<float>(image.height) - 0.5F,
+        0.0F, static_cast<float>(image.height - 1U));
+    const int raw_x0 = static_cast<int>(std::floor(px));
+    const std::uint32_t x0 = static_cast<std::uint32_t>(
+        (raw_x0 % static_cast<int>(image.width) + static_cast<int>(image.width)) %
+        static_cast<int>(image.width));
+    const std::uint32_t x1 = (x0 + 1U) % image.width;
+    const std::uint32_t y0 = static_cast<std::uint32_t>(std::floor(py));
+    const std::uint32_t y1 = std::min(image.height - 1U, y0 + 1U);
+    const float tx = px - std::floor(px);
+    const float ty = py - static_cast<float>(y0);
+
+    const auto read = [&](std::uint32_t x, std::uint32_t y) {
+        const std::size_t offset =
+            (static_cast<std::size_t>(y) * image.width + x) * 4U;
+        return std::array<float, 4>{
+            image.pixels[offset], image.pixels[offset + 1U],
+            image.pixels[offset + 2U], image.pixels[offset + 3U]
+        };
+    };
+    const auto a = read(x0, y0);
+    const auto b = read(x1, y0);
+    const auto c = read(x0, y1);
+    const auto d2 = read(x1, y1);
+    std::array<float, 4> result{};
+    for (std::size_t channel = 0; channel < 4U; ++channel) {
+        const float top = a[channel] * (1.0F - tx) + b[channel] * tx;
+        const float bottom = c[channel] * (1.0F - tx) + d2[channel] * tx;
+        result[channel] = top * (1.0F - ty) + bottom * ty;
+    }
+    return result;
+}
+
+}
+
+
+bool build_environment_cube_from_equirectangular(
+    const Rgba32fImage& source, std::uint32_t cube_size,
+    EnvironmentCubeF32Mip& output) noexcept {
+    output = {};
+    if (!source.valid() || source.width > 8192U || source.height > 8192U ||
+        static_cast<std::uint64_t>(source.width) * source.height > 16ULL * 1024ULL * 1024ULL ||
+        cube_size == 0U || cube_size > 512U) return false;
+    try {
+        output.width = cube_size;
+        output.height = cube_size;
+        output.pixels.resize(static_cast<std::size_t>(cube_size) * cube_size * 6U * 4U);
+        for (std::uint32_t face = 0; face < 6U; ++face) {
+            for (std::uint32_t y = 0; y < cube_size; ++y) {
+                for (std::uint32_t x = 0; x < cube_size; ++x) {
+                    const float u = (static_cast<float>(x) + 0.5F) / static_cast<float>(cube_size);
+                    const float v = (static_cast<float>(y) + 0.5F) / static_cast<float>(cube_size);
+                    const auto radiance = sample_equirectangular(source, face_direction(face, u, v));
+                    for (const float value : radiance) {
+                        if (!std::isfinite(value) || value < 0.0F) {
+                            output = {};
+                            return false;
+                        }
+                    }
+                    const std::size_t offset =
+                        (static_cast<std::size_t>(face) * cube_size * cube_size +
+                         static_cast<std::size_t>(y) * cube_size + x) * 4U;
+                    std::copy(radiance.begin(), radiance.end(), output.pixels.begin() +
+                              static_cast<std::ptrdiff_t>(offset));
+                }
+            }
+        }
+    } catch (...) {
+        output = {};
+        return false;
+    }
+    return output.width == cube_size && output.height == cube_size &&
+           output.pixels.size() == static_cast<std::size_t>(cube_size) * cube_size * 6U * 4U;
 }
 
 bool build_procedural_environment_cube(
