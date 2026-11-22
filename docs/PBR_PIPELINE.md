@@ -56,11 +56,12 @@ The runtime profile snapshot now includes CPU frame time, separate GPU visibilit
 - CI also compiles the Android ARM64 native library without running Gradle or building an APK.
 - No physical Android device has yet validated shadow-map sampling, visual energy behaviour, image uploads or performance.
 - The procedural environment cube has GGX importance-sampled specular roughness mips. Diffuse irradiance uses a separate cosine-convolved cubemap.
-- A CPU environment-probe influence contract computes smooth AABB edge fades, normalizes overlapping probe weights and resolves overlaps by priority. It is a tested selection/blending foundation; GPU cubemap arrays, HDR import and runtime probe sampling are not yet integrated.
+- A CPU environment-probe influence contract computes smooth AABB edge fades, normalizes overlapping probe weights and resolves overlaps by priority. Its four-slot std140 payload is uploaded with frame data; the fragment shader evaluates the same AABB/priority rules and blends fixed per-probe specular and diffuse cubemap bindings without requiring descriptor-indexing features.
+- The Android sample scene currently activates one local probe. All four probe image bindings intentionally alias the global environment/irradiance maps until independent probe assets and runtime resource registration are added; therefore the GPU selection/blend path is integrated, but distinct local probe content is not yet demonstrated.
 
 ## Remaining integration work
 1. Add a material asset/cache/handle layer and asynchronous decode/upload queues.
-2. Add GPU environment-probe arrays/storage, per-object probe selection and runtime multi-probe blending; package representative HDR assets and validate RGBA16F rendering on device.
+2. Add independent HDR cubemap storage/loading and runtime probe registration, per-object probe selection, and validation of distinct-probe blending; package representative HDR assets and validate RGBA16F rendering on device.
 3. Add cascade stabilization, split blending and local-light shadows.
 4. Add GPU/indirect visibility, GPU-memory accounting and per-pass profiling.
 5. During the separately agreed testing stage, compare GPU output with the CPU BRDF reference on two Android GPU families.
