@@ -38,7 +38,7 @@
 ## Phase 3 — Core world system
 
 - [x] ECS (generational entity handles and packed sparse-set component pools; host C++ tests passing).
-- [ ] Scene graph.
+- [x] Scene graph (hierarchy, cycle rejection, local/world transforms, subtree deletion; host tests passing).
 - [ ] Asset manager.
 - [ ] Terrain.
 - [ ] LOD.
@@ -130,7 +130,7 @@ Status is based on repository inspection, CI evidence and user-provided device l
 | Phase 0 — Architecture and infrastructure | Foundation established; audit each listed specification and governance item before marking the whole phase complete. |
 | Phase 1 — Native Android runtime | Substantial implementation and S23 FE runtime evidence; lifecycle repetition, surface recreation and full smoke-test gate need explicit verification. |
 | Phase 2 — Vulkan renderer | **Complete for the canonical Android deliverable on S23 FE/Xclipse 920.** All six scope items are implemented; CI passed C++/Rust/Android ARM64 builds, shader compilation and four-case Vulkan GPU-to-CPU PBR readback. User logs verify the 5,000-instance renderer, HDR/probe path, GPU culling, camera controls and repeated CPU/GPU visibility parity. Graceful CPU fallback is implemented. Second-GPU-family validation remains a non-blocking compatibility check before making a multi-vendor support claim. |
-| Phase 3 — Core world system | In progress. ECS foundation implemented and host-tested. Scene graph, asset manager, terrain, LOD and world partitioning remain outstanding; the navigable streamed environment deliverable is not yet met. |
+| Phase 3 — Core world system | In progress. ECS and scene graph foundations implemented and host-tested. Asset manager, terrain, LOD and world partitioning remain outstanding; the navigable streamed environment deliverable is not yet met. |
 | Phases 4–10 | Not started; remain locked behind their preceding phase exit gates. |
 
 ### Current execution order
