@@ -6,6 +6,7 @@
 #include "arut/rendering/image.hpp"
 #include "arut/rendering/render_quality.hpp"
 #include "arut/rendering/environment.hpp"
+#include "arut/rendering/gpu_visibility.hpp"
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -37,6 +38,8 @@ private:
     std::uint32_t find_memory_type(std::uint32_t type_bits, VkMemoryPropertyFlags properties) const noexcept;
     bool create_commands_and_sync() noexcept;
     bool create_frame_resources() noexcept;
+    bool create_gpu_visibility_resources() noexcept;
+    bool record_gpu_visibility(VkCommandBuffer command_buffer) noexcept;
     bool create_triangle_pipeline() noexcept;
     bool create_triangle_geometry() noexcept;
     bool create_pbr_pipeline() noexcept;
@@ -151,6 +154,18 @@ private:
     std::array<VkImageView, 4> shadow_layer_views_{};
     std::array<VkFramebuffer, 4> shadow_framebuffers_{};
     VkPipeline shadow_pipeline_{VK_NULL_HANDLE};
+    VkDescriptorSetLayout visibility_set_layout_{VK_NULL_HANDLE};
+    VkDescriptorPool visibility_descriptor_pool_{VK_NULL_HANDLE};
+    VkDescriptorSet visibility_descriptor_set_{VK_NULL_HANDLE};
+    VkPipelineLayout visibility_pipeline_layout_{VK_NULL_HANDLE};
+    VkPipeline visibility_compute_pipeline_{VK_NULL_HANDLE};
+    VkBuffer visibility_input_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory visibility_input_memory_{VK_NULL_HANDLE};
+    VkDescriptorBufferInfo visibility_input_info_{};
+    std::uint32_t visibility_source_instance_count_{0};
+    std::array<float, 24> visibility_frustum_planes_{};
+    bool compute_queue_supported_{false};
+    bool gpu_visibility_enabled_{false};
     bool shadow_enabled_{false};
     std::vector<VkFramebuffer> framebuffers_;
     VkCommandPool command_pool_{VK_NULL_HANDLE};
