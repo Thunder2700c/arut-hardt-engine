@@ -1,6 +1,6 @@
 # Vulkan Renderer Bring-up
 
-Status: the source contains a mobile forward PBR path, real base-colour texture upload, a GGX-prefiltered procedural environment cubemap, CPU frustum culling, instanced geometry, a directional shadow pass and optional GPU timestamps. CI compiles host targets and the Android ARM64 native library without packaging an APK.
+Status: the source contains a mobile forward PBR path, real material texture uploads, GGX-prefiltered specular and cosine-convolved diffuse environment lighting, instanced geometry, quality-selected directional cascades, optional GPU compute visibility with CPU fallback, indexed indirect draws and per-pass GPU timestamps. CI compiles host targets and the Android ARM64 native library without packaging an APK.
 
 ## Frame setup
 1. Create Android Vulkan instance/surface, choose graphics/presentation queues and create the FIFO swapchain.
@@ -11,7 +11,7 @@ Status: the source contains a mobile forward PBR path, real base-colour texture 
 6. Load PBR and shadow SPIR-V shader assets from Android assets.
 7. Create frame/material descriptor layouts, PBR and shadow pipelines, and frame/material uniform buffers.
 8. Generate an indexed unit cube and upload mesh buffers.
-9. Compute a camera frustum, cull sample instances with bounding spheres, and upload visible model matrices to an instance-rate vertex stream.
+9. Upload source sphere bounds and model matrices. The CPU fallback culls and compacts these into the instance stream; when supported, the compute pass performs this compaction on the GPU.
 
 ## Per-frame commands
 1. Wait for the previous frame fence and read back the completed indirect instance count for diagnostics.
@@ -34,10 +34,10 @@ Status: the source contains a mobile forward PBR path, real base-colour texture 
 - Shadow vertex stage uses frame set 0 binding 0 and vertex locations 0, 4–7.
 
 ## Visibility and quality
-GPU culling uses a Vulkan compute shader to test source bounding spheres, compact visible model matrices into a vertex-rate buffer and atomically populate the indexed indirect command. The CPU culler and CPU-authored indirect command remain the fallback. Shader ABI and workgroup sizing have host tests. Directional shadows use a four-layer depth array with 1/2/4 active cascades; camera-forward depth selects the cascade. Low/Medium/High/Ultra presets select 512/512/1024/1536 shadow resolution. Diffuse environment lighting uses a separate cosine-convolved irradiance cubemap. Specular IBL uses GGX-prefiltered environment mips and the uploaded split-sum BRDF LUT. HDR environment import, cascade stabilization/split blending and GPU/indirect culling remain pending.
+GPU culling uses a Vulkan compute shader to test source bounding spheres, compact visible model matrices into a vertex-rate storage buffer and atomically populate the indexed indirect command. The CPU culler and CPU-authored indirect command remain the fallback. ABI offsets, buffer sizes and workgroup rounding have host tests; the compute shader is compiled in CI. Directional shadows use a four-layer depth array with 1/2/4 active cascades; camera-forward depth selects the cascade. Low/Medium/High/Ultra presets select 512/512/1024/1536 shadow resolution. Diffuse environment lighting uses a separate cosine-convolved irradiance cubemap. Specular IBL uses GGX-prefiltered environment mips and the uploaded split-sum BRDF LUT. HDR environment import, cascade refinements and GPU-driven LOD/scene hierarchy remain pending.
 
 ## Diagnostics
-Runtime profile logs include CPU frame duration, separate GPU visibility-compute and cascaded-shadow durations, total GPU frame duration when available, engine-owned persistent Vulkan allocation bytes, draw calls, visible instances and triangle count. Unsupported timestamp queries are gracefully disabled. GPU memory totals and detailed per-material breakdowns remain pending.
+Runtime profile logs include CPU frame duration, separate GPU visibility-compute and cascaded-shadow durations, total GPU frame duration when available, engine-owned persistent Vulkan allocation bytes, draw calls, visible instances and triangle count. Unsupported timestamp queries are gracefully disabled. Driver-reported heap budgets and detailed per-material breakdowns remain pending.
 
 ## Limits
 - The scene is a small renderer test fixture, not a game world.
