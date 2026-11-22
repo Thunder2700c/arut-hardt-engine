@@ -26,18 +26,19 @@ Status: the source contains a mobile forward PBR path, real base-colour texture 
 - Frame set 0 binding 0: view-projection, camera position, directional-light direction/radiance and light view-projection matrices.
 - Frame set 0 binding 1: comparison-sampled directional shadow map.
 - Frame set 0 binding 2: linear-light environment cubemap with GGX-prefiltered roughness mips.
+- Frame set 0 binding 3: 64x64 RGBA8 split-sum GGX BRDF integration LUT (R=scale, G=bias).
 - Material set 1 binding 0: material factors/flags; bindings 1–3: base-colour, normal and metallic-roughness sampled images.
 - Shadow vertex stage uses frame set 0 binding 0 and vertex locations 0, 4–7.
 
 ## Visibility and quality
-CPU culling uses Vulkan zero-to-one clip-space frustum planes and bounding spheres. One 1024x1024 directional shadow map is the current default; cascades and shadow-resolution selection from Low/Medium/High/Ultra presets are not yet connected. Diffuse environment lighting is approximated from the broadest environment mip; a split-sum BRDF LUT, cosine-convolved irradiance and HDR environment import remain future refinements. GPU/indirect culling is pending.
+CPU culling uses Vulkan zero-to-one clip-space frustum planes and bounding spheres. One 1024x1024 directional shadow map is the current default; cascades and shadow-resolution selection from Low/Medium/High/Ultra presets are not yet connected. Diffuse environment lighting is approximated from the broadest environment mip. Specular IBL uses GGX-prefiltered environment mips and the uploaded split-sum BRDF LUT. Cosine-convolved diffuse irradiance and HDR environment import remain future refinements. GPU/indirect culling is pending.
 
 ## Diagnostics
 Runtime profile logs include CPU frame duration, GPU timestamp duration when available, shadow-pass duration, draw calls, visible instances and triangle count. Unsupported timestamp queries are gracefully disabled. GPU memory totals and detailed per-material breakdowns remain pending.
 
 ## Limits
 - The scene is a small renderer test fixture, not a game world.
-- Only the base-colour map uses a real image asset; normal and metallic-roughness maps use fallback textures.
+- Only the base-colour map uses a real image asset; normal and metallic-roughness maps use fallback textures. The split-sum BRDF LUT is procedurally generated on CPU and uploaded as an RGBA8 lookup texture.
 - The procedural cubemap is a bounded bootstrap environment, not an HDR environment asset or probe system.
 - The shadow map is a single directional map; no cascades or local-light shadows yet.
 - No APK, emulator or physical-device testing is performed by normal CI. The manual Android APK workflow remains separately gated.
