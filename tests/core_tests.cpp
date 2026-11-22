@@ -137,7 +137,7 @@ int main() {
         0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
         0x42, 0x60, 0x82
     }};
-    constexpr std::string_view hdr_header = "#?RADIANCE\\nFORMAT=32-bit_rle_rgbe\\n\\n-Y 1 +X 1\\n";
+    constexpr std::string_view hdr_header = "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n";
     std::vector<std::uint8_t> hdr_pixel(hdr_header.begin(), hdr_header.end());
     hdr_pixel.insert(hdr_pixel.end(), {128U, 64U, 32U, 129U});
     arut::rendering::Rgba32fImage decoded_hdr{};
