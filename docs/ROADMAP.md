@@ -36,7 +36,11 @@ Exit gate: APK installs and starts on a physical ARM64 device, handles lifecycle
 - [x] Add a host-visible vertex buffer and a depth image/view/render-pass attachment with depth testing enabled.
 - [x] Add a standard PBR-ready vertex layout, procedural unit-cube mesh data and Vulkan-compatible perspective matrix helper.
 - [x] Add indexed unit-cube mesh buffers, camera/view transforms, frame/material uniforms and an active mobile PBR draw path.
-- [ ] Add real texture asset decoding/upload, mipmaps and texture streaming.
+- [x] Add bounded PNG/JPEG/BMP/TGA decoding into RGBA8 pixels.
+- [x] Add CPU mip-chain generation with linear-light filtering for sRGB base-colour images.
+- [x] Add Vulkan staging-buffer texture upload, sampled image/view/sampler creation and mip-level sampling.
+- [x] Load a bundled sRGB base-colour PNG and bind it to the active PBR material.
+- [ ] Add more material texture maps, texture cache/handles and asynchronous texture streaming.
 - [ ] Compile the Android-native renderer and validate on device (deferred until the agreed testing stage).
 Exit gate: Android renders a textured 3D scene with validation and frame/GPU timing.
 
@@ -46,12 +50,13 @@ Exit gate: Android renders a textured 3D scene with validation and frame/GPU tim
 - [x] Define Low/Medium/High/Ultra mobile quality presets with render scale, shadow budget and light limits.
 - [x] Define a renderer profiling snapshot contract.
 - [x] Add a CPU reference implementation for Schlick Fresnel, GGX distribution, Smith geometry, Cook-Torrance direct lighting and ACES tone mapping.
-- [x] Add mobile forward PBR vertex/fragment shader source and host-CI GLSL compilation (not connected to a Vulkan PBR pipeline).
+- [x] Add mobile forward PBR vertex/fragment shader source and host-CI GLSL compilation, connected to the Vulkan PBR pipeline.
 - [x] Add host tests for BRDF limits, front/back lighting and tone mapping.
-- [ ] Integrate shader compilation, descriptor layouts, vertex formats and graphics pipeline into Vulkan.
+- [x] Integrate shader compilation, descriptor layouts, vertex formats and graphics pipeline into Vulkan.
 - [ ] Validate energy conservation and compare GPU output against the CPU reference.
 - [ ] Add mobile shadow maps and cascade quality tiers.
-- [ ] Add GPU instancing and CPU/GPU visibility culling.
+- [x] Add a per-instance model-matrix vertex stream and indexed instanced cube drawing.
+- [ ] Add CPU frustum culling and GPU visibility/indirect drawing.
 - [ ] Add environment lighting / image-based lighting (ACES tone-map source exists; runtime integration remains pending).
 - [ ] Connect profile snapshots to actual renderer counters and GPU timestamp queries.
 - [ ] Validate graceful quality fallback on two Android GPU families.
