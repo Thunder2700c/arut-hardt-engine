@@ -66,6 +66,16 @@ int main() {
         {0.8F, 0.2F, 0.1F}, 0.0F, 0.5F, {2.0F, 2.0F, 2.0F});
     assert(lit.x > 0.0F && lit.y > 0.0F && lit.z > 0.0F);
 
+    // Deterministic linear-light reference vector for the mobile GLSL
+    // Cook-Torrance direct-light equations. The same inputs are used when
+    // validating GPU readback so driver/shader drift is measurable.
+    const Vec3 shader_reference = evaluate_direct_brdf(
+        {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 1.0F}, {0.6F, 0.0F, 0.8F},
+        {0.8F, 0.2F, 0.1F}, 0.2F, 0.35F, {3.0F, 2.0F, 1.0F});
+    assert(near(shader_reference.x, 0.44556248F, 2.0e-5F));
+    assert(near(shader_reference.y, 0.08824827F, 2.0e-5F));
+    assert(near(shader_reference.z, 0.02387263F, 2.0e-5F));
+
     const Vec3 unlit = evaluate_direct_brdf(
         {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, -1.0F},
         {0.8F, 0.2F, 0.1F}, 0.0F, 0.5F, {2.0F, 2.0F, 2.0F});
