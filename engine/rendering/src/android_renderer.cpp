@@ -15,6 +15,7 @@
 #include <android/asset_manager.h>
 #include "arut/rendering/mesh.hpp"
 #include "arut/rendering/image.hpp"
+#include "arut/rendering/visibility.hpp"
 
 extern "C" void arut_android_log(int priority, const char* message) noexcept;
 
@@ -601,12 +602,29 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         model.value[12] = x;
         return model;
     };
-    const std::array<arut::rendering::Mat4, 3> instances{{
-        make_instance(-1.05F, 0.68F, -0.45F),
-        make_instance(0.0F, 0.82F, 0.15F),
-        make_instance(1.05F, 0.68F, 0.55F)
+    struct InstanceSpec final { float x; float scale; float yaw; };
+    constexpr std::array<InstanceSpec, 3> specs{{
+        {-1.05F, 0.68F, -0.45F}, {0.0F, 0.82F, 0.15F}, {1.05F, 0.68F, 0.55F}
     }};
-    const VkDeviceSize instance_bytes = sizeof(instances);
+    const std::array<float, 3> camera{2.2F, 1.8F, 2.8F};
+    const auto view = arut::rendering::look_at_rh(camera, {0.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F});
+    const auto projection = arut::rendering::perspective_rh_zo(0.785398163F,
+        static_cast<float>(extent_.width) / static_cast<float>(std::max(1U, extent_.height)), 0.1F, 100.0F);
+    const auto view_projection = arut::rendering::multiply(projection, view);
+    const auto frustum = arut::rendering::extract_vulkan_frustum(view_projection);
+    std::vector<arut::rendering::Mat4> visible_instances;
+    visible_instances.reserve(specs.size());
+    for (const auto& spec : specs) {
+        const float radius = spec.scale * 0.866025404F;
+        const arut::rendering::BoundingSphere bounds{{spec.x, 0.0F, 0.0F}, radius};
+        if (arut::rendering::sphere_visible(frustum, bounds))
+            visible_instances.push_back(make_instance(spec.x, spec.scale, spec.yaw));
+    }
+    if (visible_instances.empty()) {
+        log_error("CPU visibility culling removed every PBR test instance");
+        return false;
+    }
+    const VkDeviceSize instance_bytes = visible_instances.size() * sizeof(arut::rendering::Mat4);
     if (!create_buffer(instance_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                        instance_buffer_, instance_memory_)) return false;
     mapped = nullptr;
@@ -615,9 +633,13 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         log_error("Map PBR instance buffer failed", result);
         return false;
     }
-    std::memcpy(mapped, instances.data(), sizeof(instances));
+    std::memcpy(mapped, visible_instances.data(), static_cast<std::size_t>(instance_bytes));
     vkUnmapMemory(device_, instance_memory_);
-    instance_count_ = static_cast<std::uint32_t>(instances.size());
+    instance_count_ = static_cast<std::uint32_t>(visible_instances.size());
+    char message[160]{};
+    std::snprintf(message, sizeof(message), "PBR mesh: vertices=%zu indices=%u instances=%u culled=%zu",
+                  mesh.vertices.size(), cube_index_count_, instance_count_, specs.size() - visible_instances.size());
+    arut_android_log(ANDROID_LOG_INFO, message);
     return true;
 }
 
