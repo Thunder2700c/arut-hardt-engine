@@ -1453,7 +1453,7 @@ bool AndroidRenderer::create_commands_and_sync() noexcept {
     if (timestamp_queries_available_) {
         VkQueryPoolCreateInfo queries{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
         queries.queryType = VK_QUERY_TYPE_TIMESTAMP;
-        queries.queryCount = 2;
+        queries.queryCount = 3;
         const VkResult query_result = vkCreateQueryPool(device_, &queries, nullptr, &timestamp_query_pool_);
         if (query_result != VK_SUCCESS) {
             timestamp_queries_available_ = false;
@@ -1472,15 +1472,17 @@ bool AndroidRenderer::draw_frame() noexcept {
     VkResult result = vkWaitForFences(device_, 1, &in_flight_, VK_TRUE, UINT64_MAX);
     if (result != VK_SUCCESS) return false;
     if (timestamp_queries_available_ && timestamp_data_pending_) {
-        std::array<std::uint64_t, 2> timestamps{};
+        std::array<std::uint64_t, 3> timestamps{};
         const VkResult query_result = vkGetQueryPoolResults(
-            device_, timestamp_query_pool_, 0, 2, sizeof(timestamps), timestamps.data(),
+            device_, timestamp_query_pool_, 0, 3, sizeof(timestamps), timestamps.data(),
             sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT);
         if (query_result == VK_SUCCESS) {
             const std::uint64_t mask = timestamp_valid_bits_ >= 64U
                 ? UINT64_MAX : ((std::uint64_t{1} << timestamp_valid_bits_) - 1U);
-            const std::uint64_t ticks = (timestamps[1] - timestamps[0]) & mask;
-            last_gpu_frame_ms_ = static_cast<double>(ticks) * timestamp_period_ns_ / 1000000.0;
+            const std::uint64_t shadow_ticks = (timestamps[1] - timestamps[0]) & mask;
+            const std::uint64_t frame_ticks = (timestamps[2] - timestamps[0]) & mask;
+            last_shadow_pass_ms_ = static_cast<double>(shadow_ticks) * timestamp_period_ns_ / 1000000.0;
+            last_gpu_frame_ms_ = static_cast<double>(frame_ticks) * timestamp_period_ns_ / 1000000.0;
         }
         timestamp_data_pending_ = false;
     }
@@ -1503,7 +1505,7 @@ bool AndroidRenderer::draw_frame() noexcept {
         return false;
     }
     if (timestamp_queries_available_) {
-        vkCmdResetQueryPool(command_buffers_[image_index], timestamp_query_pool_, 0, 2);
+        vkCmdResetQueryPool(command_buffers_[image_index], timestamp_query_pool_, 0, 3);
         vkCmdWriteTimestamp(command_buffers_[image_index], VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                              timestamp_query_pool_, 0);
     }
@@ -1536,6 +1538,10 @@ bool AndroidRenderer::draw_frame() noexcept {
         vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_, 0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexed(command_buffers_[image_index], cube_index_count_, instance_count_, 0, 0, 0);
         vkCmdEndRenderPass(command_buffers_[image_index]);
+    }
+    if (timestamp_queries_available_) {
+        vkCmdWriteTimestamp(command_buffers_[image_index], VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                             timestamp_query_pool_, 1);
     }
     std::array<VkClearValue, 2> clears{};
     clears[0].color = {{0.025F, 0.045F, 0.075F, 1.0F}};
@@ -1573,7 +1579,7 @@ bool AndroidRenderer::draw_frame() noexcept {
     vkCmdEndRenderPass(command_buffers_[image_index]);
     if (timestamp_queries_available_) {
         vkCmdWriteTimestamp(command_buffers_[image_index], VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                             timestamp_query_pool_, 1);
+                             timestamp_query_pool_, 2);
     }
     result = vkEndCommandBuffer(command_buffers_[image_index]);
     if (result != VK_SUCCESS) {
@@ -1631,6 +1637,7 @@ arut::rendering::RenderProfileSnapshot AndroidRenderer::profile_snapshot() const
     arut::rendering::RenderProfileSnapshot snapshot{};
     snapshot.cpu_frame_ms = last_cpu_frame_ms_;
     snapshot.gpu_frame_ms = last_gpu_frame_ms_;
+    snapshot.shadow_pass_ms = last_shadow_pass_ms_;
     snapshot.draw_calls = last_draw_calls_;
     snapshot.visible_objects = last_visible_objects_;
     snapshot.triangles = last_triangles_;
