@@ -60,11 +60,18 @@ AndroidRenderer::~AndroidRenderer() { shutdown(); }
 bool AndroidRenderer::initialize(
     ANativeWindow* window, AAssetManager* assets,
     std::span<const arut::core::CubeRenderInstance> ecs_instances,
-    const arut::core::TerrainMesh& terrain_mesh) noexcept {
+    std::span<const arut::core::TerrainMesh> terrain_meshes) noexcept {
     shutdown();
-    if (!terrain_mesh.valid()) { log_error("Renderer rejected invalid Phase 3 terrain mesh"); return false; }
-    try { terrain_mesh_ = terrain_mesh; }
-    catch (...) { log_error("Renderer could not retain terrain mesh data"); return false; }
+    if (terrain_meshes.empty()) { log_error("Renderer rejected empty streamed terrain cell set"); return false; }
+    try {
+        terrain_meshes_.assign(terrain_meshes.begin(), terrain_meshes.end());
+        if (std::any_of(terrain_meshes_.begin(), terrain_meshes_.end(),
+                        [](const auto& mesh) { return !mesh.valid(); })) {
+            terrain_meshes_.clear();
+            log_error("Renderer rejected invalid streamed terrain cell mesh");
+            return false;
+        }
+    } catch (...) { terrain_meshes_.clear(); log_error("Renderer could not retain streamed terrain cells"); return false; }
     visibility_instances_.clear();
     visibility_source_instance_count_ = 0U;
     if (ecs_instances.size() != arut::core::CubeSpawnSystem::target_count) {
@@ -1969,48 +1976,65 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
 }
 
 bool AndroidRenderer::create_terrain_geometry() noexcept {
-    if (!terrain_mesh_.valid()) return false;
-    std::vector<arut::rendering::MeshVertex> vertices;
-    try {
-        vertices.reserve(terrain_mesh_.vertices.size());
-        for (const auto& source : terrain_mesh_.vertices) {
-            arut::rendering::MeshVertex vertex{};
-            vertex.position = {source.x, source.y, source.z};
-            vertex.normal = {source.nx, source.ny, source.nz};
-            vertex.tangent = {1.0F, 0.0F, 0.0F, 1.0F};
-            vertex.uv = {source.x / terrain_mesh_.world_size + 0.5F, source.z / terrain_mesh_.world_size + 0.5F};
-            vertices.push_back(vertex);
+    if (terrain_meshes_.empty()) return false;
+    terrain_triangle_count_ = 0U;
+    try { terrain_gpu_meshes_.reserve(terrain_meshes_.size()); }
+    catch (...) { log_error("Terrain GPU mesh list allocation failed"); return false; }
+    for (const auto& terrain : terrain_meshes_) {
+        if (!terrain.valid()) return false;
+        std::vector<arut::rendering::MeshVertex> vertices;
+        try {
+            vertices.reserve(terrain.vertices.size());
+            for (const auto& source : terrain.vertices) {
+                arut::rendering::MeshVertex vertex{};
+                vertex.position = {source.x, source.y, source.z};
+                vertex.normal = {source.nx, source.ny, source.nz};
+                vertex.tangent = {1.0F, 0.0F, 0.0F, 1.0F};
+                vertex.uv = {source.x / terrain.world_size + 0.5F, source.z / terrain.world_size + 0.5F};
+                vertices.push_back(vertex);
+            }
+        } catch (...) { log_error("Terrain vertex conversion allocation failed"); return false; }
+        TerrainGpuMesh gpu{};
+        const VkDeviceSize vertex_bytes = vertices.size() * sizeof(arut::rendering::MeshVertex);
+        const VkDeviceSize index_bytes = terrain.indices.size() * sizeof(std::uint32_t);
+        if (vertex_bytes == 0 || index_bytes == 0 ||
+            !create_buffer(vertex_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, gpu.vertex_buffer, gpu.vertex_memory) ||
+            !create_buffer(index_bytes, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, gpu.index_buffer, gpu.index_memory) ||
+            !create_buffer(sizeof(arut::rendering::Mat4), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                           gpu.instance_buffer, gpu.instance_memory)) {
+            log_error("Terrain cell GPU buffer allocation failed");
+            if (gpu.vertex_buffer) vkDestroyBuffer(device_, gpu.vertex_buffer, nullptr);
+            if (gpu.vertex_memory) vkFreeMemory(device_, gpu.vertex_memory, nullptr);
+            if (gpu.index_buffer) vkDestroyBuffer(device_, gpu.index_buffer, nullptr);
+            if (gpu.index_memory) vkFreeMemory(device_, gpu.index_memory, nullptr);
+            if (gpu.instance_buffer) vkDestroyBuffer(device_, gpu.instance_buffer, nullptr);
+            if (gpu.instance_memory) vkFreeMemory(device_, gpu.instance_memory, nullptr);
+            return false;
         }
-    } catch (...) { log_error("Terrain vertex conversion allocation failed"); return false; }
-    const VkDeviceSize vertex_bytes = vertices.size() * sizeof(arut::rendering::MeshVertex);
-    const VkDeviceSize index_bytes = terrain_mesh_.indices.size() * sizeof(std::uint32_t);
-    if (vertex_bytes == 0 || index_bytes == 0 ||
-        !create_buffer(vertex_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, terrain_vertex_buffer_, terrain_vertex_memory_) ||
-        !create_buffer(index_bytes, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, terrain_index_buffer_, terrain_index_memory_) ||
-        !create_buffer(sizeof(arut::rendering::Mat4), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, terrain_instance_buffer_, terrain_instance_memory_)) {
-        log_error("Terrain GPU buffer allocation failed"); return false;
+        void* mapped = nullptr;
+        VkResult result = vkMapMemory(device_, gpu.vertex_memory, 0, vertex_bytes, 0, &mapped);
+        if (result != VK_SUCCESS || !mapped) { log_error("Map terrain cell vertex buffer failed", result); return false; }
+        std::memcpy(mapped, vertices.data(), static_cast<std::size_t>(vertex_bytes));
+        vkUnmapMemory(device_, gpu.vertex_memory);
+        mapped = nullptr;
+        result = vkMapMemory(device_, gpu.index_memory, 0, index_bytes, 0, &mapped);
+        if (result != VK_SUCCESS || !mapped) { log_error("Map terrain cell index buffer failed", result); return false; }
+        std::memcpy(mapped, terrain.indices.data(), static_cast<std::size_t>(index_bytes));
+        vkUnmapMemory(device_, gpu.index_memory);
+        arut::rendering::Mat4 model = arut::rendering::Mat4::identity();
+        model.value[13] = -4.5F;
+        mapped = nullptr;
+        result = vkMapMemory(device_, gpu.instance_memory, 0, sizeof(model), 0, &mapped);
+        if (result != VK_SUCCESS || !mapped) { log_error("Map terrain cell transform buffer failed", result); return false; }
+        std::memcpy(mapped, &model, sizeof(model));
+        vkUnmapMemory(device_, gpu.instance_memory);
+        gpu.index_count = static_cast<std::uint32_t>(terrain.indices.size());
+        terrain_triangle_count_ += gpu.index_count / 3U;
+        terrain_gpu_meshes_.push_back(gpu);
     }
-    void* mapped = nullptr;
-    VkResult result = vkMapMemory(device_, terrain_vertex_memory_, 0, vertex_bytes, 0, &mapped);
-    if (result != VK_SUCCESS || !mapped) { log_error("Map terrain vertex buffer failed", result); return false; }
-    std::memcpy(mapped, vertices.data(), static_cast<std::size_t>(vertex_bytes));
-    vkUnmapMemory(device_, terrain_vertex_memory_);
-    mapped = nullptr;
-    result = vkMapMemory(device_, terrain_index_memory_, 0, index_bytes, 0, &mapped);
-    if (result != VK_SUCCESS || !mapped) { log_error("Map terrain index buffer failed", result); return false; }
-    std::memcpy(mapped, terrain_mesh_.indices.data(), static_cast<std::size_t>(index_bytes));
-    vkUnmapMemory(device_, terrain_index_memory_);
-    arut::rendering::Mat4 model = arut::rendering::Mat4::identity();
-    model.value[13] = -4.5F;
-    mapped = nullptr;
-    result = vkMapMemory(device_, terrain_instance_memory_, 0, sizeof(model), 0, &mapped);
-    if (result != VK_SUCCESS || !mapped) { log_error("Map terrain instance buffer failed", result); return false; }
-    std::memcpy(mapped, &model, sizeof(model));
-    vkUnmapMemory(device_, terrain_instance_memory_);
-    terrain_index_count_ = static_cast<std::uint32_t>(terrain_mesh_.indices.size());
     char message[192]{};
-    std::snprintf(message, sizeof(message), "TERRAIN_GPU uploaded=true vertices=%zu indices=%u world_size=%.1f",
-                  vertices.size(), terrain_index_count_, terrain_mesh_.world_size);
+    std::snprintf(message, sizeof(message), "TERRAIN_GPU cells=%zu uploaded=true triangles=%u",
+                  terrain_gpu_meshes_.size(), terrain_triangle_count_);
     arut_android_log(ANDROID_LOG_INFO, message);
     return true;
 }
@@ -2750,14 +2774,14 @@ bool AndroidRenderer::draw_frame() noexcept {
                     static_cast<unsigned long long>(culling_parity_checks_));
                 arut_android_log(ANDROID_LOG_INFO, parity);
             }
-            last_triangles_ = (cube_index_count_ / 3U) * completed.instance_count + terrain_index_count_ / 3U;
+            last_triangles_ = (cube_index_count_ / 3U) * completed.instance_count + terrain_triangle_count_;
         } else {
             gpu_visibility_result_pending_ = false;
             log_error("Read completed GPU visibility count failed; retaining last profile counters", map_result);
         }
     } else if (!gpu_visibility_enabled_) {
         last_visible_objects_ = instance_count_;
-        last_triangles_ = (cube_index_count_ / 3U) * instance_count_ + terrain_index_count_ / 3U;
+        last_triangles_ = (cube_index_count_ / 3U) * instance_count_ + terrain_triangle_count_;
     }
     if (timestamp_queries_available_ && timestamp_data_pending_) {
         std::array<std::uint64_t, 4> timestamps{};
@@ -2840,11 +2864,13 @@ bool AndroidRenderer::draw_frame() noexcept {
                                VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cascade), &cascade);
             vkCmdDrawIndexedIndirect(command_buffers_[image_index], indirect_draw_buffer_, 0, 1,
                                      sizeof(VkDrawIndexedIndirectCommand));
-            const std::array<VkBuffer, 2> terrain_buffers{terrain_vertex_buffer_, terrain_instance_buffer_};
-            const std::array<VkDeviceSize, 2> terrain_offsets{0, 0};
-            vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 2, terrain_buffers.data(), terrain_offsets.data());
-            vkCmdBindIndexBuffer(command_buffers_[image_index], terrain_index_buffer_, 0, VK_INDEX_TYPE_UINT32);
-            vkCmdDrawIndexed(command_buffers_[image_index], terrain_index_count_, 1, 0, 0, 0);
+            for (const auto& terrain : terrain_gpu_meshes_) {
+                const std::array<VkBuffer, 2> terrain_buffers{terrain.vertex_buffer, terrain.instance_buffer};
+                const std::array<VkDeviceSize, 2> terrain_offsets{0, 0};
+                vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 2, terrain_buffers.data(), terrain_offsets.data());
+                vkCmdBindIndexBuffer(command_buffers_[image_index], terrain.index_buffer, 0, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(command_buffers_[image_index], terrain.index_count, 1, 0, 0, 0);
+            }
             vkCmdEndRenderPass(command_buffers_[image_index]);
         }
     }
@@ -2886,11 +2912,13 @@ bool AndroidRenderer::draw_frame() noexcept {
     vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_, 0, VK_INDEX_TYPE_UINT32);
     vkCmdDrawIndexedIndirect(command_buffers_[image_index], indirect_draw_buffer_, 0, 1,
                              sizeof(VkDrawIndexedIndirectCommand));
-    const std::array<VkBuffer, 2> terrain_buffers{terrain_vertex_buffer_, terrain_instance_buffer_};
-    const std::array<VkDeviceSize, 2> terrain_offsets{0, 0};
-    vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 2, terrain_buffers.data(), terrain_offsets.data());
-    vkCmdBindIndexBuffer(command_buffers_[image_index], terrain_index_buffer_, 0, VK_INDEX_TYPE_UINT32);
-    vkCmdDrawIndexed(command_buffers_[image_index], terrain_index_count_, 1, 0, 0, 0);
+    for (const auto& terrain : terrain_gpu_meshes_) {
+        const std::array<VkBuffer, 2> terrain_buffers{terrain.vertex_buffer, terrain.instance_buffer};
+        const std::array<VkDeviceSize, 2> terrain_offsets{0, 0};
+        vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 2, terrain_buffers.data(), terrain_offsets.data());
+        vkCmdBindIndexBuffer(command_buffers_[image_index], terrain.index_buffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(command_buffers_[image_index], terrain.index_count, 1, 0, 0, 0);
+    }
     vkCmdEndRenderPass(command_buffers_[image_index]);
     if (timestamp_queries_available_) {
         vkCmdWriteTimestamp(command_buffers_[image_index], VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
@@ -2935,7 +2963,8 @@ bool AndroidRenderer::draw_frame() noexcept {
         submitted_cpu_expected_visible_ = cpu_expected_visible_;
         gpu_visibility_result_pending_ = true;
     }
-    last_draw_calls_ = (shadow_enabled_ ? shadow_cascade_count_ * 2U : 0U) + 2U;
+    const auto terrain_draws = static_cast<std::uint32_t>(terrain_gpu_meshes_.size());
+    last_draw_calls_ = (shadow_enabled_ ? shadow_cascade_count_ * (terrain_draws + 1U) : 0U) + terrain_draws + 1U;
     VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     present.waitSemaphoreCount = 1;
     present.pWaitSemaphores = &render_finished_[image_index];
@@ -3019,12 +3048,14 @@ void AndroidRenderer::destroy_swapchain() noexcept {
             if (environment_probe_diffuse_images_[probe]) vkDestroyImage(device_, environment_probe_diffuse_images_[probe], nullptr);
             if (environment_probe_diffuse_memories_[probe]) vkFreeMemory(device_, environment_probe_diffuse_memories_[probe], nullptr);
         }
-        if (terrain_vertex_buffer_) vkDestroyBuffer(device_, terrain_vertex_buffer_, nullptr);
-        if (terrain_vertex_memory_) vkFreeMemory(device_, terrain_vertex_memory_, nullptr);
-        if (terrain_index_buffer_) vkDestroyBuffer(device_, terrain_index_buffer_, nullptr);
-        if (terrain_index_memory_) vkFreeMemory(device_, terrain_index_memory_, nullptr);
-        if (terrain_instance_buffer_) vkDestroyBuffer(device_, terrain_instance_buffer_, nullptr);
-        if (terrain_instance_memory_) vkFreeMemory(device_, terrain_instance_memory_, nullptr);
+        for (const auto& terrain : terrain_gpu_meshes_) {
+            if (terrain.vertex_buffer) vkDestroyBuffer(device_, terrain.vertex_buffer, nullptr);
+            if (terrain.vertex_memory) vkFreeMemory(device_, terrain.vertex_memory, nullptr);
+            if (terrain.index_buffer) vkDestroyBuffer(device_, terrain.index_buffer, nullptr);
+            if (terrain.index_memory) vkFreeMemory(device_, terrain.index_memory, nullptr);
+            if (terrain.instance_buffer) vkDestroyBuffer(device_, terrain.instance_buffer, nullptr);
+            if (terrain.instance_memory) vkFreeMemory(device_, terrain.instance_memory, nullptr);
+        }
         if (cube_vertex_buffer_) vkDestroyBuffer(device_, cube_vertex_buffer_, nullptr);
         if (cube_vertex_memory_) vkFreeMemory(device_, cube_vertex_memory_, nullptr);
         if (cube_index_buffer_) vkDestroyBuffer(device_, cube_index_buffer_, nullptr);
@@ -3115,10 +3146,9 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     environment_probe_diffuse_views_.fill(VK_NULL_HANDLE);
     environment_probe_diffuse_samplers_.fill(VK_NULL_HANDLE);
     environment_probe_diffuse_mip_levels_.fill(0U);
-    terrain_vertex_buffer_ = terrain_index_buffer_ = terrain_instance_buffer_ = VK_NULL_HANDLE;
-    terrain_vertex_memory_ = terrain_index_memory_ = terrain_instance_memory_ = VK_NULL_HANDLE;
-    terrain_index_count_ = 0U;
-    terrain_mesh_ = {};
+    terrain_gpu_meshes_.clear();
+    terrain_meshes_.clear();
+    terrain_triangle_count_ = 0U;
     cube_vertex_buffer_ = cube_index_buffer_ = VK_NULL_HANDLE;
     cube_vertex_memory_ = cube_index_memory_ = VK_NULL_HANDLE;
     instance_buffer_ = VK_NULL_HANDLE;
