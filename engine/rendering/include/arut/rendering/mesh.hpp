@@ -64,6 +64,62 @@ struct Mat4 final {
     return mesh;
 }
 
+[[nodiscard]] inline std::array<float, 3> cross3(const std::array<float, 3>& a,
+                                                  const std::array<float, 3>& b) noexcept {
+    return {a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0]};
+}
+
+[[nodiscard]] inline float dot3(const std::array<float, 3>& a,
+                                const std::array<float, 3>& b) noexcept {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+[[nodiscard]] inline std::array<float, 3> normalize3(const std::array<float, 3>& v) noexcept {
+    const float length_squared = dot3(v, v);
+    if (!std::isfinite(length_squared) || length_squared <= 1.0e-12F) return {0.0F, 0.0F, -1.0F};
+    const float inverse_length = 1.0F / std::sqrt(length_squared);
+    return {v[0] * inverse_length, v[1] * inverse_length, v[2] * inverse_length};
+}
+
+[[nodiscard]] inline Mat4 look_at_rh(const std::array<float, 3>& eye,
+                                     const std::array<float, 3>& center,
+                                     const std::array<float, 3>& up) noexcept {
+    const std::array<float, 3> forward = normalize3({
+        center[0] - eye[0], center[1] - eye[1], center[2] - eye[2]
+    });
+    const std::array<float, 3> side = normalize3(cross3(forward, up));
+    const std::array<float, 3> corrected_up = cross3(side, forward);
+    Mat4 result = Mat4::identity();
+    result.value[0] = side[0];
+    result.value[4] = side[1];
+    result.value[8] = side[2];
+    result.value[12] = -dot3(side, eye);
+    result.value[1] = corrected_up[0];
+    result.value[5] = corrected_up[1];
+    result.value[9] = corrected_up[2];
+    result.value[13] = -dot3(corrected_up, eye);
+    result.value[2] = -forward[0];
+    result.value[6] = -forward[1];
+    result.value[10] = -forward[2];
+    result.value[14] = dot3(forward, eye);
+    return result;
+}
+
+[[nodiscard]] inline Mat4 multiply(const Mat4& a, const Mat4& b) noexcept {
+    Mat4 result{};
+    for (std::size_t column = 0; column < 4; ++column) {
+        for (std::size_t row = 0; row < 4; ++row) {
+            for (std::size_t k = 0; k < 4; ++k) {
+                result.value[column * 4 + row] +=
+                    a.value[k * 4 + row] * b.value[column * 4 + k];
+            }
+        }
+    }
+    return result;
+}
+
 [[nodiscard]] inline Mat4 perspective_rh_zo(float vertical_fov_radians, float aspect,
                                              float near_plane, float far_plane) noexcept {
     Mat4 result{};
