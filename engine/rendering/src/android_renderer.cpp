@@ -1937,6 +1937,10 @@ void AndroidRenderer::destroy_swapchain() noexcept {
         if (brdf_lut_view_) vkDestroyImageView(device_, brdf_lut_view_, nullptr);
         if (brdf_lut_image_) vkDestroyImage(device_, brdf_lut_image_, nullptr);
         if (brdf_lut_memory_) vkFreeMemory(device_, brdf_lut_memory_, nullptr);
+        if (irradiance_sampler_) vkDestroySampler(device_, irradiance_sampler_, nullptr);
+        if (irradiance_view_) vkDestroyImageView(device_, irradiance_view_, nullptr);
+        if (irradiance_image_) vkDestroyImage(device_, irradiance_image_, nullptr);
+        if (irradiance_memory_) vkFreeMemory(device_, irradiance_memory_, nullptr);
         if (environment_sampler_) vkDestroySampler(device_, environment_sampler_, nullptr);
         if (environment_view_) vkDestroyImageView(device_, environment_view_, nullptr);
         if (environment_image_) vkDestroyImage(device_, environment_image_, nullptr);
@@ -2005,6 +2009,11 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     brdf_lut_image_ = VK_NULL_HANDLE;
     brdf_lut_memory_ = VK_NULL_HANDLE;
     brdf_lut_mip_levels_ = 0;
+    irradiance_sampler_ = VK_NULL_HANDLE;
+    irradiance_view_ = VK_NULL_HANDLE;
+    irradiance_image_ = VK_NULL_HANDLE;
+    irradiance_memory_ = VK_NULL_HANDLE;
+    irradiance_mip_levels_ = 0;
     environment_sampler_ = VK_NULL_HANDLE;
     environment_view_ = VK_NULL_HANDLE;
     environment_image_ = VK_NULL_HANDLE;
