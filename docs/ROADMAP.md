@@ -63,7 +63,8 @@ Exit gate: Android renders a textured 3D scene with validation and frame/GPU tim
 - [ ] Add GPU visibility/indirect drawing.
 - [x] Add a procedural six-face sky/ground environment cubemap, GGX importance-sampled specular mips and PBR diffuse/specular environment sampling.
 - [x] Add a CPU split-sum GGX BRDF integration LUT baker, upload it as a sampled Vulkan texture and use it in the PBR specular environment response.
-- [ ] Add cosine-convolved diffuse irradiance and HDR environment asset/probe import.
+- [x] Add a separately convolved diffuse irradiance cubemap using cosine-weighted hemisphere sampling.
+- [ ] Add HDR environment asset import, environment probes and blending.
 - [x] Connect profile snapshots to CPU frame time, GPU timestamp queries, shadow-pass time, draw calls, visible objects and triangle counts.
 - [ ] Add GPU memory accounting and multi-pass/per-material breakdowns.
 - [ ] Validate graceful quality fallback on two Android GPU families.
