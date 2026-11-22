@@ -134,4 +134,20 @@ struct Mat4 final {
     return result;
 }
 
+[[nodiscard]] inline Mat4 orthographic_rh_zo(float left, float right,
+                                              float bottom, float top,
+                                              float near_plane, float far_plane) noexcept {
+    Mat4 result{};
+    if (!(right > left) || !(top > bottom) || !(near_plane > 0.0F) ||
+        !(far_plane > near_plane)) return result;
+    result.value[0] = 2.0F / (right - left);
+    result.value[5] = -2.0F / (top - bottom);
+    result.value[10] = 1.0F / (near_plane - far_plane);
+    result.value[12] = -(right + left) / (right - left);
+    result.value[13] = (top + bottom) / (top - bottom);
+    result.value[14] = near_plane / (near_plane - far_plane);
+    result.value[15] = 1.0F;
+    return result;
+}
+
 } // namespace arut::rendering
