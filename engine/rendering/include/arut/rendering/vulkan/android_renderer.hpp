@@ -57,6 +57,14 @@ private:
     bool create_shadow_resources() noexcept;
     bool create_shadow_pipeline() noexcept;
     bool create_environment_cubemap() noexcept;
+    bool create_environment_probe_cubemaps() noexcept;
+    bool load_environment_probe_cubemap(const char* path,
+        VkImage& specular_image, VkDeviceMemory& specular_memory,
+        VkImageView& specular_view, VkSampler& specular_sampler,
+        std::uint32_t& specular_mip_levels,
+        VkImage& diffuse_image, VkDeviceMemory& diffuse_memory,
+        VkImageView& diffuse_view, VkSampler& diffuse_sampler,
+        std::uint32_t& diffuse_mip_levels) noexcept;
     bool load_environment_hdr_asset(const char* path, arut::rendering::Rgba32fImage& decoded) noexcept;
     bool upload_environment_cube(const std::vector<arut::rendering::EnvironmentCubeMip>& mips, VkImage& image, VkDeviceMemory& memory, VkImageView& view, VkSampler& sampler, std::uint32_t& mip_levels) noexcept;
     bool upload_environment_cube_rgba16f(const std::vector<arut::rendering::EnvironmentCubeF16Mip>& mips, VkImage& image, VkDeviceMemory& memory, VkImageView& view, VkSampler& sampler, std::uint32_t& mip_levels) noexcept;
@@ -138,6 +146,16 @@ private:
     VkSampler brdf_lut_sampler_{VK_NULL_HANDLE};
     std::uint32_t brdf_lut_mip_levels_{0};
     std::uint32_t environment_mip_levels_{0};
+    std::array<VkImage, arut::rendering::kMaxEnvironmentProbes> environment_probe_specular_images_{};
+    std::array<VkDeviceMemory, arut::rendering::kMaxEnvironmentProbes> environment_probe_specular_memories_{};
+    std::array<VkImageView, arut::rendering::kMaxEnvironmentProbes> environment_probe_specular_views_{};
+    std::array<VkSampler, arut::rendering::kMaxEnvironmentProbes> environment_probe_specular_samplers_{};
+    std::array<std::uint32_t, arut::rendering::kMaxEnvironmentProbes> environment_probe_specular_mip_levels_{};
+    std::array<VkImage, arut::rendering::kMaxEnvironmentProbes> environment_probe_diffuse_images_{};
+    std::array<VkDeviceMemory, arut::rendering::kMaxEnvironmentProbes> environment_probe_diffuse_memories_{};
+    std::array<VkImageView, arut::rendering::kMaxEnvironmentProbes> environment_probe_diffuse_views_{};
+    std::array<VkSampler, arut::rendering::kMaxEnvironmentProbes> environment_probe_diffuse_samplers_{};
+    std::array<std::uint32_t, arut::rendering::kMaxEnvironmentProbes> environment_probe_diffuse_mip_levels_{};
     VkImage irradiance_image_{VK_NULL_HANDLE};
     VkDeviceMemory irradiance_memory_{VK_NULL_HANDLE};
     VkImageView irradiance_view_{VK_NULL_HANDLE};
