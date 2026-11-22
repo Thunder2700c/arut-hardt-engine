@@ -59,7 +59,8 @@ Exit gate: Android renders a textured 3D scene with validation and frame/GPU tim
 - [x] Add a per-instance model-matrix vertex stream and indexed instanced cube drawing.
 - [x] Add CPU frustum extraction and bounding-sphere culling for test instances.
 - [ ] Add GPU visibility/indirect drawing.
-- [ ] Add environment lighting / image-based lighting (ACES tone-map source exists; runtime integration remains pending).
+- [x] Add a procedural six-face sky/ground environment cubemap, GGX importance-sampled specular mips and PBR diffuse/specular environment sampling.
+- [ ] Add cosine-convolved diffuse irradiance, a split-sum BRDF integration LUT and HDR environment asset import.
 - [x] Connect profile snapshots to CPU frame time, GPU timestamp queries, shadow-pass time, draw calls, visible objects and triangle counts.
 - [ ] Add GPU memory accounting and multi-pass/per-material breakdowns.
 - [ ] Validate graceful quality fallback on two Android GPU families.
