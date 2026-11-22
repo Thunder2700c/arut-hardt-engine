@@ -17,6 +17,7 @@ layout(set = 0, binding = 0, std140) uniform FrameData {
     vec4 cameraPosition;
     vec4 directionalLightDirection;
     vec4 directionalLightRadiance;
+    mat4 lightViewProjection;
 } frameData;
 
 layout(location = 0) out vec3 outWorldPosition;
