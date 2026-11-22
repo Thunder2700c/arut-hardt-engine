@@ -35,8 +35,8 @@ A successful CI APK build is not proof of device behaviour. Physical-device life
 
 ## Vulkan renderer bootstrap — Phase 2
 
-The current bootstrap owns the Android Vulkan instance, Android surface, physical-device selection, graphics/present queues, swapchain, image views, clear render pass, framebuffers, command buffers and frame synchronization. It clears the swapchain to a dark blue-grey colour and presents frames while the activity is resumed and focused.
+The Android Vulkan renderer now includes the swapchain and surface lifecycle, depth-tested mesh rendering, a mobile forward PBR pipeline, texture and mesh uploads, HDR environment lighting, directional shadow cascades, instanced drawing, CPU/GPU frustum culling and optional GPU timestamp profiling. The current device stress fixture contains 5,000 cubes.
 
 Surface-bound resources are destroyed on `APP_CMD_TERM_WINDOW` and rebuilt on `APP_CMD_INIT_WINDOW`. Swapchain out-of-date/suboptimal results trigger recreation.
 
-This is deliberately not yet a 3D renderer: there is no shader pipeline, mesh, depth buffer, camera, texture upload or lighting. Those are the remaining Phase 2 milestones. CI compilation and a physical-device run are still required before the renderer can be considered validated.
+The Galaxy S23 FE has been used for runtime testing. This does not establish cross-vendor correctness: the Phase 2 validation gate still requires a second Android GPU family, graceful quality-fallback checks and a GPU-shader-versus-CPU-reference comparison.
