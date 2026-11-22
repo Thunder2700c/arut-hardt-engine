@@ -4,6 +4,7 @@
 #include <android/asset_manager.h>
 #include <vulkan/vulkan.h>
 #include "arut/rendering/image.hpp"
+#include "arut/rendering/render_quality.hpp"
 #include <cstdint>
 #include <vector>
 
@@ -19,6 +20,7 @@ public:
     bool initialize(ANativeWindow* window, AAssetManager* assets) noexcept;
     void shutdown() noexcept;
     bool draw_frame() noexcept;
+    [[nodiscard]] arut::rendering::RenderProfileSnapshot profile_snapshot() const noexcept;
     bool ready() const noexcept { return device_ != VK_NULL_HANDLE && swapchain_ != VK_NULL_HANDLE; }
 
 private:
@@ -107,6 +109,16 @@ private:
     VkSemaphore image_available_{VK_NULL_HANDLE};
     std::vector<VkSemaphore> render_finished_;
     VkFence in_flight_{VK_NULL_HANDLE};
+    VkQueryPool timestamp_query_pool_{VK_NULL_HANDLE};
+    bool timestamp_queries_available_{false};
+    bool timestamp_data_pending_{false};
+    std::uint32_t timestamp_valid_bits_{0};
+    double timestamp_period_ns_{0.0};
+    double last_cpu_frame_ms_{0.0};
+    double last_gpu_frame_ms_{0.0};
+    std::uint32_t last_draw_calls_{0};
+    std::uint32_t last_visible_objects_{0};
+    std::uint32_t last_triangles_{0};
 };
 
 } // namespace arut::rendering::vulkan
