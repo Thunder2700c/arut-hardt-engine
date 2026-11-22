@@ -1,6 +1,6 @@
 # Mobile PBR Pipeline
 
-Status: mobile PBR GLSL is compiled in host CI and packaged by the explicitly triggered Android workflow. Android renderer source now creates the PBR pipeline, descriptor layouts/sets, frame/material uniforms, fallback sampled texture, indexed cube geometry and active PBR draw path. Physical-device validation remains deferred.
+Status: mobile PBR GLSL is compiled in host CI and packaged by the explicitly triggered Android workflow. Android renderer source now creates the PBR pipeline, descriptors, frame/material uniforms, real decoded sRGB base-colour PNG, CPU-generated mip chains, Vulkan texture upload, indexed cube geometry and instanced draw path. Physical-device validation remains deferred.
 
 ## Rendering model
 The initial Android path is a forward metallic-roughness renderer. It uses linear-light material and light values, tangent-space normal maps, a GGX/Trowbridge-Reitz normal distribution, Schlick Fresnel, Schlick-GGX geometry and Cook-Torrance direct lighting. The fragment shader applies an ACES fitted tone curve and an output transfer suitable for the current UNORM swapchain selection.
@@ -25,7 +25,7 @@ The shader contract is a starting point, not yet a stable public asset format. V
 - The Vulkan renderer now has an asset-backed first-triangle pipeline, one interleaved vertex buffer and a depth attachment. The PBR shaders are now connected to the active indexed-cube draw path. The original triangle pipeline remains only as a bootstrap/reference path.
 - Ambient illumination is a temporary constant; image-based lighting, irradiance/prefiltered environment maps and BRDF integration LUT are not implemented.
 - The material contract has an occlusion-strength scalar but no occlusion texture descriptor yet. The shader does not pretend that a scalar alone is an occlusion map.
-- Shadow maps, cascades, point/spot lights, GPU instancing and visibility culling are pending.
+- Per-instance model-matrix vertex input and indexed instanced drawing are implemented. Shadow maps, cascades, IBL environment maps, CPU/GPU visibility culling and local lights remain pending.
 - Shader compilation is not part of CI yet. Do not mark shader code as compiled until a GLSL compiler and validation step are added.
 
 ## Integration order
