@@ -1524,9 +1524,11 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         source.bounds = {spec.x, 0.0F, 0.0F, radius};
         source.model = model.value;
         source_instances.push_back(source);
-        const arut::rendering::BoundingSphere bounds{{spec.x, 0.0F, 0.0F}, radius};
-        if (arut::rendering::sphere_visible(frustum, bounds))
-            cpu_visible_instances.push_back(model);
+    }
+    if (!arut::rendering::compact_visible_instances_cpu(
+            frustum, source_instances, cpu_visible_instances)) {
+        log_error("CPU visibility reference compaction failed");
+        return false;
     }
     if (source_instances.empty() || cpu_visible_instances.empty()) {
         log_error("CPU visibility fallback removed every PBR test instance");
