@@ -47,7 +47,6 @@ private:
     bool upload_texture_rgba8(const Rgba8Image& pixels, VkFormat format, bool source_is_srgb,
                               VkImage& image, VkDeviceMemory& memory, VkImageView& view,
                               VkSampler& sampler, std::uint32_t& mip_levels) noexcept;
-    bool update_pbr_frame_data() noexcept;
     bool create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buffer, VkDeviceMemory& memory) noexcept;
     void destroy_swapchain() noexcept;
     bool recreate_swapchain() noexcept;
