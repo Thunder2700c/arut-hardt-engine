@@ -66,6 +66,7 @@ struct PbrMaterial final {
 struct RenderProfileSnapshot final {
     double cpu_frame_ms{0.0};
     double gpu_frame_ms{0.0};
+    double visibility_pass_ms{0.0};
     double shadow_pass_ms{0.0};
     std::uint32_t draw_calls{0};
     std::uint32_t visible_objects{0};
