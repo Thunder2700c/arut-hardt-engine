@@ -2,6 +2,7 @@
 #include "arut/rendering/pbr_brdf.hpp"
 #include "arut/rendering/mesh.hpp"
 #include "arut/rendering/image.hpp"
+#include "arut/rendering/environment.hpp"
 #include "arut/rendering/visibility.hpp"
 #include "arut/rendering/render_quality.hpp"
 
@@ -104,6 +105,16 @@ int main() {
     std::vector<arut::rendering::Rgba8Mip> linear_mips;
     assert(arut::rendering::build_rgba8_mip_chain(decoded, false, linear_mips));
     assert(linear_mips[1].pixels[0] >= 127 && linear_mips[1].pixels[0] <= 128);
+    std::vector<arut::rendering::EnvironmentCubeMip> environment_mips;
+    assert(arut::rendering::build_procedural_environment_cube(8, environment_mips));
+    assert(environment_mips.size() == 4);
+    assert(environment_mips[0].width == 8 && environment_mips[0].height == 8);
+    assert(environment_mips[0].pixels.size() == 8U * 8U * 4U * 6U);
+    assert(environment_mips[3].width == 1 && environment_mips[3].height == 1);
+    assert(environment_mips[3].pixels.size() == 4U * 6U);
+    assert(!arut::rendering::build_procedural_environment_cube(0, environment_mips));
+    assert(environment_mips.empty());
+    assert(!arut::rendering::build_procedural_environment_cube(512, environment_mips));
     arut::rendering::Rgba8Image invalid_image{};
     assert(!arut::rendering::decode_image_rgba8({}, invalid_image));
     assert(invalid_image.pixels.empty());
