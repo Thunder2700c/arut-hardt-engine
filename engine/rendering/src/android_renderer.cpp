@@ -23,6 +23,12 @@ extern "C" void arut_android_log(int priority, const char* message) noexcept;
 
 namespace arut::rendering::vulkan {
 namespace {
+static_assert(sizeof(VkDrawIndexedIndirectCommand) ==
+              sizeof(arut::rendering::IndexedIndirectArguments));
+static_assert(offsetof(VkDrawIndexedIndirectCommand, instanceCount) ==
+              offsetof(arut::rendering::IndexedIndirectArguments, instance_count));
+static_assert(offsetof(VkDrawIndexedIndirectCommand, firstInstance) ==
+              offsetof(arut::rendering::IndexedIndirectArguments, first_instance));
 constexpr char kTag[] = "ARUT-HARDT";
 void log_error(const char* message, VkResult result = VK_SUCCESS) {
     char buffer[512]{}; std::snprintf(buffer, sizeof(buffer), "%s (VkResult=%d)", message, static_cast<int>(result));
