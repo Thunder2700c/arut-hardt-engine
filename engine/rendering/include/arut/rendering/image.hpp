@@ -6,6 +6,17 @@
 
 namespace arut::rendering {
 
+struct Rgba32fImage final {
+    std::uint32_t width{0};
+    std::uint32_t height{0};
+    // Row-major linear-light RGBA floats. RGB may exceed 1.0 for HDR radiance.
+    std::vector<float> pixels;
+    [[nodiscard]] bool valid() const noexcept {
+        return width > 0 && height > 0 &&
+               pixels.size() == static_cast<std::size_t>(width) * height * 4U;
+    }
+};
+
 struct Rgba8Image final {
     std::uint32_t width{0};
     std::uint32_t height{0};
@@ -37,6 +48,10 @@ struct Rgba8Mip final {
     std::uint32_t height{0};
     std::vector<std::uint8_t> pixels;
 };
+
+// Supports PNG, JPEG, BMP and TGA. Decoded images are normalized to four channels.
+[[nodiscard]] ImageDecodeResult decode_image_rgba32f(
+    std::span<const std::uint8_t> encoded, Rgba32fImage& output) noexcept;
 
 // Supports PNG, JPEG, BMP and TGA. Decoded images are normalized to four channels.
 [[nodiscard]] ImageDecodeResult decode_image_rgba8(
