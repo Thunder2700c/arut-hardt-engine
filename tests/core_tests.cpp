@@ -335,6 +335,18 @@ int main() {
     assert(arut::rendering::evaluate_environment_probe_weights(
         priority_probes, 0.0F, 0.0F, 0.0F, probe_weights));
     assert(near(probe_weights[0], 0.0F) && near(probe_weights[1], 1.0F));
+    auto minimum_priority_probe = priority_probes[0];
+    minimum_priority_probe.priority = std::numeric_limits<std::int32_t>::min();
+    assert(arut::rendering::evaluate_environment_probe_weights(
+        std::span<const arut::rendering::EnvironmentProbeInfluence>(&minimum_priority_probe, 1U),
+        0.0F, 0.0F, 0.0F, probe_weights));
+    assert(near(probe_weights[0], 1.0F));
+    auto negative_blend_probe = overlapping_probes[0];
+    negative_blend_probe.blend_distance = -1.0F;
+    assert(arut::rendering::evaluate_environment_probe_weights(
+        std::span<const arut::rendering::EnvironmentProbeInfluence>(&negative_blend_probe, 1U),
+        0.0F, 0.0F, 0.0F, probe_weights));
+    assert(near(probe_weights[0], 0.0F));
     assert(!arut::rendering::evaluate_environment_probe_weights(
         overlapping_probes, std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F, probe_weights));
     assert(probe_weights.empty());
