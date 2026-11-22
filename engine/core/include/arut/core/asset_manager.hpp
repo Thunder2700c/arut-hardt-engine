@@ -102,7 +102,7 @@ public:
                                         std::string& output) {
         output.clear();
         if (input.empty() || input.front() == '/' ||
-            input.find('\\\\') != std::string_view::npos ||
+            input.find('\\') != std::string_view::npos ||
             input.find(':') != std::string_view::npos) return false;
         std::size_t start = 0;
         while (start < input.size()) {
