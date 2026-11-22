@@ -6,6 +6,7 @@
 #include "arut/rendering/image.hpp"
 #include "arut/rendering/render_quality.hpp"
 #include "arut/rendering/environment.hpp"
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -20,6 +21,7 @@ public:
 
     bool initialize(ANativeWindow* window, AAssetManager* assets) noexcept;
     void shutdown() noexcept;
+    bool set_quality_tier(arut::rendering::RenderQualityTier tier) noexcept;
     bool draw_frame() noexcept;
     [[nodiscard]] arut::rendering::RenderProfileSnapshot profile_snapshot() const noexcept;
     bool ready() const noexcept { return device_ != VK_NULL_HANDLE && swapchain_ != VK_NULL_HANDLE; }
@@ -34,6 +36,7 @@ private:
     bool create_depth_resources() noexcept;
     std::uint32_t find_memory_type(std::uint32_t type_bits, VkMemoryPropertyFlags properties) const noexcept;
     bool create_commands_and_sync() noexcept;
+    bool create_frame_resources() noexcept;
     bool create_triangle_pipeline() noexcept;
     bool create_triangle_geometry() noexcept;
     bool create_pbr_pipeline() noexcept;
@@ -134,13 +137,16 @@ private:
     VkImageView depth_view_{VK_NULL_HANDLE};
     VkFormat depth_format_{VK_FORMAT_UNDEFINED};
     VkFormat shadow_format_{VK_FORMAT_UNDEFINED};
+    arut::rendering::RenderQualityConfig quality_{arut::rendering::quality_config(arut::rendering::RenderQualityTier::Medium)};
     VkExtent2D shadow_extent_{1024U, 1024U};
+    std::uint32_t shadow_cascade_count_{1U};
     VkImage shadow_image_{VK_NULL_HANDLE};
     VkDeviceMemory shadow_memory_{VK_NULL_HANDLE};
     VkImageView shadow_view_{VK_NULL_HANDLE};
     VkSampler shadow_sampler_{VK_NULL_HANDLE};
     VkRenderPass shadow_render_pass_{VK_NULL_HANDLE};
-    VkFramebuffer shadow_framebuffer_{VK_NULL_HANDLE};
+    std::array<VkImageView, 4> shadow_layer_views_{};
+    std::array<VkFramebuffer, 4> shadow_framebuffers_{};
     VkPipeline shadow_pipeline_{VK_NULL_HANDLE};
     bool shadow_enabled_{false};
     std::vector<VkFramebuffer> framebuffers_;
