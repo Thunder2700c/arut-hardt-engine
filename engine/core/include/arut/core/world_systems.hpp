@@ -86,7 +86,9 @@ public:
         float hysteresis{8.0F};
     };
 
-    explicit LodSystem(Thresholds thresholds = {}) : thresholds_(thresholds) {
+    LodSystem() : LodSystem(Thresholds{}) {}
+
+    explicit LodSystem(Thresholds thresholds) : thresholds_(thresholds) {
         if (!(thresholds_.high_to_medium > 0.0F &&
               thresholds_.medium_to_low > thresholds_.high_to_medium &&
               thresholds_.low_to_impostor > thresholds_.medium_to_low &&
