@@ -1,6 +1,6 @@
 # Android Native Runtime — Phase 1
 
-The Android app uses android.app.NativeActivity and Android NDK native_app_glue.
+The Android app uses android.app.NativeActivity and Android NDK native_app_glue. The Phase 2 renderer creates a Vulkan Android surface and swapchain when the native window appears.
 
 Implemented in this phase:
 - ARM64 (arm64-v8a), minimum Android API 26.
@@ -31,3 +31,12 @@ Device smoke test:
 - Confirm Vulkan capability output on supported devices, or a graceful no-Vulkan log.
 
 A successful CI APK build is not proof of device behaviour. Physical-device lifecycle, input and Vulkan validation remain required before Phase 1 is complete.
+
+
+## Vulkan renderer bootstrap — Phase 2
+
+The current bootstrap owns the Android Vulkan instance, Android surface, physical-device selection, graphics/present queues, swapchain, image views, clear render pass, framebuffers, command buffers and frame synchronization. It clears the swapchain to a dark blue-grey colour and presents frames while the activity is resumed and focused.
+
+Surface-bound resources are destroyed on `APP_CMD_TERM_WINDOW` and rebuilt on `APP_CMD_INIT_WINDOW`. Swapchain out-of-date/suboptimal results trigger recreation.
+
+This is deliberately not yet a 3D renderer: there is no shader pipeline, mesh, depth buffer, camera, texture upload or lighting. Those are the remaining Phase 2 milestones. CI compilation and a physical-device run are still required before the renderer can be considered validated.
