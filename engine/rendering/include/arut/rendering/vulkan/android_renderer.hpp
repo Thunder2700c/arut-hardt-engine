@@ -55,6 +55,7 @@ private:
                               VkImage& image, VkDeviceMemory& memory, VkImageView& view,
                               VkSampler& sampler, std::uint32_t& mip_levels) noexcept;
     bool create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buffer, VkDeviceMemory& memory) noexcept;
+    void account_gpu_allocation(VkDeviceSize bytes) noexcept;
     void destroy_swapchain() noexcept;
     bool recreate_swapchain() noexcept;
 
@@ -163,6 +164,7 @@ private:
     double last_cpu_frame_ms_{0.0};
     double last_gpu_frame_ms_{0.0};
     double last_shadow_pass_ms_{0.0};
+    std::uint64_t tracked_gpu_memory_bytes_{0};
     std::uint32_t last_draw_calls_{0};
     std::uint32_t last_visible_objects_{0};
     std::uint32_t last_triangles_{0};
