@@ -1,4 +1,6 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+#include "pbr_brdf.glsl"
 
 // ARUT-HARDT mobile forward PBR reference shader.
 // Vertex inputs use glTF-style tangent-space conventions: +Y up in tangent space.
@@ -183,18 +185,13 @@ void main() {
 
     vec3 v = normalize(frameData.cameraPosition.xyz - inWorldPosition);
     vec3 l = normalize(-frameData.directionalLightDirection.xyz);
-    vec3 h = normalize(v + l);
     float nDotV = max(dot(n, v), 1e-4);
     float nDotL = max(dot(n, l), 0.0);
     vec3 f0 = mix(vec3(0.04), base.rgb, metallic);
-    vec3 f = fresnelSchlick(max(dot(h, v), 0.0), f0);
-    float d = distributionGGX(max(dot(n, h), 0.0), roughness);
-    float g = geometrySmith(nDotV, nDotL, roughness);
-    vec3 specular = (d * g * f) / max(1e-4, 4.0 * nDotV * nDotL);
-    vec3 diffuseWeight = (1.0 - f) * (1.0 - metallic);
-    vec3 diffuse = diffuseWeight * base.rgb / PI;
     float shadowVisibility = directionalShadowVisibility(n, l);
-    vec3 direct = (diffuse + specular) * frameData.directionalLightRadiance.rgb * nDotL * shadowVisibility;
+    vec3 direct = arutPbrEvaluateDirect(
+        n, v, l, base.rgb, metallic, roughness,
+        frameData.directionalLightRadiance.rgb) * shadowVisibility;
 
     // Diffuse IBL uses a cosine-convolved irradiance cubemap. Specular IBL
     // uses GGX-prefiltered environment mips and a split-sum BRDF integration LUT.
