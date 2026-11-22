@@ -68,7 +68,8 @@ bool AndroidRenderer::create_frame_resources() noexcept {
            create_triangle_geometry() && create_triangle_pipeline() &&
            create_pbr_geometry() && create_gpu_visibility_resources() &&
            create_fallback_texture() &&
-           create_environment_cubemap() && create_brdf_lut() &&
+           create_environment_cubemap() && create_environment_probe_cubemaps() &&
+           create_brdf_lut() &&
            create_pbr_pipeline() && create_shadow_resources() &&
            create_shadow_pipeline() && create_pbr_descriptors() &&
            create_commands_and_sync();
@@ -1064,6 +1065,115 @@ bool AndroidRenderer::load_environment_hdr_asset(
         decoded = {};
         arut_android_log(ANDROID_LOG_WARN, "HDR environment asset allocation failed.");
         return false;
+    }
+    return true;
+}
+
+bool AndroidRenderer::load_environment_probe_cubemap(
+    const char* path,
+    VkImage& specular_image, VkDeviceMemory& specular_memory,
+    VkImageView& specular_view, VkSampler& specular_sampler,
+    std::uint32_t& specular_mip_levels,
+    VkImage& diffuse_image, VkDeviceMemory& diffuse_memory,
+    VkImageView& diffuse_view, VkSampler& diffuse_sampler,
+    std::uint32_t& diffuse_mip_levels) noexcept {
+    arut::rendering::Rgba32fImage hdr_source{};
+    if (!load_environment_hdr_asset(path, hdr_source)) return false;
+
+    VkFormatProperties format_properties{};
+    vkGetPhysicalDeviceFormatProperties(
+        physical_device_, VK_FORMAT_R16G16B16A16_SFLOAT, &format_properties);
+    const VkFormatFeatureFlags required =
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+    if ((format_properties.optimalTilingFeatures & required) != required) {
+        arut_android_log(ANDROID_LOG_WARN,
+            "RGBA16F is unavailable for a local environment probe; retaining global fallback.");
+        return false;
+    }
+
+    arut::rendering::EnvironmentCubeF32Mip base{};
+    std::vector<arut::rendering::EnvironmentCubeF32Mip> specular_float;
+    arut::rendering::EnvironmentCubeF32Mip diffuse_float{};
+    if (!arut::rendering::build_environment_cube_from_equirectangular(hdr_source, 32U, base) ||
+        !arut::rendering::build_ggx_prefiltered_environment_cube(base, 96U, specular_float) ||
+        !arut::rendering::build_diffuse_irradiance_cube(base, 8U, 96U, diffuse_float)) {
+        log_error("Local HDR environment probe convolution failed; retaining global fallback.");
+        return false;
+    }
+
+    std::vector<arut::rendering::EnvironmentCubeF16Mip> specular_half;
+    arut::rendering::EnvironmentCubeF16Mip diffuse_half{};
+    try {
+        specular_half.reserve(specular_float.size());
+        for (const auto& mip : specular_float) {
+            arut::rendering::EnvironmentCubeF16Mip half{};
+            if (!arut::rendering::convert_environment_cube_to_rgba16f(mip, half)) {
+                log_error("Local HDR probe RGBA16F conversion failed.");
+                return false;
+            }
+            specular_half.push_back(std::move(half));
+        }
+    } catch (...) {
+        log_error("Local HDR probe mip allocation failed.");
+        return false;
+    }
+    if (!arut::rendering::convert_environment_cube_to_rgba16f(diffuse_float, diffuse_half))
+        return false;
+
+    const std::vector<arut::rendering::EnvironmentCubeF16Mip> diffuse_mips{
+        std::move(diffuse_half)};
+    if (!upload_environment_cube_rgba16f(
+            specular_half, specular_image, specular_memory, specular_view,
+            specular_sampler, specular_mip_levels)) return false;
+    if (upload_environment_cube_rgba16f(
+            diffuse_mips, diffuse_image, diffuse_memory, diffuse_view,
+            diffuse_sampler, diffuse_mip_levels)) return true;
+
+    const auto release_partial = [this](VkImage& image, VkDeviceMemory& memory,
+                                        VkImageView& view, VkSampler& sampler) {
+        if (sampler) vkDestroySampler(device_, sampler, nullptr);
+        if (view) vkDestroyImageView(device_, view, nullptr);
+        if (image) {
+            VkMemoryRequirements requirements{};
+            vkGetImageMemoryRequirements(device_, image, &requirements);
+            if (requirements.size <= tracked_gpu_memory_bytes_)
+                tracked_gpu_memory_bytes_ -= requirements.size;
+            vkDestroyImage(device_, image, nullptr);
+        }
+        if (memory) vkFreeMemory(device_, memory, nullptr);
+        image = VK_NULL_HANDLE;
+        memory = VK_NULL_HANDLE;
+        view = VK_NULL_HANDLE;
+        sampler = VK_NULL_HANDLE;
+    };
+    release_partial(specular_image, specular_memory, specular_view, specular_sampler);
+    specular_mip_levels = 0U;
+    return false;
+}
+
+bool AndroidRenderer::create_environment_probe_cubemaps() noexcept {
+    for (std::uint32_t index = 0; index < arut::rendering::kMaxEnvironmentProbes; ++index) {
+        char path[96]{};
+        std::snprintf(path, sizeof(path), "environments/probes/probe_%u.hdr", index);
+        if (!load_environment_probe_cubemap(
+                path,
+                environment_probe_specular_images_[index],
+                environment_probe_specular_memories_[index],
+                environment_probe_specular_views_[index],
+                environment_probe_specular_samplers_[index],
+                environment_probe_specular_mip_levels_[index],
+                environment_probe_diffuse_images_[index],
+                environment_probe_diffuse_memories_[index],
+                environment_probe_diffuse_views_[index],
+                environment_probe_diffuse_samplers_[index],
+                environment_probe_diffuse_mip_levels_[index])) {
+            // Missing or unsupported local assets deliberately retain the global environment.
+            continue;
+        }
+        char message[160]{};
+        std::snprintf(message, sizeof(message),
+            "Loaded independent HDR environment probe slot %u.", index);
+        arut_android_log(ANDROID_LOG_INFO, message);
     }
     return true;
 }
@@ -2360,8 +2470,18 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     std::array<VkDescriptorImageInfo, arut::rendering::kMaxEnvironmentProbes> probe_specular_infos{};
     std::array<VkDescriptorImageInfo, arut::rendering::kMaxEnvironmentProbes> probe_diffuse_infos{};
     for (std::uint32_t probe = 0; probe < arut::rendering::kMaxEnvironmentProbes; ++probe) {
-        probe_specular_infos[probe] = environment_info;
-        probe_diffuse_infos[probe] = irradiance_info;
+        probe_specular_infos[probe] = {
+            environment_probe_specular_samplers_[probe]
+                ? environment_probe_specular_samplers_[probe] : environment_sampler_,
+            environment_probe_specular_views_[probe]
+                ? environment_probe_specular_views_[probe] : environment_view_,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        probe_diffuse_infos[probe] = {
+            environment_probe_diffuse_samplers_[probe]
+                ? environment_probe_diffuse_samplers_[probe] : irradiance_sampler_,
+            environment_probe_diffuse_views_[probe]
+                ? environment_probe_diffuse_views_[probe] : irradiance_view_,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     }
     std::array<VkWriteDescriptorSet, 12> writes{};
     writes[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &frame_info, nullptr};
@@ -2657,6 +2777,16 @@ void AndroidRenderer::destroy_swapchain() noexcept {
         if (material_uniform_memory_) vkFreeMemory(device_, material_uniform_memory_, nullptr);
         if (environment_probe_uniform_buffer_) vkDestroyBuffer(device_, environment_probe_uniform_buffer_, nullptr);
         if (environment_probe_uniform_memory_) vkFreeMemory(device_, environment_probe_uniform_memory_, nullptr);
+        for (std::size_t probe = 0; probe < arut::rendering::kMaxEnvironmentProbes; ++probe) {
+            if (environment_probe_specular_samplers_[probe]) vkDestroySampler(device_, environment_probe_specular_samplers_[probe], nullptr);
+            if (environment_probe_specular_views_[probe]) vkDestroyImageView(device_, environment_probe_specular_views_[probe], nullptr);
+            if (environment_probe_specular_images_[probe]) vkDestroyImage(device_, environment_probe_specular_images_[probe], nullptr);
+            if (environment_probe_specular_memories_[probe]) vkFreeMemory(device_, environment_probe_specular_memories_[probe], nullptr);
+            if (environment_probe_diffuse_samplers_[probe]) vkDestroySampler(device_, environment_probe_diffuse_samplers_[probe], nullptr);
+            if (environment_probe_diffuse_views_[probe]) vkDestroyImageView(device_, environment_probe_diffuse_views_[probe], nullptr);
+            if (environment_probe_diffuse_images_[probe]) vkDestroyImage(device_, environment_probe_diffuse_images_[probe], nullptr);
+            if (environment_probe_diffuse_memories_[probe]) vkFreeMemory(device_, environment_probe_diffuse_memories_[probe], nullptr);
+        }
         if (cube_vertex_buffer_) vkDestroyBuffer(device_, cube_vertex_buffer_, nullptr);
         if (cube_vertex_memory_) vkFreeMemory(device_, cube_vertex_memory_, nullptr);
         if (cube_index_buffer_) vkDestroyBuffer(device_, cube_index_buffer_, nullptr);
@@ -2735,6 +2865,16 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     frame_uniform_memory_ = material_uniform_memory_ = VK_NULL_HANDLE;
     environment_probe_uniform_buffer_ = VK_NULL_HANDLE;
     environment_probe_uniform_memory_ = VK_NULL_HANDLE;
+    environment_probe_specular_images_.fill(VK_NULL_HANDLE);
+    environment_probe_specular_memories_.fill(VK_NULL_HANDLE);
+    environment_probe_specular_views_.fill(VK_NULL_HANDLE);
+    environment_probe_specular_samplers_.fill(VK_NULL_HANDLE);
+    environment_probe_specular_mip_levels_.fill(0U);
+    environment_probe_diffuse_images_.fill(VK_NULL_HANDLE);
+    environment_probe_diffuse_memories_.fill(VK_NULL_HANDLE);
+    environment_probe_diffuse_views_.fill(VK_NULL_HANDLE);
+    environment_probe_diffuse_samplers_.fill(VK_NULL_HANDLE);
+    environment_probe_diffuse_mip_levels_.fill(0U);
     cube_vertex_buffer_ = cube_index_buffer_ = VK_NULL_HANDLE;
     cube_vertex_memory_ = cube_index_memory_ = VK_NULL_HANDLE;
     instance_buffer_ = VK_NULL_HANDLE;
