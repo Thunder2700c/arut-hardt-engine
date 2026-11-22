@@ -505,7 +505,7 @@ bool AndroidRenderer::create_triangle_pipeline() noexcept {
     VkPipelineRasterizationStateCreateInfo raster{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
     raster.polygonMode = VK_POLYGON_MODE_FILL;
     raster.cullMode = VK_CULL_MODE_NONE;
-    raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
     raster.lineWidth = 1.0F;
     VkPipelineMultisampleStateCreateInfo multisample{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
     multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
@@ -943,6 +943,9 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     };
     static_assert(sizeof(FrameData) == 112);
     static_assert(sizeof(MaterialData) == 64);
+    if (!load_texture_asset("textures/demo_base_color.png", VK_FORMAT_R8G8B8A8_SRGB, true,
+                            base_color_image_, base_color_memory_, base_color_view_,
+                            base_color_sampler_, base_color_mip_levels_)) return false;
     if (!create_buffer(sizeof(FrameData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, frame_uniform_buffer_, frame_uniform_memory_) ||
         !create_buffer(sizeof(MaterialData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, material_uniform_buffer_, material_uniform_memory_)) return false;
 
@@ -961,8 +964,8 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     if (result != VK_SUCCESS || !mapped) { log_error("Map frame uniform buffer failed", result); return false; }
     std::memcpy(mapped, &frame_upload, sizeof(FrameData)); vkUnmapMemory(device_, frame_uniform_memory_);
 
-    const MaterialData material{{0.78F, 0.34F, 0.16F, 1.0F}, {0.0F, 0.0F, 0.0F, 0.05F},
-                                {0.48F, 1.0F, 1.0F, 0.5F}, {0U, 0U, 0U, 0U}};
+    const MaterialData material{{1.0F, 1.0F, 1.0F, 1.0F}, {0.0F, 0.0F, 0.0F, 0.05F},
+                                {0.48F, 1.0F, 1.0F, 0.5F}, {1U, 0U, 0U, 0U}};
     mapped = nullptr;
     result = vkMapMemory(device_, material_uniform_memory_, 0, sizeof(MaterialData), 0, &mapped);
     if (result != VK_SUCCESS || !mapped) { log_error("Map material uniform buffer failed", result); return false; }
@@ -986,12 +989,14 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
 
     VkDescriptorBufferInfo frame_info{frame_uniform_buffer_, 0, sizeof(FrameData)};
     VkDescriptorBufferInfo material_info{material_uniform_buffer_, 0, sizeof(MaterialData)};
-    const VkDescriptorImageInfo image_info{fallback_sampler_, fallback_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    const VkDescriptorImageInfo base_color_info{base_color_sampler_, base_color_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    const VkDescriptorImageInfo fallback_info{fallback_sampler_, fallback_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     std::array<VkWriteDescriptorSet, 5> writes{};
     writes[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &frame_info, nullptr};
     writes[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &material_info, nullptr};
-    for (std::uint32_t i = 0; i < 3; ++i)
-        writes[i + 2] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, i + 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &image_info, nullptr, nullptr};
+    writes[2] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &base_color_info, nullptr, nullptr};
+    writes[3] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 2, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &fallback_info, nullptr, nullptr};
+    writes[4] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 3, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &fallback_info, nullptr, nullptr};
     vkUpdateDescriptorSets(device_, static_cast<std::uint32_t>(writes.size()), writes.data(), 0, nullptr);
     arut_android_log(ANDROID_LOG_INFO, "PBR frame/material descriptors and fallback texture bound.");
     return true;
@@ -1162,6 +1167,10 @@ void AndroidRenderer::destroy_swapchain() noexcept {
         if (cube_vertex_memory_) vkFreeMemory(device_, cube_vertex_memory_, nullptr);
         if (cube_index_buffer_) vkDestroyBuffer(device_, cube_index_buffer_, nullptr);
         if (cube_index_memory_) vkFreeMemory(device_, cube_index_memory_, nullptr);
+        if (base_color_sampler_) vkDestroySampler(device_, base_color_sampler_, nullptr);
+        if (base_color_view_) vkDestroyImageView(device_, base_color_view_, nullptr);
+        if (base_color_image_) vkDestroyImage(device_, base_color_image_, nullptr);
+        if (base_color_memory_) vkFreeMemory(device_, base_color_memory_, nullptr);
         if (fallback_sampler_) vkDestroySampler(device_, fallback_sampler_, nullptr);
         if (fallback_view_) vkDestroyImageView(device_, fallback_view_, nullptr);
         if (fallback_image_) vkDestroyImage(device_, fallback_image_, nullptr);
@@ -1198,7 +1207,13 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     cube_vertex_buffer_ = cube_index_buffer_ = VK_NULL_HANDLE;
     cube_vertex_memory_ = cube_index_memory_ = VK_NULL_HANDLE;
     cube_index_count_ = 0;
+    base_color_sampler_ = VK_NULL_HANDLE;
+    base_color_view_ = VK_NULL_HANDLE;
+    base_color_image_ = VK_NULL_HANDLE;
+    base_color_memory_ = VK_NULL_HANDLE;
+    base_color_mip_levels_ = 0;
     fallback_sampler_ = VK_NULL_HANDLE;
+    fallback_mip_levels_ = 0;
     fallback_view_ = VK_NULL_HANDLE;
     fallback_image_ = VK_NULL_HANDLE;
     fallback_memory_ = VK_NULL_HANDLE;
