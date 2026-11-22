@@ -1,6 +1,7 @@
 #pragma once
 
 #include <android/native_window.h>
+#include <android/asset_manager.h>
 #include <vulkan/vulkan.h>
 #include <cstdint>
 #include <vector>
@@ -14,7 +15,7 @@ public:
     AndroidRenderer(const AndroidRenderer&) = delete;
     AndroidRenderer& operator=(const AndroidRenderer&) = delete;
 
-    bool initialize(ANativeWindow* window) noexcept;
+    bool initialize(ANativeWindow* window, AAssetManager* assets) noexcept;
     void shutdown() noexcept;
     bool draw_frame() noexcept;
     bool ready() const noexcept { return device_ != VK_NULL_HANDLE && swapchain_ != VK_NULL_HANDLE; }
@@ -29,10 +30,14 @@ private:
     bool create_depth_resources() noexcept;
     std::uint32_t find_memory_type(std::uint32_t type_bits, VkMemoryPropertyFlags properties) const noexcept;
     bool create_commands_and_sync() noexcept;
+    bool create_triangle_pipeline() noexcept;
+    bool create_triangle_geometry() noexcept;
+    bool create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buffer, VkDeviceMemory& memory) noexcept;
     void destroy_swapchain() noexcept;
     bool recreate_swapchain() noexcept;
 
     ANativeWindow* window_{nullptr};
+    AAssetManager* assets_{nullptr};
     VkInstance instance_{VK_NULL_HANDLE};
     VkSurfaceKHR surface_{VK_NULL_HANDLE};
     VkPhysicalDevice physical_device_{VK_NULL_HANDLE};
@@ -47,6 +52,10 @@ private:
     std::vector<VkImage> images_;
     std::vector<VkImageView> image_views_;
     VkRenderPass render_pass_{VK_NULL_HANDLE};
+    VkPipelineLayout pipeline_layout_{VK_NULL_HANDLE};
+    VkPipeline graphics_pipeline_{VK_NULL_HANDLE};
+    VkBuffer triangle_vertex_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory triangle_vertex_memory_{VK_NULL_HANDLE};
     VkImage depth_image_{VK_NULL_HANDLE};
     VkDeviceMemory depth_memory_{VK_NULL_HANDLE};
     VkImageView depth_view_{VK_NULL_HANDLE};
