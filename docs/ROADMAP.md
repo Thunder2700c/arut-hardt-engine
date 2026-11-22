@@ -36,15 +36,20 @@ Exit gate: APK installs and starts on a physical ARM64 device, handles lifecycle
 - [ ] Add vertex/index buffers, depth, camera, textures and first lit 3D scene.
 Exit gate: Android renders a textured 3D scene with validation and frame/GPU timing.
 
-## Phase 3 — Rendering and materials (foundation started)
+## Phase 3 — Rendering and materials (implementation in progress)
 - [x] Define a PBR material data contract (base colour, metallic, roughness, emissive, normal scale, occlusion and alpha cutoff).
 - [x] Add finite-value handling and safe material parameter normalization.
 - [x] Define Low/Medium/High/Ultra mobile quality presets with render scale, shadow budget and light limits.
 - [x] Define a renderer profiling snapshot contract.
-- [ ] Implement the PBR shader pipeline and validate energy-conserving BRDF behaviour.
+- [x] Add a CPU reference implementation for Schlick Fresnel, GGX distribution, Smith geometry, Cook-Torrance direct lighting and ACES tone mapping.
+- [x] Add mobile forward PBR vertex/fragment shader source (not yet compiled or connected to a Vulkan pipeline).
+- [x] Add host tests for BRDF limits, front/back lighting and tone mapping.
+- [ ] Integrate shader compilation, descriptor layouts, vertex formats and graphics pipeline into Vulkan.
+- [ ] Validate energy conservation and compare GPU output against the CPU reference.
+- [ ] Add mobile shadow maps and cascade quality tiers.
 - [ ] Add mobile shadow maps and cascade quality tiers.
 - [ ] Add GPU instancing and CPU/GPU visibility culling.
-- [ ] Add environment lighting / image-based lighting and tone mapping.
+- [ ] Add environment lighting / image-based lighting (ACES tone-map source exists; runtime integration remains pending).
 - [ ] Connect profile snapshots to actual renderer counters and GPU timestamp queries.
 - [ ] Validate graceful quality fallback on two Android GPU families.
 Exit gate: PBR test scene works across two Android GPU families with graceful fallback and measured CPU/GPU costs.
