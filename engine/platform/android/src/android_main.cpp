@@ -9,6 +9,7 @@
 #include <cinttypes>
 #include <cstdint>
 #include <cstddef>
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -72,10 +73,31 @@ void write_log(int priority, const char* level, const char* format, va_list args
  }
 }
 
+void log_message(int priority, const char* level, const char* message) {
+ __android_log_write(priority, kLogTag, message ? message : "");
+ std::lock_guard<std::mutex> lock(g_log_mutex);
+ if (!g_log_file) return;
+ timespec now{};
+ clock_gettime(CLOCK_REALTIME, &now);
+ std::tm local{};
+ localtime_r(&now.tv_sec, &local);
+ char timestamp[40]{};
+ std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S", &local);
+ std::fprintf(g_log_file, "%s.%03ld %s %s\\n", timestamp, now.tv_nsec / 1000000L, level, message ? message : "");
+ std::fflush(g_log_file);
+ const long position = std::ftell(g_log_file);
+ if (position > kMaxLogBytes) {
+  std::fclose(g_log_file); g_log_file = nullptr;
+  char previous[1050]{};
+  std::snprintf(previous, sizeof(previous), "%s.1", g_log_path);
+  std::remove(previous); std::rename(g_log_path, previous);
+  g_log_file = std::fopen(g_log_path, "a");
+ }
+}
 void log_info(const char* format, ...) {
  va_list args; va_start(args, format);
- write_log(ANDROID_LOG_INFO, "INFO", format, args);
- va_end(args);
+ char message[2048]{}; std::vsnprintf(message, sizeof(message), format, args); va_end(args);
+ log_message(ANDROID_LOG_INFO, "INFO", message);
 }
 void log_warn(const char* format, ...) {
  va_list args; va_start(args, format);
@@ -137,6 +159,10 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
  }
  return 0;
 }
+ }
+extern "C" void arut_android_log(int priority, const char* message) noexcept {
+ const char* level = priority >= ANDROID_LOG_ERROR ? "ERROR" : (priority >= ANDROID_LOG_WARN ? "WARN" : "INFO");
+ log_message(priority, level, message);
 }
 namespace arut::platform::android {
 void run(android_app* app) {
