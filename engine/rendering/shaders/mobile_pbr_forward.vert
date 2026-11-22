@@ -1,7 +1,7 @@
 #version 450
 
 // ARUT-HARDT mobile forward PBR vertex stage.
-// Vertex attribute locations: position 0, normal 1, tangent 2, UV 3.
+// Vertex attribute locations: position 0, normal 1, tangent 2, UV 3; instance model columns 4-7.
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
@@ -30,7 +30,7 @@ void main() {
     mat3 normalMatrix = transpose(inverse(mat3(model)));
     outWorldPosition = worldPosition.xyz;
     outWorldNormal = normalize(normalMatrix * inNormal);
-    outWorldTangent = vec4(normalize(mat3(objectData.model) * inTangent.xyz), inTangent.w);
+    outWorldTangent = vec4(normalize(mat3(model) * inTangent.xyz), inTangent.w);
     outUv = inUv;
     gl_Position = frameData.viewProjection * worldPosition;
 }
