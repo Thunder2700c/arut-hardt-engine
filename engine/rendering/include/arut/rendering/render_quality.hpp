@@ -27,11 +27,11 @@ struct RenderQualityConfig final {
         case RenderQualityTier::Low:
             return {tier, 0.70F, 512, 1, 4, false, true, false, ToneMapOperator::Reinhard};
         case RenderQualityTier::Medium:
-            return {tier, 0.85F, 1024, 1, 8, true, true, true, ToneMapOperator::Aces};
+            return {tier, 0.85F, 512, 1, 8, true, true, true, ToneMapOperator::Aces};
         case RenderQualityTier::High:
-            return {tier, 1.00F, 2048, 2, 16, true, true, true, ToneMapOperator::Aces};
+            return {tier, 1.00F, 1024, 2, 16, true, true, true, ToneMapOperator::Aces};
         case RenderQualityTier::Ultra:
-            return {tier, 1.00F, 4096, 4, 32, true, true, true, ToneMapOperator::Aces};
+            return {tier, 1.00F, 1536, 4, 32, true, true, true, ToneMapOperator::Aces};
     }
     return quality_config(RenderQualityTier::Medium);
 }
