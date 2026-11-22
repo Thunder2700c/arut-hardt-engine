@@ -29,6 +29,17 @@ struct EnvironmentCubeF32Mip final {
     const Rgba32fImage& source, std::uint32_t cube_size,
     EnvironmentCubeF32Mip& output) noexcept;
 
+// GGX-prefilters a float HDR source cubemap into a full roughness mip chain.
+[[nodiscard]] bool build_ggx_prefiltered_environment_cube(
+    const EnvironmentCubeF32Mip& source_base, std::uint32_t sample_count,
+    std::vector<EnvironmentCubeF32Mip>& output) noexcept;
+
+// Integrates a float HDR cubemap over a cosine-weighted hemisphere.
+// The result stores irradiance divided by PI for the Lambertian diffuse term.
+[[nodiscard]] bool build_diffuse_irradiance_cube(
+    const EnvironmentCubeF32Mip& source_base, std::uint32_t output_size,
+    std::uint32_t sample_count, EnvironmentCubeF32Mip& output) noexcept;
+
 // Builds a compact linear-light procedural sky/ground cubemap and box-filtered mips.
 // This is a bootstrap IBL source; GGX importance prefiltering is a later refinement.
 [[nodiscard]] bool build_procedural_environment_cube(
