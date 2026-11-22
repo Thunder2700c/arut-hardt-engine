@@ -50,6 +50,7 @@ Exit gate: Android renders a textured 3D scene with validation and frame/GPU tim
 - [x] Define Low/Medium/High/Ultra mobile quality presets with render scale, shadow budget and light limits.
 - [x] Define a renderer profiling snapshot contract.
 - [x] Add a CPU reference implementation for Schlick Fresnel, GGX distribution, Smith geometry, Cook-Torrance direct lighting and ACES tone mapping.
+- [x] Decode and upload bundled base-colour, tangent-normal and metallic-roughness texture assets with sRGB/linear colour-space handling and mip chains.
 - [x] Add mobile forward PBR vertex/fragment shader source and host-CI GLSL compilation, connected to the Vulkan PBR pipeline.
 - [x] Add host tests for BRDF limits, front/back lighting and tone mapping.
 - [x] Integrate shader compilation, descriptor layouts, vertex formats and graphics pipeline into Vulkan.
