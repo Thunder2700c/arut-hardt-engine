@@ -35,9 +35,15 @@ layout(set = 0, binding = 9) uniform samplerCube diffuseProbe0;
 layout(set = 0, binding = 10) uniform samplerCube diffuseProbe1;
 layout(set = 0, binding = 11) uniform samplerCube diffuseProbe2;
 layout(set = 0, binding = 12) uniform samplerCube diffuseProbe3;
-layout(set = 0, binding = 5) uniform samplerCube environmentProbeSpecular[4];
-layout(set = 0, binding = 6) uniform samplerCube environmentProbeDiffuse[4];
-layout(set = 0, binding = 7, std140) uniform EnvironmentProbeData {
+layout(set = 0, binding = 5) uniform samplerCube environmentProbeSpecular0;
+layout(set = 0, binding = 6) uniform samplerCube environmentProbeSpecular1;
+layout(set = 0, binding = 7) uniform samplerCube environmentProbeSpecular2;
+layout(set = 0, binding = 8) uniform samplerCube environmentProbeSpecular3;
+layout(set = 0, binding = 9) uniform samplerCube environmentProbeDiffuse0;
+layout(set = 0, binding = 10) uniform samplerCube environmentProbeDiffuse1;
+layout(set = 0, binding = 11) uniform samplerCube environmentProbeDiffuse2;
+layout(set = 0, binding = 12) uniform samplerCube environmentProbeDiffuse3;
+layout(set = 0, binding = 13, std140) uniform EnvironmentProbeData {
     vec4 probeMinBlend[4];
     vec4 probeMax[4];
     ivec4 probePriorities;
@@ -247,15 +253,15 @@ void main() {
     if (dot(probeWeights, vec4(1.0)) > 0.0) {
         // Fixed sampler indices avoid requiring descriptor-indexing extensions on mobile Vulkan.
         diffuseIrradiance =
-            texture(environmentProbeDiffuse[0], n).rgb * probeWeights.x +
-            texture(environmentProbeDiffuse[1], n).rgb * probeWeights.y +
-            texture(environmentProbeDiffuse[2], n).rgb * probeWeights.z +
-            texture(environmentProbeDiffuse[3], n).rgb * probeWeights.w;
+            texture(environmentProbeDiffuse0, n).rgb * probeWeights.x +
+            texture(environmentProbeDiffuse1, n).rgb * probeWeights.y +
+            texture(environmentProbeDiffuse2, n).rgb * probeWeights.z +
+            texture(environmentProbeDiffuse3, n).rgb * probeWeights.w;
         prefilteredEnvironment =
-            textureLod(environmentProbeSpecular[0], reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.x +
-            textureLod(environmentProbeSpecular[1], reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.y +
-            textureLod(environmentProbeSpecular[2], reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.z +
-            textureLod(environmentProbeSpecular[3], reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.w;
+            textureLod(environmentProbeSpecular0, reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.x +
+            textureLod(environmentProbeSpecular1, reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.y +
+            textureLod(environmentProbeSpecular2, reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.z +
+            textureLod(environmentProbeSpecular3, reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.w;
     } else {
         diffuseIrradiance = texture(diffuseIrradianceMap, n).rgb;
         prefilteredEnvironment = textureLod(
