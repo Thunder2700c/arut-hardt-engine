@@ -7,6 +7,7 @@
 #include "arut/rendering/render_quality.hpp"
 #include "arut/rendering/environment.hpp"
 #include "arut/rendering/gpu_visibility.hpp"
+#include "arut/rendering/environment_probe.hpp"
 #include <array>
 #include <cstdint>
 #include <cstddef>
@@ -106,6 +107,8 @@ private:
     VkDeviceMemory frame_uniform_memory_{VK_NULL_HANDLE};
     VkBuffer material_uniform_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory material_uniform_memory_{VK_NULL_HANDLE};
+    VkBuffer environment_probe_uniform_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory environment_probe_uniform_memory_{VK_NULL_HANDLE};
     VkBuffer cube_vertex_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory cube_vertex_memory_{VK_NULL_HANDLE};
     VkBuffer cube_index_buffer_{VK_NULL_HANDLE};
