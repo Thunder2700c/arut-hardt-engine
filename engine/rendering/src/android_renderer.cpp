@@ -1864,13 +1864,6 @@ bool AndroidRenderer::draw_frame() noexcept {
     if (shadow_enabled_) {
         VkClearValue shadow_clear{};
         shadow_clear.depthStencil = {1.0F, 0};
-        VkRenderPassBeginInfo shadow_pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-        shadow_pass.renderPass = shadow_render_pass_;
-        shadow_pass.framebuffer = shadow_framebuffer_;
-        shadow_pass.renderArea.extent = shadow_extent_;
-        shadow_pass.clearValueCount = 1;
-        shadow_pass.pClearValues = &shadow_clear;
-        vkCmdBeginRenderPass(command_buffers_[image_index], &shadow_pass, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(command_buffers_[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_pipeline_);
         vkCmdBindDescriptorSets(command_buffers_[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 pbr_pipeline_layout_, 0, 1, &frame_descriptor_set_, 0, nullptr);
@@ -1888,8 +1881,19 @@ bool AndroidRenderer::draw_frame() noexcept {
                                static_cast<std::uint32_t>(shadow_vertex_buffers.size()),
                                shadow_vertex_buffers.data(), shadow_vertex_offsets.data());
         vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_, 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(command_buffers_[image_index], cube_index_count_, instance_count_, 0, 0, 0);
-        vkCmdEndRenderPass(command_buffers_[image_index]);
+        for (std::uint32_t cascade = 0; cascade < shadow_cascade_count_; ++cascade) {
+            VkRenderPassBeginInfo shadow_pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+            shadow_pass.renderPass = shadow_render_pass_;
+            shadow_pass.framebuffer = shadow_framebuffers_[cascade];
+            shadow_pass.renderArea.extent = shadow_extent_;
+            shadow_pass.clearValueCount = 1;
+            shadow_pass.pClearValues = &shadow_clear;
+            vkCmdBeginRenderPass(command_buffers_[image_index], &shadow_pass, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdPushConstants(command_buffers_[image_index], pbr_pipeline_layout_,
+                               VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cascade), &cascade);
+            vkCmdDrawIndexed(command_buffers_[image_index], cube_index_count_, instance_count_, 0, 0, 0);
+            vkCmdEndRenderPass(command_buffers_[image_index]);
+        }
     }
     if (timestamp_queries_available_) {
         vkCmdWriteTimestamp(command_buffers_[image_index], VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
