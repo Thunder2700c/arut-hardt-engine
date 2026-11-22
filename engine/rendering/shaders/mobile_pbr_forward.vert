@@ -15,6 +15,7 @@ layout(location = 7) in vec4 inModelColumn3;
 layout(set = 0, binding = 0, std140) uniform FrameData {
     mat4 viewProjection;
     vec4 cameraPosition;
+    vec4 cameraForward;
     vec4 directionalLightDirection;
     vec4 directionalLightRadiance;
     mat4 lightViewProjection[4];
