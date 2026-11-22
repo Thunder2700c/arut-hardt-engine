@@ -11,13 +11,13 @@ namespace arut::rendering {
 namespace {
 struct Vec3 final { float x, y, z; };
 [[nodiscard]] float dot(Vec3 a, Vec3 b) noexcept { return a.x*b.x + a.y*b.y + a.z*b.z; }
+[[nodiscard]] Vec3 operator*(Vec3 value, float scalar) noexcept {
+    return {value.x*scalar, value.y*scalar, value.z*scalar};
+}
 [[nodiscard]] Vec3 normalize(Vec3 value) noexcept {
     const float length_squared = dot(value, value);
     if (!(length_squared > 1.0e-12F) || !std::isfinite(length_squared)) return {0.0F, 0.0F, 1.0F};
     return value * (1.0F / std::sqrt(length_squared));
-}
-[[nodiscard]] Vec3 operator*(Vec3 value, float scalar) noexcept {
-    return {value.x*scalar, value.y*scalar, value.z*scalar};
 }
 [[nodiscard]] Vec3 operator+(Vec3 a, Vec3 b) noexcept {
     return {a.x+b.x, a.y+b.y, a.z+b.z};
@@ -61,7 +61,6 @@ bool build_brdf_integration_lut(
         output.width = dimension;
         output.height = dimension;
         output.pixels.resize(static_cast<std::size_t>(dimension) * dimension * 4U);
-        constexpr Vec3 normal{0.0F,0.0F,1.0F};
         for (std::uint32_t y=0; y<dimension; ++y) {
             const float roughness = (static_cast<float>(y)+0.5F)/static_cast<float>(dimension);
             for (std::uint32_t x=0; x<dimension; ++x) {
