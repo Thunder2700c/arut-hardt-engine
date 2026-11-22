@@ -119,12 +119,15 @@ private:
     VkBuffer environment_probe_uniform_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory environment_probe_uniform_memory_{VK_NULL_HANDLE};
     std::array<arut::rendering::EnvironmentProbeInfluence,
-               arut::rendering::kMaxEnvironmentProbes> environment_probe_influences_{
+               arut::rendering::kMaxEnvironmentProbes> environment_probe_influences_{{
         arut::rendering::EnvironmentProbeInfluence{
             arut::rendering::EnvironmentProbeAabb{-4.0F, -4.0F, -4.0F, 4.0F, 4.0F, 4.0F},
-            4.0F, 0}
-    };
-    std::uint32_t environment_probe_count_{1U};
+            4.0F, 0},
+        arut::rendering::EnvironmentProbeInfluence{
+            arut::rendering::EnvironmentProbeAabb{-1.6F, -2.0F, -1.6F, 1.6F, 2.0F, 1.6F},
+            0.65F, 1}
+    }};
+    std::uint32_t environment_probe_count_{2U};
     VkBuffer cube_vertex_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory cube_vertex_memory_{VK_NULL_HANDLE};
     VkBuffer cube_index_buffer_{VK_NULL_HANDLE};

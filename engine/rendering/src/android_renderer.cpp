@@ -1847,8 +1847,12 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         return model;
     };
     struct InstanceSpec final { float x; float scale; float yaw; };
-    constexpr std::array<InstanceSpec, 3> specs{{
-        {-1.05F, 0.68F, -0.45F}, {0.0F, 0.82F, 0.15F}, {1.05F, 0.68F, 0.55F}
+    // Three visible objects plus two deliberately off-frustum sentinels.
+    // GPU indirect drawing must compact five inputs to the same three objects
+    // selected by the CPU reference on the physical validation device.
+    constexpr std::array<InstanceSpec, 5> specs{{
+        {-1.05F, 0.68F, -0.45F}, {0.0F, 0.82F, 0.15F}, {1.05F, 0.68F, 0.55F},
+        {-12.0F, 0.68F, -0.20F}, {12.0F, 0.68F, 0.30F}
     }};
     const std::array<float, 3> camera{2.2F, 1.8F, 2.8F};
     const auto view = arut::rendering::look_at_rh(camera, {0.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F});
