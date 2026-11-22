@@ -113,6 +113,16 @@ private:
     std::uint32_t brdf_lut_mip_levels_{0};
     std::uint32_t environment_mip_levels_{0};
     std::uint32_t base_color_mip_levels_{0};
+    VkImage normal_image_{VK_NULL_HANDLE};
+    VkDeviceMemory normal_memory_{VK_NULL_HANDLE};
+    VkImageView normal_view_{VK_NULL_HANDLE};
+    VkSampler normal_sampler_{VK_NULL_HANDLE};
+    std::uint32_t normal_mip_levels_{0};
+    VkImage metallic_roughness_image_{VK_NULL_HANDLE};
+    VkDeviceMemory metallic_roughness_memory_{VK_NULL_HANDLE};
+    VkImageView metallic_roughness_view_{VK_NULL_HANDLE};
+    VkSampler metallic_roughness_sampler_{VK_NULL_HANDLE};
+    std::uint32_t metallic_roughness_mip_levels_{0};
     VkImage depth_image_{VK_NULL_HANDLE};
     VkDeviceMemory depth_memory_{VK_NULL_HANDLE};
     VkImageView depth_view_{VK_NULL_HANDLE};
