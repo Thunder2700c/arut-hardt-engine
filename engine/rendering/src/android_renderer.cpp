@@ -678,7 +678,8 @@ void AndroidRenderer::destroy_swapchain() noexcept {
 bool AndroidRenderer::recreate_swapchain() noexcept {
     if (!device_) return false;
     destroy_swapchain();
-    return create_swapchain() && create_render_targets() && create_commands_and_sync();
+    return create_swapchain() && create_render_targets() && create_triangle_geometry() &&
+           create_triangle_pipeline() && create_commands_and_sync();
 }
 
 void AndroidRenderer::shutdown() noexcept {
