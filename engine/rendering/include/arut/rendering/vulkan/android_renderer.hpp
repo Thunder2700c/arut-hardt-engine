@@ -180,6 +180,7 @@ private:
     double timestamp_period_ns_{0.0};
     double last_cpu_frame_ms_{0.0};
     double last_gpu_frame_ms_{0.0};
+    double last_visibility_pass_ms_{0.0};
     double last_shadow_pass_ms_{0.0};
     std::uint64_t tracked_gpu_memory_bytes_{0};
     std::uint32_t last_draw_calls_{0};
