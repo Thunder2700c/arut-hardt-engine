@@ -23,8 +23,17 @@ Status: Foundation established.
 
 Exit gate: APK installs and starts on a physical ARM64 device, handles lifecycle/input/surface changes, reports GPU capabilities when available, and calls the Rust ABI. CI alone is not physical-device validation.
 
-## Phase 2 — Vulkan renderer bootstrap
-Vulkan instance/device selection, Android surface/swapchain, synchronization, GPU resources, shader pipeline, mesh/texture upload, depth, camera and first lit scene.
+## Phase 2 — Vulkan renderer bootstrap (in progress)
+- [x] Android Vulkan instance with surface extensions.
+- [x] Android window surface creation and graphics/present queue selection.
+- [x] VK_KHR_swapchain device selection and FIFO swapchain creation.
+- [x] Swapchain image views, clear render pass, framebuffers and command buffers.
+- [x] Frame synchronization with acquire/submit/present and out-of-date swapchain recreation.
+- [x] Connect renderer lifetime to NativeActivity window lifecycle.
+- [ ] Confirm Android ARM64 CI compiles and packages the renderer.
+- [ ] Install and run on the Galaxy S23 FE; verify the blue-black clear frame and rotation/resume.
+- [ ] Add shader modules, graphics pipeline and first triangle.
+- [ ] Add vertex/index buffers, depth, camera, textures and first lit 3D scene.
 Exit gate: Android renders a textured 3D scene with validation and frame/GPU timing.
 
 ## Phase 3 — Rendering and materials
