@@ -17,7 +17,7 @@ android {
    }
   }
  }
- externalNativeBuild { cmake { path = file("../CMakeLists.txt"); version = "3.22.1" } }
+ externalNativeBuild { cmake { path = file("../CMakeLists.txt"); version = "3.25.2" } }
  buildTypes {
   release { isMinifyEnabled = false }
   debug { applicationIdSuffix = ".debug"; versionNameSuffix = "-debug" }
