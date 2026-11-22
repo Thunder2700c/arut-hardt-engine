@@ -68,10 +68,14 @@ struct RenderProfileSnapshot final {
     double gpu_frame_ms{0.0};
     double visibility_pass_ms{0.0};
     double shadow_pass_ms{0.0};
+    double main_pass_ms{0.0};
     std::uint32_t draw_calls{0};
     std::uint32_t visible_objects{0};
     std::uint32_t triangles{0};
     std::uint64_t gpu_memory_bytes{0};
+    std::uint64_t gpu_memory_budget_bytes{0};
+    std::uint64_t gpu_memory_usage_bytes{0};
+    bool gpu_memory_budget_available{false};
     bool gpu_timing_available{false};
     bool gpu_visibility_enabled{false};
 };
