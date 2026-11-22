@@ -7,7 +7,8 @@
 #include <vulkan/vulkan.h>
 #include <cinttypes>
 #include <cstdint>
-#include <cstdarg>
+#include <cstddef>
+#include <stdarg.h>
 extern "C" std::uint32_t arut_tasks_abi_version() noexcept;
 namespace {
 constexpr char kLogTag[] = "ARUT-HARDT";
@@ -53,8 +54,8 @@ void report_vulkan_device() {
  }
  VkPhysicalDevice devices[8]{};
  const std::uint32_t reported_count = device_count;
- const std::uint32_t capacity = device_count < 8 ? device_count : 8;
- result = vkEnumeratePhysicalDevices(instance, const_cast<std::uint32_t*>(&capacity), devices);
+ std::uint32_t capacity = device_count < 8 ? device_count : 8;
+ result = vkEnumeratePhysicalDevices(instance, &capacity, devices);
  if (result != VK_SUCCESS) {
   log_warn("Vulkan device enumeration failed (VkResult=%d).", static_cast<int>(result));
   vkDestroyInstance(instance, nullptr); return;
