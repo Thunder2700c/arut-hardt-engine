@@ -116,6 +116,11 @@ int main() {
     assert(arut::rendering::sphere_visible(frustum, {{0.0F, 0.0F, 0.0F}, 0.5F}));
     assert(!arut::rendering::sphere_visible(frustum, {{100.0F, 0.0F, 0.0F}, 0.5F}));
     assert(!arut::rendering::sphere_visible(frustum, {{0.0F, 0.0F, 5.0F}, 0.5F}));
+    const auto shadow_projection = arut::rendering::orthographic_rh_zo(-4.0F, 4.0F, -4.0F, 4.0F, 0.1F, 20.0F);
+    assert(near(shadow_projection.value[0], 0.25F));
+    assert(near(shadow_projection.value[5], -0.25F));
+    const auto invalid_ortho = arut::rendering::orthographic_rh_zo(1.0F, 1.0F, -1.0F, 1.0F, 0.1F, 10.0F);
+    for (const auto value : invalid_ortho.value) assert(near(value, 0.0F));
     const auto invalid_projection = arut::rendering::perspective_rh_zo(1.0F, 0.0F, 0.1F, 100.0F);
     for (const auto value : invalid_projection.value) assert(near(value, 0.0F));
     return 0;
