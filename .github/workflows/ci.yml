@@ -16,13 +16,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Ninja
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+        run: sudo apt-get update && sudo apt-get install -y ninja-build glslang-tools
       - name: Configure
         run: cmake --preset dev
       - name: Build
         run: cmake --build --preset dev --parallel 2
       - name: Test
         run: ctest --preset dev
+      - name: Compile and validate Vulkan PBR shaders (no APK)
+        run: |
+          mkdir -p build/shaders
+          glslangValidator -V --target-env vulkan1.0 -o build/shaders/mobile_pbr_forward.vert.spv engine/rendering/shaders/mobile_pbr_forward.vert
+          glslangValidator -V --target-env vulkan1.0 -o build/shaders/mobile_pbr_forward.frag.spv engine/rendering/shaders/mobile_pbr_forward.frag
 
   rust:
     name: Rust workspace
