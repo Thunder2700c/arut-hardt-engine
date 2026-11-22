@@ -46,8 +46,8 @@ bool AndroidRenderer::initialize(ANativeWindow* window, AAssetManager* assets) n
     if (!window || !assets_ || !create_instance() || !create_surface(window) ||
         !select_device() || !create_device() || !create_swapchain() ||
         !create_render_targets() || !create_triangle_geometry() || !create_triangle_pipeline() ||
-        !create_pbr_geometry() || !create_fallback_texture() || !create_pbr_pipeline() ||
-        !create_shadow_resources() || !create_shadow_pipeline() ||
+        !create_pbr_geometry() || !create_fallback_texture() || !create_environment_cubemap() ||
+        !create_pbr_pipeline() || !create_shadow_resources() || !create_shadow_pipeline() ||
         !create_pbr_descriptors() || !create_commands_and_sync()) {
         shutdown();
         return false;
@@ -718,6 +718,199 @@ bool AndroidRenderer::create_shadow_pipeline() noexcept {
         log_error("Create directional shadow graphics pipeline failed", result);
         return false;
     }
+    return true;
+}
+
+bool AndroidRenderer::create_environment_cubemap() noexcept {
+    std::vector<arut::rendering::EnvironmentCubeMip> mip_chain;
+    if (!arut::rendering::build_procedural_environment_cube(32U, mip_chain) || mip_chain.empty()) {
+        log_error("Procedural environment cubemap generation failed");
+        return false;
+    }
+    VkFormatProperties format_properties{};
+    vkGetPhysicalDeviceFormatProperties(physical_device_, VK_FORMAT_R8G8B8A8_UNORM, &format_properties);
+    if ((format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) == 0U) {
+        log_error("RGBA8 optimal images are not sampleable; environment IBL unavailable");
+        return false;
+    }
+    const bool linear_filter =
+        (format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0U;
+
+    VkDeviceSize staging_size = 0;
+    for (const auto& mip : mip_chain) {
+        if (mip.pixels.size() > std::numeric_limits<VkDeviceSize>::max() - staging_size) return false;
+        staging_size += static_cast<VkDeviceSize>(mip.pixels.size());
+    }
+    VkBuffer staging = VK_NULL_HANDLE;
+    VkDeviceMemory staging_memory = VK_NULL_HANDLE;
+    if (!create_buffer(staging_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, staging, staging_memory)) return false;
+    auto release_staging = [&]() {
+        if (staging) vkDestroyBuffer(device_, staging, nullptr);
+        if (staging_memory) vkFreeMemory(device_, staging_memory, nullptr);
+        staging = VK_NULL_HANDLE;
+        staging_memory = VK_NULL_HANDLE;
+    };
+    void* mapped = nullptr;
+    VkResult result = vkMapMemory(device_, staging_memory, 0, staging_size, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map environment cubemap staging buffer failed", result);
+        release_staging();
+        return false;
+    }
+    std::vector<VkBufferImageCopy> copies;
+    copies.reserve(mip_chain.size() * 6U);
+    VkDeviceSize offset = 0;
+    for (std::uint32_t level = 0; level < mip_chain.size(); ++level) {
+        const auto& mip = mip_chain[level];
+        const VkDeviceSize face_bytes = static_cast<VkDeviceSize>(mip.width) * mip.height * 4U;
+        if (mip.pixels.size() != static_cast<std::size_t>(face_bytes * 6U)) {
+            vkUnmapMemory(device_, staging_memory);
+            release_staging();
+            log_error("Environment cubemap face/mip byte count mismatch");
+            return false;
+        }
+        std::memcpy(static_cast<std::uint8_t*>(mapped) + offset, mip.pixels.data(), mip.pixels.size());
+        for (std::uint32_t face = 0; face < 6U; ++face) {
+            VkBufferImageCopy copy{};
+            copy.bufferOffset = offset + face_bytes * face;
+            copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copy.imageSubresource.mipLevel = level;
+            copy.imageSubresource.baseArrayLayer = face;
+            copy.imageSubresource.layerCount = 1;
+            copy.imageExtent = {mip.width, mip.height, 1};
+            copies.push_back(copy);
+        }
+        offset += face_bytes * 6U;
+    }
+    vkUnmapMemory(device_, staging_memory);
+
+    VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    image.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    image.imageType = VK_IMAGE_TYPE_2D;
+    image.format = VK_FORMAT_R8G8B8A8_UNORM;
+    image.extent = {mip_chain[0].width, mip_chain[0].height, 1};
+    image.mipLevels = static_cast<std::uint32_t>(mip_chain.size());
+    image.arrayLayers = 6;
+    image.samples = VK_SAMPLE_COUNT_1_BIT;
+    image.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    result = vkCreateImage(device_, &image, nullptr, &environment_image_);
+    if (result != VK_SUCCESS) {
+        log_error("Create environment cubemap image failed", result);
+        release_staging();
+        return false;
+    }
+    VkMemoryRequirements requirements{};
+    vkGetImageMemoryRequirements(device_, environment_image_, &requirements);
+    const std::uint32_t memory_type = find_memory_type(
+        requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (memory_type == UINT32_MAX) {
+        log_error("No device-local memory for environment cubemap");
+        release_staging();
+        return false;
+    }
+    VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    allocation.allocationSize = requirements.size;
+    allocation.memoryTypeIndex = memory_type;
+    result = vkAllocateMemory(device_, &allocation, nullptr, &environment_memory_);
+    if (result == VK_SUCCESS) result = vkBindImageMemory(device_, environment_image_, environment_memory_, 0);
+    if (result != VK_SUCCESS) {
+        log_error("Allocate/bind environment cubemap memory failed", result);
+        release_staging();
+        return false;
+    }
+
+    VkCommandPool pool = VK_NULL_HANDLE;
+    VkCommandPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+    pool_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+    pool_info.queueFamilyIndex = graphics_family_;
+    result = vkCreateCommandPool(device_, &pool_info, nullptr, &pool);
+    VkCommandBuffer command = VK_NULL_HANDLE;
+    if (result == VK_SUCCESS) {
+        VkCommandBufferAllocateInfo command_info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+        command_info.commandPool = pool;
+        command_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        command_info.commandBufferCount = 1;
+        result = vkAllocateCommandBuffers(device_, &command_info, &command);
+    }
+    if (result == VK_SUCCESS) {
+        VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        result = vkBeginCommandBuffer(command, &begin);
+    }
+    if (result == VK_SUCCESS) {
+        VkImageMemoryBarrier to_transfer{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        to_transfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        to_transfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        to_transfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        to_transfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        to_transfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        to_transfer.image = environment_image_;
+        to_transfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        to_transfer.subresourceRange.levelCount = static_cast<std::uint32_t>(mip_chain.size());
+        to_transfer.subresourceRange.layerCount = 6;
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &to_transfer);
+        vkCmdCopyBufferToImage(command, staging, environment_image_,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               static_cast<std::uint32_t>(copies.size()), copies.data());
+        VkImageMemoryBarrier to_shader{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        to_shader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        to_shader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        to_shader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        to_shader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        to_shader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        to_shader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        to_shader.image = environment_image_;
+        to_shader.subresourceRange = to_transfer.subresourceRange;
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                             0, nullptr, 0, nullptr, 1, &to_shader);
+        result = vkEndCommandBuffer(command);
+    }
+    if (result == VK_SUCCESS) {
+        VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+        submit.commandBufferCount = 1;
+        submit.pCommandBuffers = &command;
+        result = vkQueueSubmit(graphics_queue_, 1, &submit, VK_NULL_HANDLE);
+        if (result == VK_SUCCESS) result = vkQueueWaitIdle(graphics_queue_);
+    }
+    if (pool) vkDestroyCommandPool(device_, pool, nullptr);
+    release_staging();
+    if (result != VK_SUCCESS) {
+        log_error("Upload environment cubemap faces/mips failed", result);
+        return false;
+    }
+
+    VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    view.image = environment_image_;
+    view.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+    view.format = VK_FORMAT_R8G8B8A8_UNORM;
+    view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    view.subresourceRange.levelCount = static_cast<std::uint32_t>(mip_chain.size());
+    view.subresourceRange.layerCount = 6;
+    result = vkCreateImageView(device_, &view, nullptr, &environment_view_);
+    if (result != VK_SUCCESS) {
+        log_error("Create environment cubemap view failed", result);
+        return false;
+    }
+    VkSamplerCreateInfo sampler{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    sampler.magFilter = linear_filter ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+    sampler.minFilter = linear_filter ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+    sampler.mipmapMode = linear_filter ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sampler.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sampler.maxLod = static_cast<float>(mip_chain.size() - 1U);
+    result = vkCreateSampler(device_, &sampler, nullptr, &environment_sampler_);
+    if (result != VK_SUCCESS) {
+        log_error("Create environment cubemap sampler failed", result);
+        return false;
+    }
+    environment_mip_levels_ = static_cast<std::uint32_t>(mip_chain.size());
+    arut_android_log(ANDROID_LOG_INFO, "Procedural sky/ground environment cubemap uploaded with roughness mips.");
     return true;
 }
 
@@ -1754,7 +1947,7 @@ bool AndroidRenderer::recreate_swapchain() noexcept {
     destroy_swapchain();
     return create_swapchain() && create_render_targets() && create_triangle_geometry() &&
            create_triangle_pipeline() && create_pbr_geometry() && create_fallback_texture() &&
-           create_pbr_pipeline() && create_shadow_resources() && create_shadow_pipeline() &&
+           create_environment_cubemap() && create_pbr_pipeline() && create_shadow_resources() && create_shadow_pipeline() &&
            create_pbr_descriptors() && create_commands_and_sync();
 }
 
