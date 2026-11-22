@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <android/asset_manager.h>
 #include "arut/rendering/mesh.hpp"
+#include "arut/rendering/image.hpp"
 
 extern "C" void arut_android_log(int priority, const char* message) noexcept;
 
@@ -575,60 +576,131 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
     return true;
 }
 
-bool AndroidRenderer::create_fallback_texture() noexcept {
-    VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-    image.imageType = VK_IMAGE_TYPE_2D;
-    image.format = VK_FORMAT_R8G8B8A8_UNORM;
-    image.extent = {1, 1, 1};
-    image.mipLevels = 1;
-    image.arrayLayers = 1;
-    image.samples = VK_SAMPLE_COUNT_1_BIT;
-    image.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    VkResult result = vkCreateImage(device_, &image, nullptr, &fallback_image_);
-    if (result != VK_SUCCESS) { log_error("Create fallback texture image failed", result); return false; }
-    VkMemoryRequirements requirements{};
-    vkGetImageMemoryRequirements(device_, fallback_image_, &requirements);
-    const std::uint32_t memory_type = find_memory_type(requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    if (memory_type == UINT32_MAX) { log_error("No device-local memory for fallback texture"); return false; }
-    VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
-    allocation.allocationSize = requirements.size;
-    allocation.memoryTypeIndex = memory_type;
-    result = vkAllocateMemory(device_, &allocation, nullptr, &fallback_memory_);
-    if (result != VK_SUCCESS) { log_error("Allocate fallback texture memory failed", result); return false; }
-    result = vkBindImageMemory(device_, fallback_image_, fallback_memory_, 0);
-    if (result != VK_SUCCESS) { log_error("Bind fallback texture memory failed", result); return false; }
+bool AndroidRenderer::upload_texture_rgba8(
+    const arut::rendering::Rgba8Image& pixels, VkFormat format, bool source_is_srgb,
+    VkImage& image, VkDeviceMemory& memory, VkImageView& view, VkSampler& sampler,
+    std::uint32_t& mip_levels) noexcept {
+    if (!pixels.valid()) return false;
+    VkFormatProperties format_properties{};
+    vkGetPhysicalDeviceFormatProperties(physical_device_, format, &format_properties);
+    if ((format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) == 0U) {
+        log_error("Texture format does not support optimal sampled images");
+        return false;
+    }
+
+    std::vector<arut::rendering::Rgba8Mip> mip_chain;
+    if (!arut::rendering::build_rgba8_mip_chain(pixels, source_is_srgb, mip_chain)) {
+        log_error("CPU mip-chain generation failed");
+        return false;
+    }
+    VkDeviceSize staging_size = 0;
+    for (const auto& level : mip_chain) {
+        const VkDeviceSize bytes = static_cast<VkDeviceSize>(level.pixels.size());
+        if (bytes > std::numeric_limits<VkDeviceSize>::max() - staging_size) return false;
+        staging_size += bytes;
+    }
+    if (staging_size == 0 || mip_chain.size() > std::numeric_limits<std::uint32_t>::max()) return false;
 
     VkBuffer staging = VK_NULL_HANDLE;
     VkDeviceMemory staging_memory = VK_NULL_HANDLE;
-    if (!create_buffer(4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, staging, staging_memory)) return false;
-    const std::array<std::uint8_t, 4> white{255, 255, 255, 255};
-    void* mapped = nullptr;
-    result = vkMapMemory(device_, staging_memory, 0, 4, 0, &mapped);
-    if (result != VK_SUCCESS || !mapped) {
-        vkDestroyBuffer(device_, staging, nullptr); vkFreeMemory(device_, staging_memory, nullptr);
-        log_error("Map fallback texture staging buffer failed", result); return false;
+    auto release_staging = [&]() {
+        if (staging) vkDestroyBuffer(device_, staging, nullptr);
+        if (staging_memory) vkFreeMemory(device_, staging_memory, nullptr);
+        staging = VK_NULL_HANDLE;
+        staging_memory = VK_NULL_HANDLE;
+    };
+    if (!create_buffer(staging_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, staging, staging_memory)) {
+        release_staging();
+        return false;
     }
-    std::memcpy(mapped, white.data(), white.size());
+    void* mapped = nullptr;
+    VkResult result = vkMapMemory(device_, staging_memory, 0, staging_size, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map texture staging buffer failed", result);
+        release_staging();
+        return false;
+    }
+    std::vector<VkBufferImageCopy> copies;
+    copies.reserve(mip_chain.size());
+    VkDeviceSize offset = 0;
+    for (std::uint32_t level = 0; level < mip_chain.size(); ++level) {
+        const auto& mip = mip_chain[level];
+        std::memcpy(static_cast<std::uint8_t*>(mapped) + offset,
+                    mip.pixels.data(), mip.pixels.size());
+        VkBufferImageCopy copy{};
+        copy.bufferOffset = offset;
+        copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copy.imageSubresource.mipLevel = level;
+        copy.imageSubresource.layerCount = 1;
+        copy.imageExtent = {mip.width, mip.height, 1};
+        copies.push_back(copy);
+        offset += static_cast<VkDeviceSize>(mip.pixels.size());
+    }
     vkUnmapMemory(device_, staging_memory);
+
+    VkImageCreateInfo image_info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    image_info.imageType = VK_IMAGE_TYPE_2D;
+    image_info.format = format;
+    image_info.extent = {pixels.width, pixels.height, 1};
+    image_info.mipLevels = static_cast<std::uint32_t>(mip_chain.size());
+    image_info.arrayLayers = 1;
+    image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    result = vkCreateImage(device_, &image_info, nullptr, &image);
+    if (result != VK_SUCCESS) {
+        log_error("Create sampled texture image failed", result);
+        release_staging();
+        return false;
+    }
+    auto release_texture = [&]() {
+        if (sampler) vkDestroySampler(device_, sampler, nullptr);
+        if (view) vkDestroyImageView(device_, view, nullptr);
+        if (image) vkDestroyImage(device_, image, nullptr);
+        if (memory) vkFreeMemory(device_, memory, nullptr);
+        sampler = VK_NULL_HANDLE;
+        view = VK_NULL_HANDLE;
+        image = VK_NULL_HANDLE;
+        memory = VK_NULL_HANDLE;
+        mip_levels = 0;
+    };
+    VkMemoryRequirements requirements{};
+    vkGetImageMemoryRequirements(device_, image, &requirements);
+    const std::uint32_t memory_type = find_memory_type(
+        requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (memory_type == UINT32_MAX) {
+        log_error("No device-local memory for sampled texture");
+        release_texture();
+        release_staging();
+        return false;
+    }
+    VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    allocation.allocationSize = requirements.size;
+    allocation.memoryTypeIndex = memory_type;
+    result = vkAllocateMemory(device_, &allocation, nullptr, &memory);
+    if (result == VK_SUCCESS) result = vkBindImageMemory(device_, image, memory, 0);
+    if (result != VK_SUCCESS) {
+        log_error("Allocate/bind sampled texture memory failed", result);
+        release_texture();
+        release_staging();
+        return false;
+    }
 
     VkCommandPool pool = VK_NULL_HANDLE;
     VkCommandPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     pool_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
     pool_info.queueFamilyIndex = graphics_family_;
     result = vkCreateCommandPool(device_, &pool_info, nullptr, &pool);
-    if (result != VK_SUCCESS) {
-        vkDestroyBuffer(device_, staging, nullptr); vkFreeMemory(device_, staging_memory, nullptr);
-        log_error("Create texture upload command pool failed", result); return false;
-    }
     VkCommandBuffer command = VK_NULL_HANDLE;
-    VkCommandBufferAllocateInfo command_info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-    command_info.commandPool = pool;
-    command_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    command_info.commandBufferCount = 1;
-    result = vkAllocateCommandBuffers(device_, &command_info, &command);
+    if (result == VK_SUCCESS) {
+        VkCommandBufferAllocateInfo command_info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+        command_info.commandPool = pool;
+        command_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        command_info.commandBufferCount = 1;
+        result = vkAllocateCommandBuffers(device_, &command_info, &command);
+    }
     if (result == VK_SUCCESS) {
         VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -641,17 +713,15 @@ bool AndroidRenderer::create_fallback_texture() noexcept {
         to_transfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         to_transfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         to_transfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        to_transfer.image = fallback_image_;
+        to_transfer.image = image;
         to_transfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        to_transfer.subresourceRange.levelCount = 1;
+        to_transfer.subresourceRange.levelCount = static_cast<std::uint32_t>(mip_chain.size());
         to_transfer.subresourceRange.layerCount = 1;
-        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                             0, 0, nullptr, 0, nullptr, 1, &to_transfer);
-        VkBufferImageCopy copy{};
-        copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copy.imageSubresource.layerCount = 1;
-        copy.imageExtent = {1, 1, 1};
-        vkCmdCopyBufferToImage(command, staging, fallback_image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                             0, nullptr, 0, nullptr, 1, &to_transfer);
+        vkCmdCopyBufferToImage(command, staging, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               static_cast<std::uint32_t>(copies.size()), copies.data());
         VkImageMemoryBarrier to_shader{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
         to_shader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         to_shader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -659,7 +729,7 @@ bool AndroidRenderer::create_fallback_texture() noexcept {
         to_shader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         to_shader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         to_shader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        to_shader.image = fallback_image_;
+        to_shader.image = image;
         to_shader.subresourceRange = to_transfer.subresourceRange;
         vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
                              VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
@@ -673,31 +743,91 @@ bool AndroidRenderer::create_fallback_texture() noexcept {
         result = vkQueueSubmit(graphics_queue_, 1, &submit, VK_NULL_HANDLE);
         if (result == VK_SUCCESS) result = vkQueueWaitIdle(graphics_queue_);
     }
-    vkDestroyCommandPool(device_, pool, nullptr);
-    vkDestroyBuffer(device_, staging, nullptr);
-    vkFreeMemory(device_, staging_memory, nullptr);
-    if (result != VK_SUCCESS) { log_error("Upload fallback texture failed", result); return false; }
+    if (pool) vkDestroyCommandPool(device_, pool, nullptr);
+    release_staging();
+    if (result != VK_SUCCESS) {
+        log_error("Upload sampled texture mip chain failed", result);
+        release_texture();
+        return false;
+    }
 
-    VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-    view.image = fallback_image_;
-    view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    view.format = VK_FORMAT_R8G8B8A8_UNORM;
-    view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    view.subresourceRange.levelCount = 1;
-    view.subresourceRange.layerCount = 1;
-    result = vkCreateImageView(device_, &view, nullptr, &fallback_view_);
-    if (result != VK_SUCCESS) { log_error("Create fallback texture view failed", result); return false; }
-    VkSamplerCreateInfo sampler{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
-    sampler.magFilter = VK_FILTER_LINEAR;
-    sampler.minFilter = VK_FILTER_LINEAR;
-    sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    sampler.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    sampler.maxLod = 0.0F;
-    result = vkCreateSampler(device_, &sampler, nullptr, &fallback_sampler_);
-    if (result != VK_SUCCESS) { log_error("Create fallback texture sampler failed", result); return false; }
+    VkImageViewCreateInfo view_info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    view_info.image = image;
+    view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view_info.format = format;
+    view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    view_info.subresourceRange.levelCount = static_cast<std::uint32_t>(mip_chain.size());
+    view_info.subresourceRange.layerCount = 1;
+    result = vkCreateImageView(device_, &view_info, nullptr, &view);
+    if (result != VK_SUCCESS) {
+        log_error("Create sampled texture view failed", result);
+        release_texture();
+        return false;
+    }
+
+    const bool linear_filter =
+        (format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0U;
+    VkSamplerCreateInfo sampler_info{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    sampler_info.magFilter = linear_filter ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+    sampler_info.minFilter = linear_filter ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+    sampler_info.mipmapMode = linear_filter ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler_info.maxLod = static_cast<float>(mip_chain.size() - 1U);
+    result = vkCreateSampler(device_, &sampler_info, nullptr, &sampler);
+    if (result != VK_SUCCESS) {
+        log_error("Create sampled texture sampler failed", result);
+        release_texture();
+        return false;
+    }
+    mip_levels = static_cast<std::uint32_t>(mip_chain.size());
     return true;
+}
+
+bool AndroidRenderer::load_texture_asset(
+    const char* path, VkFormat format, bool source_is_srgb,
+    VkImage& image, VkDeviceMemory& memory, VkImageView& view, VkSampler& sampler,
+    std::uint32_t& mip_levels) noexcept {
+    if (!assets_ || !path || !*path) return false;
+    AAsset* asset = AAssetManager_open(assets_, path, AASSET_MODE_BUFFER);
+    if (!asset) {
+        char message[256]{};
+        std::snprintf(message, sizeof(message), "Texture asset not found: %s", path);
+        log_error(message);
+        return false;
+    }
+    const off_t length = AAsset_getLength(asset);
+    if (length <= 0 || static_cast<std::uint64_t>(length) > 64ULL * 1024ULL * 1024ULL) {
+        AAsset_close(asset);
+        log_error("Texture asset has invalid or excessive size");
+        return false;
+    }
+    std::vector<std::uint8_t> encoded(static_cast<std::size_t>(length));
+    const int read = AAsset_read(asset, encoded.data(), encoded.size());
+    AAsset_close(asset);
+    if (read != length) {
+        log_error("Texture asset read was incomplete");
+        return false;
+    }
+    arut::rendering::Rgba8Image decoded{};
+    const auto decoded_result = arut::rendering::decode_image_rgba8(encoded, decoded);
+    if (!decoded_result) {
+        log_error("Texture image decode failed (unsupported, corrupt or over budget)");
+        return false;
+    }
+    return upload_texture_rgba8(decoded, format, source_is_srgb,
+                                image, memory, view, sampler, mip_levels);
+}
+
+bool AndroidRenderer::create_fallback_texture() noexcept {
+    arut::rendering::Rgba8Image white{};
+    white.width = 1;
+    white.height = 1;
+    white.pixels = {255U, 255U, 255U, 255U};
+    return upload_texture_rgba8(white, VK_FORMAT_R8G8B8A8_UNORM, false,
+                               fallback_image_, fallback_memory_, fallback_view_,
+                               fallback_sampler_, fallback_mip_levels_);
 }
 
 bool AndroidRenderer::create_pbr_pipeline() noexcept {
