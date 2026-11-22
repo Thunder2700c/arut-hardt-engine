@@ -30,7 +30,9 @@ layout(set = 0, binding = 2, std430) buffer DrawArguments {
 layout(push_constant, std430) uniform VisibilityPushConstants {
     vec4 frustumPlanes[6];
     uint instanceCount;
-    uvec3 padding;
+    uint padding0;
+    uint padding1;
+    uint padding2;
 } pushData;
 
 void main() {
