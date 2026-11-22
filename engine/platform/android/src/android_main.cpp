@@ -59,7 +59,7 @@ void write_log(int priority, const char* level, const char* format, va_list args
  localtime_r(&now.tv_sec, &local);
  char timestamp[40]{};
  std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S", &local);
- std::fprintf(g_log_file, "%s.%03ld %s %s\\n", timestamp, now.tv_nsec / 1000000L, level, message);
+ std::fprintf(g_log_file, "%s.%03ld %s %s\n", timestamp, now.tv_nsec / 1000000L, level, message);
  std::fflush(g_log_file);
  const long position = std::ftell(g_log_file);
  if (position > kMaxLogBytes) {
@@ -83,7 +83,7 @@ void log_message(int priority, const char* level, const char* message) {
  localtime_r(&now.tv_sec, &local);
  char timestamp[40]{};
  std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S", &local);
- std::fprintf(g_log_file, "%s.%03ld %s %s\\n", timestamp, now.tv_nsec / 1000000L, level, message ? message : "");
+ std::fprintf(g_log_file, "%s.%03ld %s %s\n", timestamp, now.tv_nsec / 1000000L, level, message ? message : "");
  std::fflush(g_log_file);
  const long position = std::ftell(g_log_file);
  if (position > kMaxLogBytes) {
