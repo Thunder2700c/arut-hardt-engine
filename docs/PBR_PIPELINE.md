@@ -18,7 +18,8 @@ The forward shader uses linear-light material and lighting inputs, tangent-space
 The shader interface is currently an engine-internal prototype, not a stable external material asset format.
 
 ## Texture pipeline
-- stb_image v2.34 is pinned under third_party/stb; the decoder enables PNG, JPEG, BMP and TGA input and normalizes to RGBA8.
+- stb_image v2.34 is pinned under third_party/stb; LDR PNG, JPEG, BMP and TGA decode to RGBA8, while Radiance RGBE HDR decodes to linear RGBA32F and preserves values above 1.0.
+- HDR decode is bounded to the same 8192-pixel side and 16-million-pixel limits; malformed, non-finite and negative decoded values are rejected.
 - Decode is bounded to 8192 pixels per side and 16 million total pixels; a texture asset larger than 64 MiB is rejected before decoding.
 - CPU mip generation filters sRGB colour channels in linear light and treats alpha as linear.
 - Vulkan uploads mip levels through a staging buffer, transitions to shader-read layout, creates a view and a sampler.
@@ -55,7 +56,7 @@ The runtime profile snapshot now includes CPU frame time, separate GPU visibilit
 
 ## Remaining integration work
 1. Add a material asset/cache/handle layer and asynchronous decode/upload queues.
-2. Add HDR environment import, GPU probe storage/sampling and runtime probe blending.
+2. Convert decoded equirectangular HDR images into HDR cubemaps, add RGBA16F GPU upload, probe storage/sampling and runtime probe blending.
 3. Add cascade stabilization, split blending and local-light shadows.
 4. Add GPU/indirect visibility, GPU-memory accounting and per-pass profiling.
 5. During the separately agreed testing stage, compare GPU output with the CPU BRDF reference on two Android GPU families.
