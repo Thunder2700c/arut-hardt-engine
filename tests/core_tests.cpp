@@ -338,5 +338,18 @@ int main() {
     assert(!arut::rendering::evaluate_environment_probe_weights(
         overlapping_probes, std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F, probe_weights));
     assert(probe_weights.empty());
+    arut::rendering::EnvironmentProbeGpuData gpu_probe_data{};
+    assert(arut::rendering::build_environment_probe_gpu_data(
+        overlapping_probes, gpu_probe_data));
+    assert(gpu_probe_data.metadata[0] == 2U);
+    assert(near(gpu_probe_data.bounds_min_blend[0][0], -2.0F));
+    assert(near(gpu_probe_data.bounds_min_blend[0][3], 4.0F));
+    assert(gpu_probe_data.priorities[1] == 1);
+    auto invalid_probe = overlapping_probes[0];
+    invalid_probe.blend_distance = -1.0F;
+    assert(!arut::rendering::build_environment_probe_gpu_data(
+        std::span<const arut::rendering::EnvironmentProbeInfluence>(&invalid_probe, 1U),
+        gpu_probe_data));
+    assert(gpu_probe_data.metadata[0] == 0U);
     return 0;
 }
