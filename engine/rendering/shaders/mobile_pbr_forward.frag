@@ -23,6 +23,14 @@ layout(set = 0, binding = 1) uniform sampler2DArrayShadow directionalShadowMap;
 layout(set = 0, binding = 2) uniform samplerCube environmentMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfIntegrationLut;
 layout(set = 0, binding = 4) uniform samplerCube diffuseIrradianceMap;
+layout(set = 0, binding = 5) uniform samplerCube environmentProbeSpecular[4];
+layout(set = 0, binding = 6) uniform samplerCube environmentProbeDiffuse[4];
+layout(set = 0, binding = 7, std140) uniform EnvironmentProbeData {
+    vec4 probeMinBlend[4];
+    vec4 probeMax[4];
+    ivec4 probePriorities;
+    uvec4 probeMetadata; // x = active probe count
+} probeData;
 
 layout(set = 1, binding = 0, std140) uniform MaterialData {
     vec4 baseColorFactor;
@@ -103,6 +111,41 @@ float directionalShadowVisibility(vec3 normal, vec3 lightDirection) {
     return visibility;
 }
 
+float environmentProbeInfluence(int index, vec3 worldPosition) {
+    vec3 outsideDistance = max(max(
+        probeData.probeMinBlend[index].xyz - worldPosition,
+        worldPosition - probeData.probeMax[index].xyz), vec3(0.0));
+    float distanceOutside = length(outsideDistance);
+    if (distanceOutside <= 0.0) return 1.0;
+    float blendDistance = probeData.probeMinBlend[index].w;
+    if (blendDistance <= 0.0 || distanceOutside >= blendDistance) return 0.0;
+    float t = 1.0 - distanceOutside / blendDistance;
+    return t * t * (3.0 - 2.0 * t);
+}
+
+vec4 selectEnvironmentProbeWeights(vec3 worldPosition) {
+    float rawWeights[4] = float[4](0.0, 0.0, 0.0, 0.0);
+    int highestPriority = -2147483647;
+    int activeCount = min(int(probeData.probeMetadata.x), 4);
+    for (int i = 0; i < 4; ++i) {
+        if (i < activeCount) {
+            rawWeights[i] = environmentProbeInfluence(i, worldPosition);
+            if (rawWeights[i] > 0.0)
+                highestPriority = max(highestPriority, probeData.probePriorities[i]);
+        }
+    }
+    vec4 weights = vec4(0.0);
+    float total = 0.0;
+    for (int i = 0; i < 4; ++i) {
+        if (i < activeCount && rawWeights[i] > 0.0 &&
+            probeData.probePriorities[i] == highestPriority) {
+            weights[i] = rawWeights[i];
+            total += rawWeights[i];
+        }
+    }
+    return total > 0.0 ? weights / total : vec4(0.0);
+}
+
 vec3 acesToneMap(vec3 color) {
     color = max(color, vec3(0.0));
     return clamp((color * (2.51 * color + 0.03)) /
@@ -151,10 +194,27 @@ void main() {
     // Diffuse IBL uses a cosine-convolved irradiance cubemap. Specular IBL
     // uses GGX-prefiltered environment mips and a split-sum BRDF integration LUT.
     float environmentMaxLod = float(max(textureQueryLevels(environmentMap) - 1, 0));
-    vec3 diffuseIrradiance = texture(diffuseIrradianceMap, n).rgb;
     vec3 reflectionDirection = reflect(-v, n);
-    vec3 prefilteredEnvironment = textureLod(
-        environmentMap, reflectionDirection, roughness * environmentMaxLod).rgb;
+    vec4 probeWeights = selectEnvironmentProbeWeights(inWorldPosition);
+    vec3 diffuseIrradiance;
+    vec3 prefilteredEnvironment;
+    if (dot(probeWeights, vec4(1.0)) > 0.0) {
+        // Fixed sampler indices avoid requiring descriptor-indexing extensions on mobile Vulkan.
+        diffuseIrradiance =
+            texture(environmentProbeDiffuse[0], n).rgb * probeWeights.x +
+            texture(environmentProbeDiffuse[1], n).rgb * probeWeights.y +
+            texture(environmentProbeDiffuse[2], n).rgb * probeWeights.z +
+            texture(environmentProbeDiffuse[3], n).rgb * probeWeights.w;
+        prefilteredEnvironment =
+            textureLod(environmentProbeSpecular[0], reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.x +
+            textureLod(environmentProbeSpecular[1], reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.y +
+            textureLod(environmentProbeSpecular[2], reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.z +
+            textureLod(environmentProbeSpecular[3], reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.w;
+    } else {
+        diffuseIrradiance = texture(diffuseIrradianceMap, n).rgb;
+        prefilteredEnvironment = textureLod(
+            environmentMap, reflectionDirection, roughness * environmentMaxLod).rgb;
+    }
     vec3 fresnelRoughness = f0 + (max(vec3(1.0 - roughness), f0) - f0) *
                             pow(1.0 - nDotV, 5.0);
     vec3 diffuseEnvironment = diffuseIrradiance * base.rgb *
