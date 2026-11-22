@@ -1,5 +1,9 @@
 name: Android ARM64 (explicit build only)
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/phase3-apk-test.trigger"
   workflow_dispatch:
     inputs:
       build_apk:
@@ -13,7 +17,7 @@ permissions:
 
 jobs:
   android-arm64:
-    if: inputs.build_apk == true
+    if: github.event_name == 'push' || inputs.build_apk == true
     name: Build native Android ARM64 APK
     runs-on: ubuntu-latest
     steps:
