@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <typeindex>
 #include <type_traits>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -166,6 +167,40 @@ public:
         if (!alive(entity)) return false;
         auto* storage = find_pool<T>();
         return storage && storage->remove(entity);
+    }
+
+    // Visit entities owning every requested component. A snapshot of the first pool's
+    // handles allows the callback to alter component membership without invalidating iteration.
+    template <typename... Components, typename Function>
+    std::size_t each(Function&& function) {
+        static_assert(sizeof...(Components) > 0U, "World::each requires at least one component type");
+        using First = std::tuple_element_t<0, std::tuple<Components...>>;
+        auto* first_pool = find_pool<First>();
+        if (!first_pool) return 0U;
+        const auto handles = first_pool->entities;
+        std::size_t visited = 0U;
+        for (const Entity entity : handles) {
+            if (!alive(entity) || !(has<Components>(entity) && ...)) continue;
+            function(entity, get<Components>(entity)...);
+            ++visited;
+        }
+        return visited;
+    }
+
+    template <typename... Components, typename Function>
+    std::size_t each(Function&& function) const {
+        static_assert(sizeof...(Components) > 0U, "World::each requires at least one component type");
+        using First = std::tuple_element_t<0, std::tuple<Components...>>;
+        const auto* first_pool = find_pool<First>();
+        if (!first_pool) return 0U;
+        const auto handles = first_pool->entities;
+        std::size_t visited = 0U;
+        for (const Entity entity : handles) {
+            if (!alive(entity) || !(has<Components>(entity) && ...)) continue;
+            function(entity, get<Components>(entity)...);
+            ++visited;
+        }
+        return visited;
     }
 
     [[nodiscard]] std::uint32_t entity_count() const noexcept { return alive_count_; }
