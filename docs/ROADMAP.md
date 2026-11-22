@@ -70,6 +70,7 @@ Exit gate: Android renders a textured 3D scene with validation and frame/GPU tim
 - [x] Add a CPU split-sum GGX BRDF integration LUT baker, upload it as a sampled Vulkan texture and use it in the PBR specular environment response.
 - [x] Add a separately convolved diffuse irradiance cubemap using cosine-weighted hemisphere sampling.
 - [x] Add a tested CPU environment-probe influence contract with smooth AABB edge fades, normalized overlap weights and priority resolution.
+- [x] Upload a four-slot std140 probe payload and integrate GPU-side AABB/priority weight evaluation plus fixed per-probe specular/diffuse bindings; current slots alias the global fallback until independent probe assets are registered.
 - [x] Decode bounded Radiance RGBE images to linear RGBA32F and convert equirectangular HDR radiance into a seam-wrapped six-face RGBA32F cubemap.
 - [x] Add HDR float GGX specular prefiltering and cosine-convolved diffuse irradiance; convert the results to validated RGBA16F and support Vulkan cubemap upload with an RGBA8 procedural fallback.
 - [x] Add optional Android loading of `environments/default.hdr` and connect the HDR import/convolution/upload path to the active PBR descriptors.
