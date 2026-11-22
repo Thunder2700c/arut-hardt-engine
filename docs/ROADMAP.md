@@ -70,12 +70,11 @@ Exit gate: Android renders a textured 3D scene with validation and frame/GPU tim
 - [x] Add a CPU split-sum GGX BRDF integration LUT baker, upload it as a sampled Vulkan texture and use it in the PBR specular environment response.
 - [x] Add a separately convolved diffuse irradiance cubemap using cosine-weighted hemisphere sampling.
 - [x] Add a tested CPU environment-probe influence contract with smooth AABB edge fades, normalized overlap weights and priority resolution.
-- [x] Upload a four-slot std140 probe uniform buffer and integrate GPU-side AABB/priority selection plus weighted specular/diffuse cubemap blending using fixed-index descriptor arrays; current slots alias the global fallback until independent probe assets are registered.
 - [x] Decode bounded Radiance RGBE images to linear RGBA32F and convert equirectangular HDR radiance into a seam-wrapped six-face RGBA32F cubemap.
 - [x] Add HDR float GGX specular prefiltering and cosine-convolved diffuse irradiance; convert the results to validated RGBA16F and support Vulkan cubemap upload with an RGBA8 procedural fallback.
 - [x] Add optional Android loading of `environments/default.hdr` and connect the HDR import/convolution/upload path to the active PBR descriptors.
-- [x] Add a four-slot GPU probe uniform buffer, priority-aware AABB selection and weighted specular/diffuse cubemap blending in the mobile PBR shader, plus optional per-slot HDR probe asset loading with global-environment fallback.
-- [ ] Add scene/runtime probe registration and per-object probe selection; validate distinct probe assets and blended output on device.
+- [x] Add a four-slot GPU probe uniform buffer, priority-aware world-position AABB selection, weighted specular/diffuse cubemap blending, runtime probe registration, and optional per-slot HDR probe asset loading with global-environment fallback.
+- [ ] Validate distinct probe assets and blended output on physical devices.
 - [x] Connect profile snapshots to CPU frame time, separate GPU visibility/shadow/full-frame timestamp intervals, draw calls, visible objects and triangle counts.
 - [x] Track persistent renderer-owned Vulkan buffer/image allocation sizes in runtime profiling logs.
 - [x] Add optional VK_EXT_memory_budget device-local heap usage/budget queries and separate visibility, shadow and main-scene GPU timestamp intervals.
