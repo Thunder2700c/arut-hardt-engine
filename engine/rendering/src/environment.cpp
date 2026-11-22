@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -41,6 +42,46 @@ struct Vec3 final { float x, y, z; };
         case 4: return normalize({s, -t, 1.0F});
         default: return normalize({-s, -t, -1.0F});
     }
+}
+
+
+[[nodiscard]] bool float_to_binary16(float value, std::uint16_t& output) noexcept {
+    if (!std::isfinite(value) || value < 0.0F || value > 65504.0F) return false;
+    const std::uint32_t bits = std::bit_cast<std::uint32_t>(value);
+    const std::uint32_t exponent_bits = (bits >> 23U) & 0xffU;
+    std::uint32_t mantissa = bits & 0x7fffffU;
+    int exponent = static_cast<int>(exponent_bits) - 127 + 15;
+    if (exponent <= 0) {
+        if (exponent < -10) {
+            output = 0U;
+            return true;
+        }
+        mantissa |= 0x800000U;
+        const std::uint32_t shift = static_cast<std::uint32_t>(14 - exponent);
+        std::uint32_t rounded = mantissa >> shift;
+        const std::uint32_t remainder = mantissa & ((1U << shift) - 1U);
+        const std::uint32_t halfway = 1U << (shift - 1U);
+        if (remainder > halfway || (remainder == halfway && (rounded & 1U) != 0U))
+            ++rounded;
+        output = static_cast<std::uint16_t>(rounded);
+        return true;
+    }
+    if (exponent >= 31) {
+        output = 0x7bffU;
+        return true;
+    }
+    std::uint32_t rounded = mantissa + 0x0fffU + ((mantissa >> 13U) & 1U);
+    if ((rounded & 0x800000U) != 0U) {
+        rounded = 0U;
+        ++exponent;
+        if (exponent >= 31) {
+            output = 0x7bffU;
+            return true;
+        }
+    }
+    output = static_cast<std::uint16_t>(
+        (static_cast<std::uint32_t>(exponent) << 10U) | (rounded >> 13U));
+    return true;
 }
 
 [[nodiscard]] std::uint8_t to_byte(float value) noexcept {
@@ -269,6 +310,31 @@ bool build_environment_cube_from_equirectangular(
     }
     return output.width == cube_size && output.height == cube_size &&
            output.pixels.size() == static_cast<std::size_t>(cube_size) * cube_size * 6U * 4U;
+}
+
+
+
+bool convert_environment_cube_to_rgba16f(
+    const EnvironmentCubeF32Mip& source, EnvironmentCubeF16Mip& output) noexcept {
+    output = {};
+    if (source.width == 0U || source.height != source.width || source.width > 512U ||
+        source.pixels.size() != static_cast<std::size_t>(source.width) *
+                               source.height * 6U * 4U) return false;
+    try {
+        output.width = source.width;
+        output.height = source.height;
+        output.pixels.resize(source.pixels.size());
+        for (std::size_t i = 0; i < source.pixels.size(); ++i) {
+            if (!float_to_binary16(source.pixels[i], output.pixels[i])) {
+                output = {};
+                return false;
+            }
+        }
+    } catch (...) {
+        output = {};
+        return false;
+    }
+    return output.pixels.size() == source.pixels.size();
 }
 
 
