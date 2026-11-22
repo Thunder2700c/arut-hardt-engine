@@ -49,8 +49,10 @@ struct AssetCacheStats final {
 // the manager owns normalized names, size limits and cache lifetime.
 class AssetManager final {
 public:
+    static constexpr std::size_t default_max_asset_bytes = 64U * 1024U * 1024U;
+
     explicit AssetManager(std::shared_ptr<const AssetSource> source,
-                          std::size_t max_asset_bytes = 64U * 1024U * 1024U)
+                          std::size_t max_asset_bytes = default_max_asset_bytes)
         : source_(std::move(source)), max_asset_bytes_(max_asset_bytes) {}
 
     [[nodiscard]] AssetLoadResult load(std::string_view path) {
