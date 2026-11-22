@@ -1515,6 +1515,36 @@ bool AndroidRenderer::draw_frame() noexcept {
         vkCmdWriteTimestamp(command_buffers_[image_index], VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                              timestamp_query_pool_, 0);
     }
+    if (shadow_enabled_) {
+        VkClearValue shadow_clear{};
+        shadow_clear.depthStencil = {1.0F, 0};
+        VkRenderPassBeginInfo shadow_pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        shadow_pass.renderPass = shadow_render_pass_;
+        shadow_pass.framebuffer = shadow_framebuffer_;
+        shadow_pass.renderArea.extent = shadow_extent_;
+        shadow_pass.clearValueCount = 1;
+        shadow_pass.pClearValues = &shadow_clear;
+        vkCmdBeginRenderPass(command_buffers_[image_index], &shadow_pass, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(command_buffers_[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_pipeline_);
+        vkCmdBindDescriptorSets(command_buffers_[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                pbr_pipeline_layout_, 0, 1, &frame_descriptor_set_, 0, nullptr);
+        VkViewport shadow_viewport{};
+        shadow_viewport.width = static_cast<float>(shadow_extent_.width);
+        shadow_viewport.height = static_cast<float>(shadow_extent_.height);
+        shadow_viewport.minDepth = 0.0F;
+        shadow_viewport.maxDepth = 1.0F;
+        VkRect2D shadow_scissor{{0, 0}, shadow_extent_};
+        vkCmdSetViewport(command_buffers_[image_index], 0, 1, &shadow_viewport);
+        vkCmdSetScissor(command_buffers_[image_index], 0, 1, &shadow_scissor);
+        const std::array<VkBuffer, 2> shadow_vertex_buffers{cube_vertex_buffer_, instance_buffer_};
+        const std::array<VkDeviceSize, 2> shadow_vertex_offsets{0, 0};
+        vkCmdBindVertexBuffers(command_buffers_[image_index], 0,
+                               static_cast<std::uint32_t>(shadow_vertex_buffers.size()),
+                               shadow_vertex_buffers.data(), shadow_vertex_offsets.data());
+        vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(command_buffers_[image_index], cube_index_count_, instance_count_, 0, 0, 0);
+        vkCmdEndRenderPass(command_buffers_[image_index]);
+    }
     std::array<VkClearValue, 2> clears{};
     clears[0].color = {{0.025F, 0.045F, 0.075F, 1.0F}};
     clears[1].depthStencil = {1.0F, 0};
