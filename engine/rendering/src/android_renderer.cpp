@@ -11,6 +11,7 @@
 #include <vector>
 #include <cstddef>
 #include <cstdint>
+#include <chrono>
 #include <android/asset_manager.h>
 #include "arut/rendering/mesh.hpp"
 #include "arut/rendering/image.hpp"
@@ -112,6 +113,10 @@ bool AndroidRenderer::select_device() noexcept {
             present_family_ = present;
             VkPhysicalDeviceProperties properties{};
             vkGetPhysicalDeviceProperties(candidate, &properties);
+            timestamp_valid_bits_ = families[graphics].timestampValidBits;
+            timestamp_period_ns_ = static_cast<double>(properties.limits.timestampPeriod);
+            timestamp_queries_available_ = properties.limits.timestampComputeAndGraphics == VK_TRUE &&
+                                           timestamp_valid_bits_ > 0U && timestamp_period_ns_ > 0.0;
             char gpu_message[512]{}; std::snprintf(gpu_message, sizeof(gpu_message), "Selected Vulkan GPU: %s vendor=0x%04x device=0x%04x api=%u.%u.%u driver=%u type=%d", properties.deviceName, properties.vendorID, properties.deviceID, VK_VERSION_MAJOR(properties.apiVersion), VK_VERSION_MINOR(properties.apiVersion), VK_VERSION_PATCH(properties.apiVersion), properties.driverVersion, static_cast<int>(properties.deviceType));
             arut_android_log(ANDROID_LOG_INFO, gpu_message);
             return true;
@@ -1089,13 +1094,41 @@ bool AndroidRenderer::create_commands_and_sync() noexcept {
     }
     VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     fence.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-    return vkCreateFence(device_, &fence, nullptr, &in_flight_) == VK_SUCCESS;
+    if (vkCreateFence(device_, &fence, nullptr, &in_flight_) != VK_SUCCESS) return false;
+    if (timestamp_queries_available_) {
+        VkQueryPoolCreateInfo queries{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+        queries.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        queries.queryCount = 2;
+        const VkResult query_result = vkCreateQueryPool(device_, &queries, nullptr, &timestamp_query_pool_);
+        if (query_result != VK_SUCCESS) {
+            timestamp_queries_available_ = false;
+            timestamp_query_pool_ = VK_NULL_HANDLE;
+            log_error("Timestamp query pool unavailable; GPU timing disabled", query_result);
+        } else {
+            arut_android_log(ANDROID_LOG_INFO, "Vulkan GPU timestamp profiling enabled.");
+        }
+    }
+    return true;
 }
 
 bool AndroidRenderer::draw_frame() noexcept {
     if (!ready()) return false;
+    const auto cpu_frame_start = std::chrono::steady_clock::now();
     VkResult result = vkWaitForFences(device_, 1, &in_flight_, VK_TRUE, UINT64_MAX);
     if (result != VK_SUCCESS) return false;
+    if (timestamp_queries_available_ && timestamp_data_pending_) {
+        std::array<std::uint64_t, 2> timestamps{};
+        const VkResult query_result = vkGetQueryPoolResults(
+            device_, timestamp_query_pool_, 0, 2, sizeof(timestamps), timestamps.data(),
+            sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT);
+        if (query_result == VK_SUCCESS) {
+            const std::uint64_t mask = timestamp_valid_bits_ >= 64U
+                ? UINT64_MAX : ((std::uint64_t{1} << timestamp_valid_bits_) - 1U);
+            const std::uint64_t ticks = (timestamps[1] - timestamps[0]) & mask;
+            last_gpu_frame_ms_ = static_cast<double>(ticks) * timestamp_period_ns_ / 1000000.0;
+        }
+        timestamp_data_pending_ = false;
+    }
     std::uint32_t image_index = 0;
     result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, image_available_, VK_NULL_HANDLE, &image_index);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) return recreate_swapchain();
@@ -1113,6 +1146,11 @@ bool AndroidRenderer::draw_frame() noexcept {
     if (result != VK_SUCCESS) {
         log_error("vkBeginCommandBuffer failed", result);
         return false;
+    }
+    if (timestamp_queries_available_) {
+        vkCmdResetQueryPool(command_buffers_[image_index], timestamp_query_pool_, 0, 2);
+        vkCmdWriteTimestamp(command_buffers_[image_index], VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                             timestamp_query_pool_, 0);
     }
     std::array<VkClearValue, 2> clears{};
     clears[0].color = {{0.025F, 0.045F, 0.075F, 1.0F}};
@@ -1148,6 +1186,10 @@ bool AndroidRenderer::draw_frame() noexcept {
     vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_, 0, VK_INDEX_TYPE_UINT32);
     vkCmdDrawIndexed(command_buffers_[image_index], cube_index_count_, instance_count_, 0, 0, 0);
     vkCmdEndRenderPass(command_buffers_[image_index]);
+    if (timestamp_queries_available_) {
+        vkCmdWriteTimestamp(command_buffers_[image_index], VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                             timestamp_query_pool_, 1);
+    }
     result = vkEndCommandBuffer(command_buffers_[image_index]);
     if (result != VK_SUCCESS) {
         log_error("vkEndCommandBuffer failed", result);
@@ -1182,6 +1224,10 @@ bool AndroidRenderer::draw_frame() noexcept {
             log_error("Failed to recreate frame fence after submit failure");
         return false;
     }
+    timestamp_data_pending_ = timestamp_queries_available_;
+    last_draw_calls_ = 1U;
+    last_visible_objects_ = instance_count_;
+    last_triangles_ = (cube_index_count_ / 3U) * instance_count_;
     VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     present.waitSemaphoreCount = 1;
     present.pWaitSemaphores = &render_finished_[image_index];
@@ -1191,13 +1237,27 @@ bool AndroidRenderer::draw_frame() noexcept {
     result = vkQueuePresentKHR(present_queue_, &present);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) return recreate_swapchain();
     if (result != VK_SUCCESS) { log_error("vkQueuePresentKHR failed", result); return false; }
+    last_cpu_frame_ms_ = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - cpu_frame_start).count();
     return true;
+}
+
+arut::rendering::RenderProfileSnapshot AndroidRenderer::profile_snapshot() const noexcept {
+    arut::rendering::RenderProfileSnapshot snapshot{};
+    snapshot.cpu_frame_ms = last_cpu_frame_ms_;
+    snapshot.gpu_frame_ms = last_gpu_frame_ms_;
+    snapshot.draw_calls = last_draw_calls_;
+    snapshot.visible_objects = last_visible_objects_;
+    snapshot.triangles = last_triangles_;
+    snapshot.gpu_timing_available = timestamp_queries_available_;
+    return snapshot;
 }
 
 void AndroidRenderer::destroy_swapchain() noexcept {
     if (device_ != VK_NULL_HANDLE) vkDeviceWaitIdle(device_);
     if (device_ != VK_NULL_HANDLE) {
         if (in_flight_) vkDestroyFence(device_, in_flight_, nullptr);
+        if (timestamp_query_pool_) vkDestroyQueryPool(device_, timestamp_query_pool_, nullptr);
         if (pbr_pipeline_) vkDestroyPipeline(device_, pbr_pipeline_, nullptr);
         if (pbr_pipeline_layout_) vkDestroyPipelineLayout(device_, pbr_pipeline_layout_, nullptr);
         if (pbr_descriptor_pool_) vkDestroyDescriptorPool(device_, pbr_descriptor_pool_, nullptr);
@@ -1237,6 +1297,8 @@ void AndroidRenderer::destroy_swapchain() noexcept {
         if (swapchain_) vkDestroySwapchainKHR(device_, swapchain_, nullptr);
     }
     in_flight_ = VK_NULL_HANDLE;
+    timestamp_query_pool_ = VK_NULL_HANDLE;
+    timestamp_data_pending_ = false;
     image_available_ = VK_NULL_HANDLE;
     render_finished_.clear();
     command_pool_ = VK_NULL_HANDLE;
