@@ -1027,7 +1027,154 @@ bool AndroidRenderer::create_shadow_pipeline() noexcept {
     return true;
 }
 
+bool AndroidRenderer::load_environment_hdr_asset(
+    const char* path, arut::rendering::Rgba32fImage& decoded) noexcept {
+    decoded = {};
+    if (!assets_ || !path || !*path) return false;
+    AAsset* asset = AAssetManager_open(assets_, path, AASSET_MODE_BUFFER);
+    if (!asset) {
+        arut_android_log(ANDROID_LOG_INFO,
+            "Optional HDR environment asset not present; using procedural fallback.");
+        return false;
+    }
+    const off_t length = AAsset_getLength(asset);
+    if (length <= 0 || static_cast<std::uint64_t>(length) > 64ULL * 1024ULL * 1024ULL) {
+        AAsset_close(asset);
+        arut_android_log(ANDROID_LOG_WARN, "HDR environment asset has invalid or excessive size.");
+        return false;
+    }
+    try {
+        std::vector<std::uint8_t> encoded(static_cast<std::size_t>(length));
+        const int read = AAsset_read(asset, encoded.data(), encoded.size());
+        AAsset_close(asset);
+        if (read != length) {
+            arut_android_log(ANDROID_LOG_WARN, "HDR environment asset read was incomplete.");
+            return false;
+        }
+        const auto result = arut::rendering::decode_image_rgba32f(encoded, decoded);
+        if (!result) {
+            decoded = {};
+            arut_android_log(ANDROID_LOG_WARN,
+                "HDR environment decode failed; using procedural environment fallback.");
+            return false;
+        }
+    } catch (...) {
+        AAsset_close(asset);
+        decoded = {};
+        arut_android_log(ANDROID_LOG_WARN, "HDR environment asset allocation failed.");
+        return false;
+    }
+    return true;
+}
+
 bool AndroidRenderer::create_environment_cubemap() noexcept {
+    arut::rendering::Rgba32fImage hdr_source{};
+    if (load_environment_hdr_asset("environments/default.hdr", hdr_source)) {
+        VkFormatProperties hdr_format_properties{};
+        vkGetPhysicalDeviceFormatProperties(
+            physical_device_, VK_FORMAT_R16G16B16A16_SFLOAT, &hdr_format_properties);
+        const VkFormatFeatureFlags hdr_required =
+            VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+        const bool hdr_format_supported =
+            (hdr_format_properties.optimalTilingFeatures & hdr_required) == hdr_required;
+        if (hdr_format_supported) {
+            arut::rendering::EnvironmentCubeF32Mip hdr_base{};
+            std::vector<arut::rendering::EnvironmentCubeF32Mip> hdr_specular_float;
+            arut::rendering::EnvironmentCubeF32Mip hdr_diffuse_float{};
+            bool hdr_ready =
+                arut::rendering::build_environment_cube_from_equirectangular(
+                    hdr_source, 32U, hdr_base) &&
+                arut::rendering::build_ggx_prefiltered_environment_cube(
+                    hdr_base, 96U, hdr_specular_float) &&
+                arut::rendering::build_diffuse_irradiance_cube(
+                    hdr_base, 8U, 96U, hdr_diffuse_float);
+            std::vector<arut::rendering::EnvironmentCubeF16Mip> hdr_specular_half;
+            arut::rendering::EnvironmentCubeF16Mip hdr_diffuse_half{};
+            if (hdr_ready) {
+                try {
+                    hdr_specular_half.reserve(hdr_specular_float.size());
+                    for (const auto& mip : hdr_specular_float) {
+                        arut::rendering::EnvironmentCubeF16Mip half{};
+                        if (!arut::rendering::convert_environment_cube_to_rgba16f(mip, half)) {
+                            hdr_ready = false;
+                            break;
+                        }
+                        hdr_specular_half.push_back(std::move(half));
+                    }
+                } catch (...) {
+                    hdr_ready = false;
+                }
+                if (hdr_ready) {
+                    hdr_ready = arut::rendering::convert_environment_cube_to_rgba16f(
+                        hdr_diffuse_float, hdr_diffuse_half);
+                }
+            }
+            if (hdr_ready) {
+                VkImage hdr_environment_image = VK_NULL_HANDLE;
+                VkDeviceMemory hdr_environment_memory = VK_NULL_HANDLE;
+                VkImageView hdr_environment_view = VK_NULL_HANDLE;
+                VkSampler hdr_environment_sampler = VK_NULL_HANDLE;
+                std::uint32_t hdr_environment_levels = 0U;
+                VkImage hdr_irradiance_image = VK_NULL_HANDLE;
+                VkDeviceMemory hdr_irradiance_memory = VK_NULL_HANDLE;
+                VkImageView hdr_irradiance_view = VK_NULL_HANDLE;
+                VkSampler hdr_irradiance_sampler = VK_NULL_HANDLE;
+                std::uint32_t hdr_irradiance_levels = 0U;
+                const std::vector<arut::rendering::EnvironmentCubeF16Mip> hdr_irradiance_mips{
+                    std::move(hdr_diffuse_half)};
+                const bool uploaded =
+                    upload_environment_cube_rgba16f(
+                        hdr_specular_half, hdr_environment_image, hdr_environment_memory,
+                        hdr_environment_view, hdr_environment_sampler, hdr_environment_levels) &&
+                    upload_environment_cube_rgba16f(
+                        hdr_irradiance_mips, hdr_irradiance_image, hdr_irradiance_memory,
+                        hdr_irradiance_view, hdr_irradiance_sampler, hdr_irradiance_levels);
+                if (uploaded) {
+                    environment_image_ = hdr_environment_image;
+                    environment_memory_ = hdr_environment_memory;
+                    environment_view_ = hdr_environment_view;
+                    environment_sampler_ = hdr_environment_sampler;
+                    environment_mip_levels_ = hdr_environment_levels;
+                    irradiance_image_ = hdr_irradiance_image;
+                    irradiance_memory_ = hdr_irradiance_memory;
+                    irradiance_view_ = hdr_irradiance_view;
+                    irradiance_sampler_ = hdr_irradiance_sampler;
+                    irradiance_mip_levels_ = hdr_irradiance_levels;
+                    arut_android_log(ANDROID_LOG_INFO,
+                        "Radiance HDR environment converted, GGX-prefiltered, convolved and uploaded as RGBA16F.");
+                    return true;
+                }
+
+                const auto release_cube = [this](VkImage& image, VkDeviceMemory& memory,
+                                                  VkImageView& view, VkSampler& sampler) {
+                    if (sampler) vkDestroySampler(device_, sampler, nullptr);
+                    if (view) vkDestroyImageView(device_, view, nullptr);
+                    if (image) {
+                        if (memory) {
+                            VkMemoryRequirements requirements{};
+                            vkGetImageMemoryRequirements(device_, image, &requirements);
+                            if (requirements.size <= tracked_gpu_memory_bytes_)
+                                tracked_gpu_memory_bytes_ -= requirements.size;
+                        }
+                        vkDestroyImage(device_, image, nullptr);
+                    }
+                    if (memory) vkFreeMemory(device_, memory, nullptr);
+                    image = VK_NULL_HANDLE;
+                    memory = VK_NULL_HANDLE;
+                    view = VK_NULL_HANDLE;
+                    sampler = VK_NULL_HANDLE;
+                };
+                release_cube(hdr_environment_image, hdr_environment_memory,
+                             hdr_environment_view, hdr_environment_sampler);
+                release_cube(hdr_irradiance_image, hdr_irradiance_memory,
+                             hdr_irradiance_view, hdr_irradiance_sampler);
+            }
+        } else {
+            arut_android_log(ANDROID_LOG_WARN,
+                "RGBA16F sampled cubemaps unsupported; using procedural RGBA8 environment.");
+        }
+    }
+
     std::vector<arut::rendering::EnvironmentCubeMip> specular_mips;
     if (!arut::rendering::build_procedural_environment_cube(32U, specular_mips) || specular_mips.empty()) {
         log_error("Procedural environment cubemap generation failed");
