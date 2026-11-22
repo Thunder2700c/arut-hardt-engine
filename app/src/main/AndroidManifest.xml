@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
  <uses-feature android:glEsVersion="0x00030000" android:required="false" />
  <uses-feature android:name="android.hardware.vulkan.level" android:required="false" android:version="1" />
- <application android:allowBackup="false" android:hasCode="false" android:label="ARUT-HARDT Engine"
+ <application android:allowBackup="false" android:label="ARUT-HARDT Engine"
   android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="false">
   <activity android:name="android.app.NativeActivity"
    android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|uiMode"
