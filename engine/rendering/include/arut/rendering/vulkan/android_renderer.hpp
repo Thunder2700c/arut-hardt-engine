@@ -30,6 +30,7 @@ private:
     void destroy_swapchain() noexcept;
     bool recreate_swapchain() noexcept;
 
+    ANativeWindow* window_{nullptr};
     VkInstance instance_{VK_NULL_HANDLE};
     VkSurfaceKHR surface_{VK_NULL_HANDLE};
     VkPhysicalDevice physical_device_{VK_NULL_HANDLE};
