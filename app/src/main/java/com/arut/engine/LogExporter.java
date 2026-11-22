@@ -19,18 +19,19 @@ import java.io.OutputStream;
 public final class LogExporter {
     private LogExporter() {}
 
-    public static boolean exportRuntimeLog(Activity activity, String sourcePath) {
+    public static boolean exportRuntimeLog(Activity activity, String sourcePath, String previousPath) {
         if (activity == null || sourcePath == null) return false;
         File source = new File(sourcePath);
+        File previous = previousPath == null ? null : new File(previousPath);
         if (!source.isFile()) return false;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            return exportWithMediaStore(activity, source);
+            return exportWithMediaStore(activity, source, previous);
         }
-        return exportToAppDocuments(activity, source);
+        return exportToAppDocuments(activity, source, previous);
     }
 
-    private static boolean exportWithMediaStore(Activity activity, File source) {
+    private static boolean exportWithMediaStore(Activity activity, File source, File previous) {
         ContentResolver resolver = activity.getContentResolver();
         String relativePath = Environment.DIRECTORY_DOWNLOADS + "/ARUT-HARDT/";
         Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
@@ -63,7 +64,7 @@ public final class LogExporter {
                 resolver.delete(destination, null, null);
                 return false;
             }
-            copy(input, output);
+            copyLogs(previous, input, output);
             return true;
         } catch (IOException | RuntimeException error) {
             resolver.delete(destination, null, null);
@@ -71,17 +72,27 @@ public final class LogExporter {
         }
     }
 
-    private static boolean exportToAppDocuments(Activity activity, File source) {
+    private static boolean exportToAppDocuments(Activity activity, File source, File previous) {
         File documents = activity.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
         if (documents == null) return false;
         File destination = new File(documents, "ARUT-HARDT-runtime.log");
         try (InputStream input = new FileInputStream(source);
              OutputStream output = new FileOutputStream(destination, false)) {
-            copy(input, output);
+            copyLogs(previous, input, output);
             return true;
         } catch (IOException error) {
             return false;
         }
+    }
+
+    private static void copyLogs(File previous, InputStream current, OutputStream output) throws IOException {
+        if (previous != null && previous.isFile()) {
+            try (InputStream old = new FileInputStream(previous)) {
+                copy(old, output);
+                output.write("\\n--- current runtime.log ---\\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+        }
+        copy(current, output);
     }
 
     private static void copy(InputStream input, OutputStream output) throws IOException {
