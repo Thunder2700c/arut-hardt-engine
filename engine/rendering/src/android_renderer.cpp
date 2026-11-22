@@ -15,6 +15,7 @@
 #include <android/asset_manager.h>
 #include "arut/rendering/mesh.hpp"
 #include "arut/rendering/image.hpp"
+#include "arut/rendering/brdf_lut.hpp"
 #include "arut/rendering/visibility.hpp"
 
 extern "C" void arut_android_log(int priority, const char* message) noexcept;
