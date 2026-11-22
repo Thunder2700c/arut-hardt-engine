@@ -2,10 +2,10 @@ plugins { id("com.android.application") version "8.7.3" }
 android {
  namespace = "com.arut.engine"
  compileSdk = 35
+ ndkVersion = "27.2.12479018"
  defaultConfig {
   applicationId = "com.arut.engine"
   minSdk = 26
-  ndkVersion = "27.2.12479018"
   targetSdk = 35
   versionCode = 1
   versionName = "0.1.0"
