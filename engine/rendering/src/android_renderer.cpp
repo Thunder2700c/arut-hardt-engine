@@ -114,6 +114,31 @@ bool AndroidRenderer::initialize(
     return true;
 }
 
+bool AndroidRenderer::set_terrain_cells(
+    std::span<const arut::core::TerrainMesh> terrain_meshes) noexcept {
+    if (!ready() || terrain_meshes.empty()) return false;
+    std::vector<arut::core::TerrainMesh> replacement;
+    try {
+        replacement.assign(terrain_meshes.begin(), terrain_meshes.end());
+        if (std::any_of(replacement.begin(), replacement.end(),
+                        [](const auto& mesh) { return !mesh.valid(); })) return false;
+    } catch (...) { return false; }
+    if (vkDeviceWaitIdle(device_) != VK_SUCCESS) return false;
+    for (const auto& terrain : terrain_gpu_meshes_) {
+        if (terrain.vertex_buffer) vkDestroyBuffer(device_, terrain.vertex_buffer, nullptr);
+        if (terrain.vertex_memory) vkFreeMemory(device_, terrain.vertex_memory, nullptr);
+        if (terrain.index_buffer) vkDestroyBuffer(device_, terrain.index_buffer, nullptr);
+        if (terrain.index_memory) vkFreeMemory(device_, terrain.index_memory, nullptr);
+        if (terrain.instance_buffer) vkDestroyBuffer(device_, terrain.instance_buffer, nullptr);
+        if (terrain.instance_memory) vkFreeMemory(device_, terrain.instance_memory, nullptr);
+        if (terrain.allocation_bytes <= tracked_gpu_memory_bytes_)
+            tracked_gpu_memory_bytes_ -= terrain.allocation_bytes;
+    }
+    terrain_gpu_meshes_.clear();
+    terrain_meshes_ = std::move(replacement);
+    return create_terrain_geometry();
+}
+
 bool AndroidRenderer::create_frame_resources() noexcept {
     return create_render_targets() &&
            create_triangle_geometry() && create_triangle_pipeline() &&
@@ -1995,6 +2020,7 @@ bool AndroidRenderer::create_terrain_geometry() noexcept {
             }
         } catch (...) { log_error("Terrain vertex conversion allocation failed"); return false; }
         TerrainGpuMesh gpu{};
+        const std::uint64_t allocation_before = tracked_gpu_memory_bytes_;
         const VkDeviceSize vertex_bytes = vertices.size() * sizeof(arut::rendering::MeshVertex);
         const VkDeviceSize index_bytes = terrain.indices.size() * sizeof(std::uint32_t);
         if (vertex_bytes == 0 || index_bytes == 0 ||
@@ -2029,6 +2055,7 @@ bool AndroidRenderer::create_terrain_geometry() noexcept {
         std::memcpy(mapped, &model, sizeof(model));
         vkUnmapMemory(device_, gpu.instance_memory);
         gpu.index_count = static_cast<std::uint32_t>(terrain.indices.size());
+        gpu.allocation_bytes = tracked_gpu_memory_bytes_ - allocation_before;
         terrain_triangle_count_ += gpu.index_count / 3U;
         terrain_gpu_meshes_.push_back(gpu);
     }
@@ -3055,6 +3082,8 @@ void AndroidRenderer::destroy_swapchain() noexcept {
             if (terrain.index_memory) vkFreeMemory(device_, terrain.index_memory, nullptr);
             if (terrain.instance_buffer) vkDestroyBuffer(device_, terrain.instance_buffer, nullptr);
             if (terrain.instance_memory) vkFreeMemory(device_, terrain.instance_memory, nullptr);
+            if (terrain.allocation_bytes <= tracked_gpu_memory_bytes_)
+                tracked_gpu_memory_bytes_ -= terrain.allocation_bytes;
         }
         if (cube_vertex_buffer_) vkDestroyBuffer(device_, cube_vertex_buffer_, nullptr);
         if (cube_vertex_memory_) vkFreeMemory(device_, cube_vertex_memory_, nullptr);
