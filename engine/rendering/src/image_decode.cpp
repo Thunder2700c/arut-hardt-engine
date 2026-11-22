@@ -2,8 +2,6 @@
 #define STBI_ONLY_JPEG
 #define STBI_ONLY_BMP
 #define STBI_ONLY_TGA
-#define STBI_NO_HDR
-#define STBI_NO_LINEAR
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -34,6 +32,53 @@ constexpr std::uint64_t kMaxPixels = 16ULL * 1024ULL * 1024ULL;
 [[nodiscard]] std::uint8_t to_byte(float value) noexcept {
     return static_cast<std::uint8_t>(std::lround(std::clamp(value, 0.0F, 1.0F) * 255.0F));
 }
+}
+
+
+ImageDecodeResult decode_image_rgba32f(
+    std::span<const std::uint8_t> encoded, Rgba32fImage& output) noexcept {
+    output = {};
+    if (encoded.empty()) return {ImageDecodeError::EmptyInput};
+    if (encoded.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+        return {ImageDecodeError::InputTooLarge};
+
+    int width = 0;
+    int height = 0;
+    int source_channels = 0;
+    const auto* bytes = reinterpret_cast<const stbi_uc*>(encoded.data());
+    const int input_size = static_cast<int>(encoded.size());
+    if (stbi_is_hdr_from_memory(bytes, input_size) == 0 ||
+        stbi_info_from_memory(bytes, input_size, &width, &height, &source_channels) == 0)
+        return {ImageDecodeError::UnsupportedOrCorrupt};
+    if (width <= 0 || height <= 0 || width > kMaxDimension || height > kMaxDimension ||
+        static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height) > kMaxPixels)
+        return {ImageDecodeError::DimensionsOutOfRange};
+
+    float* decoded = stbi_loadf_from_memory(bytes, input_size, &width, &height, nullptr, STBI_rgb_alpha);
+    if (!decoded) return {ImageDecodeError::UnsupportedOrCorrupt};
+    const std::size_t value_count = static_cast<std::size_t>(width) *
+                                    static_cast<std::size_t>(height) * 4U;
+    try {
+        output.width = static_cast<std::uint32_t>(width);
+        output.height = static_cast<std::uint32_t>(height);
+        output.pixels.assign(decoded, decoded + value_count);
+    } catch (...) {
+        stbi_image_free(decoded);
+        output = {};
+        return {ImageDecodeError::AllocationFailed};
+    }
+    stbi_image_free(decoded);
+    if (!output.valid()) {
+        output = {};
+        return {ImageDecodeError::UnsupportedOrCorrupt};
+    }
+    for (float value : output.pixels) {
+        if (!std::isfinite(value) || value < 0.0F) {
+            output = {};
+            return {ImageDecodeError::UnsupportedOrCorrupt};
+        }
+    }
+    return {ImageDecodeError::None};
 }
 
 ImageDecodeResult decode_image_rgba8(
