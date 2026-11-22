@@ -125,16 +125,21 @@ float environmentProbeInfluence(int index, vec3 worldPosition) {
 
 vec4 selectEnvironmentProbeWeights(vec3 worldPosition) {
     float rawWeights[4] = float[4](0.0, 0.0, 0.0, 0.0);
-    int highestPriority = -2147483647;
+    int highestPriority = 0;
+    bool hasPriority = false;
     int activeCount = min(int(probeData.probeMetadata.x), 4);
     for (int i = 0; i < 4; ++i) {
         if (i < activeCount) {
             rawWeights[i] = environmentProbeInfluence(i, worldPosition);
-            if (rawWeights[i] > 0.0)
-                highestPriority = max(highestPriority, probeData.probePriorities[i]);
+            if (rawWeights[i] > 0.0 &&
+                (!hasPriority || probeData.probePriorities[i] > highestPriority)) {
+                highestPriority = probeData.probePriorities[i];
+                hasPriority = true;
+            }
         }
     }
     vec4 weights = vec4(0.0);
+    if (!hasPriority) return weights;
     float total = 0.0;
     for (int i = 0; i < 4; ++i) {
         if (i < activeCount && rawWeights[i] > 0.0 &&
