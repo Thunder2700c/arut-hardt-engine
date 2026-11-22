@@ -79,6 +79,27 @@ bool AndroidRenderer::create_gpu_visibility_resources() noexcept {
         return true;
     }
 
+    VkPhysicalDeviceProperties compute_properties{};
+    vkGetPhysicalDeviceProperties(physical_device_, &compute_properties);
+    const VkDeviceSize required_storage_range = std::max<VkDeviceSize>(
+        static_cast<VkDeviceSize>(visibility_source_instance_count_) *
+            sizeof(arut::rendering::GpuVisibilityInstance),
+        static_cast<VkDeviceSize>(visibility_source_instance_count_) *
+            sizeof(arut::rendering::Mat4));
+    const std::uint32_t dispatch_groups =
+        arut::rendering::visibility_workgroup_count(visibility_source_instance_count_);
+    if (compute_properties.limits.maxComputeWorkGroupInvocations <
+            arut::rendering::kVisibilityWorkgroupSize ||
+        compute_properties.limits.maxComputeWorkGroupSize[0] <
+            arut::rendering::kVisibilityWorkgroupSize ||
+        compute_properties.limits.maxComputeWorkGroupCount[0] < dispatch_groups ||
+        compute_properties.limits.maxPushConstantsSize <
+            sizeof(arut::rendering::GpuVisibilityPushConstants) ||
+        compute_properties.limits.maxStorageBufferRange < required_storage_range) {
+        arut_android_log(ANDROID_LOG_WARN, "GPU visibility skipped: device compute/storage limits are insufficient; using CPU culling.");
+        return true;
+    }
+
     const auto disable_gpu_visibility = [this]() {
         if (visibility_compute_pipeline_) vkDestroyPipeline(device_, visibility_compute_pipeline_, nullptr);
         if (visibility_pipeline_layout_) vkDestroyPipelineLayout(device_, visibility_pipeline_layout_, nullptr);
