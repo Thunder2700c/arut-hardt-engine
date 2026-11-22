@@ -21,7 +21,9 @@ The shader interface is currently an engine-internal prototype, not a stable ext
 - stb_image v2.34 is pinned under third_party/stb; LDR PNG, JPEG, BMP and TGA decode to RGBA8, while Radiance RGBE HDR decodes to linear RGBA32F and preserves values above 1.0.
 - HDR decode is bounded to the same 8192-pixel side and 16-million-pixel limits; malformed, non-finite and negative decoded values are rejected.
 - Linear equirectangular HDR images can be converted on CPU into six RGBA32F cubemap faces. Longitude sampling wraps across the seam, latitude sampling clamps at the poles, and radiance above 1.0 remains unclamped.
-- The float cubemap conversion is a CPU import stage only; the active Vulkan renderer still uses the procedural RGBA8 environment until RGBA16F upload, float GGX prefiltering and runtime probe integration are completed.
+- Float HDR cubemaps retain radiance through CPU GGX specular roughness prefiltering and cosine-convolved diffuse irradiance. The results can be converted to validated IEEE-754 binary16 RGBA16F data; values outside the finite half-float range are rejected rather than clamped.
+- Android optionally loads `app/src/main/assets/environments/default.hdr`, uploads the specular and diffuse cubemaps as `VK_FORMAT_R16G16B16A16_SFLOAT`, and binds them through the existing PBR cubemap descriptors. If that asset is absent or the GPU lacks sampled/transfer support for RGBA16F, the renderer falls back to the procedural RGBA8 environment. No sample HDR file is currently bundled.
+- GPU environment-probe arrays/storage, per-object probe selection and runtime multi-probe blending remain pending.
 - Decode is bounded to 8192 pixels per side and 16 million total pixels; a texture asset larger than 64 MiB is rejected before decoding.
 - CPU mip generation filters sRGB colour channels in linear light and treats alpha as linear.
 - Vulkan uploads mip levels through a staging buffer, transitions to shader-read layout, creates a view and a sampler.
@@ -58,7 +60,7 @@ The runtime profile snapshot now includes CPU frame time, separate GPU visibilit
 
 ## Remaining integration work
 1. Add a material asset/cache/handle layer and asynchronous decode/upload queues.
-2. Convert decoded equirectangular HDR images into HDR cubemaps, add RGBA16F GPU upload, probe storage/sampling and runtime probe blending.
+2. Add GPU environment-probe arrays/storage, per-object probe selection and runtime multi-probe blending; package representative HDR assets and validate RGBA16F rendering on device.
 3. Add cascade stabilization, split blending and local-light shadows.
 4. Add GPU/indirect visibility, GPU-memory accounting and per-pass profiling.
 5. During the separately agreed testing stage, compare GPU output with the CPU BRDF reference on two Android GPU families.
