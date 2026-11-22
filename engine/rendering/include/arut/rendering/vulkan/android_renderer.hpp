@@ -3,6 +3,7 @@
 #include <android/native_window.h>
 #include <android/asset_manager.h>
 #include <vulkan/vulkan.h>
+#include "arut/rendering/image.hpp"
 #include <cstdint>
 #include <vector>
 
@@ -36,6 +37,12 @@ private:
     bool create_pbr_geometry() noexcept;
     bool create_pbr_descriptors() noexcept;
     bool create_fallback_texture() noexcept;
+    bool load_texture_asset(const char* path, VkFormat format, bool source_is_srgb,
+                            VkImage& image, VkDeviceMemory& memory, VkImageView& view,
+                            VkSampler& sampler, std::uint32_t& mip_levels) noexcept;
+    bool upload_texture_rgba8(const Rgba8Image& pixels, VkFormat format, bool source_is_srgb,
+                              VkImage& image, VkDeviceMemory& memory, VkImageView& view,
+                              VkSampler& sampler, std::uint32_t& mip_levels) noexcept;
     bool update_pbr_frame_data() noexcept;
     bool create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buffer, VkDeviceMemory& memory) noexcept;
     void destroy_swapchain() noexcept;
@@ -81,6 +88,11 @@ private:
     VkDeviceMemory fallback_memory_{VK_NULL_HANDLE};
     VkImageView fallback_view_{VK_NULL_HANDLE};
     VkSampler fallback_sampler_{VK_NULL_HANDLE};
+    VkImage base_color_image_{VK_NULL_HANDLE};
+    VkDeviceMemory base_color_memory_{VK_NULL_HANDLE};
+    VkImageView base_color_view_{VK_NULL_HANDLE};
+    VkSampler base_color_sampler_{VK_NULL_HANDLE};
+    std::uint32_t base_color_mip_levels_{0};
     VkImage depth_image_{VK_NULL_HANDLE};
     VkDeviceMemory depth_memory_{VK_NULL_HANDLE};
     VkImageView depth_view_{VK_NULL_HANDLE};
