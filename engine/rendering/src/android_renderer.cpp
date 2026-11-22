@@ -1551,21 +1551,33 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
     visibility_source_instance_count_ = static_cast<std::uint32_t>(source_instances.size());
 
     const VkDeviceSize input_bytes = source_instances.size() * sizeof(arut::rendering::GpuVisibilityInstance);
-    if (!create_buffer(input_bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                       visibility_input_buffer_, visibility_input_memory_)) return false;
-    mapped = nullptr;
-    result = vkMapMemory(device_, visibility_input_memory_, 0, input_bytes, 0, &mapped);
-    if (result != VK_SUCCESS || !mapped) {
-        log_error("Map GPU visibility input buffer failed", result);
-        return false;
+    if (compute_queue_supported_) {
+        if (!create_buffer(input_bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                           visibility_input_buffer_, visibility_input_memory_)) {
+            compute_queue_supported_ = false;
+            arut_android_log(ANDROID_LOG_WARN, "GPU visibility input storage allocation failed; using CPU culling.");
+        } else {
+            mapped = nullptr;
+            result = vkMapMemory(device_, visibility_input_memory_, 0, input_bytes, 0, &mapped);
+            if (result != VK_SUCCESS || !mapped) {
+                log_error("Map GPU visibility input buffer failed; using CPU culling", result);
+                vkDestroyBuffer(device_, visibility_input_buffer_, nullptr);
+                vkFreeMemory(device_, visibility_input_memory_, nullptr);
+                visibility_input_buffer_ = VK_NULL_HANDLE;
+                visibility_input_memory_ = VK_NULL_HANDLE;
+                compute_queue_supported_ = false;
+            } else {
+                std::memcpy(mapped, source_instances.data(), static_cast<std::size_t>(input_bytes));
+                vkUnmapMemory(device_, visibility_input_memory_);
+            }
+        }
     }
-    std::memcpy(mapped, source_instances.data(), static_cast<std::size_t>(input_bytes));
-    vkUnmapMemory(device_, visibility_input_memory_);
 
     const VkDeviceSize instance_capacity_bytes =
         source_instances.size() * sizeof(arut::rendering::Mat4);
-    if (!create_buffer(instance_capacity_bytes,
-                       VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+    const VkBufferUsageFlags instance_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+        (compute_queue_supported_ ? VK_BUFFER_USAGE_STORAGE_BUFFER_BIT : 0U);
+    if (!create_buffer(instance_capacity_bytes, instance_usage,
                        instance_buffer_, instance_memory_)) return false;
     mapped = nullptr;
     result = vkMapMemory(device_, instance_memory_, 0, instance_capacity_bytes, 0, &mapped);
@@ -1582,8 +1594,9 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
     const arut::rendering::IndexedIndirectArguments indirect_command{
         cube_index_count_, instance_count_, 0U, 0, 0U
     };
-    if (!create_buffer(sizeof(indirect_command),
-                       VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+    const VkBufferUsageFlags indirect_usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+        (compute_queue_supported_ ? VK_BUFFER_USAGE_STORAGE_BUFFER_BIT : 0U);
+    if (!create_buffer(sizeof(indirect_command), indirect_usage,
                        indirect_draw_buffer_, indirect_draw_memory_)) return false;
     mapped = nullptr;
     result = vkMapMemory(device_, indirect_draw_memory_, 0, sizeof(indirect_command), 0, &mapped);
