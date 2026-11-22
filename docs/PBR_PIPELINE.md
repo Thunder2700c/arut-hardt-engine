@@ -34,7 +34,7 @@ Texture cache/handles, async decode/upload queues, KTX2, more production-resolut
 - When the selected depth format cannot be used as a depth attachment but is sampleable, a 1x1 fully-lit shadow fallback is uploaded instead.
 - CPU view-frustum extraction uses Vulkan zero-to-one clip depth; bounding-sphere tests cull instances before the instance buffer upload.
 
-Quality presets select 1/2/4 active cascades and 512/512/1024/1536 map resolutions for Low/Medium/High/Ultra. Cascade stabilization, split blending, spot/point-light shadows and GPU/indirect visibility remain pending.
+Quality presets select 1/2/4 active cascades and 512/512/1024/1536 map resolutions for Low/Medium/High/Ultra. Light-space projection translation is texel-snapped and adjacent cascades cross-fade over the final 10% of each split. Spot/point-light shadows and GPU/indirect visibility remain pending.
 
 ## Profiling
 The runtime profile snapshot now includes CPU frame time, GPU timestamp duration when supported, shadow-pass GPU duration, draw calls, visible instances and triangle count. The GPU timestamp query pool is optional and disabled when the selected queue does not expose valid timestamp bits. GPU memory totals and detailed per-pass/per-material counters are not yet implemented.
