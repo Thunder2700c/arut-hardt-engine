@@ -42,6 +42,7 @@ private:
     bool create_shadow_resources() noexcept;
     bool create_shadow_pipeline() noexcept;
     bool create_environment_cubemap() noexcept;
+    bool upload_environment_cube(const std::vector<arut::rendering::EnvironmentCubeMip>& mips, VkImage& image, VkDeviceMemory& memory, VkImageView& view, VkSampler& sampler, std::uint32_t& mip_levels) noexcept;
     bool create_brdf_lut() noexcept;
     bool create_fallback_texture() noexcept;
     bool load_texture_asset(const char* path, VkFormat format, bool source_is_srgb,
@@ -112,6 +113,11 @@ private:
     VkSampler brdf_lut_sampler_{VK_NULL_HANDLE};
     std::uint32_t brdf_lut_mip_levels_{0};
     std::uint32_t environment_mip_levels_{0};
+    VkImage irradiance_image_{VK_NULL_HANDLE};
+    VkDeviceMemory irradiance_memory_{VK_NULL_HANDLE};
+    VkImageView irradiance_view_{VK_NULL_HANDLE};
+    VkSampler irradiance_sampler_{VK_NULL_HANDLE};
+    std::uint32_t irradiance_mip_levels_{0};
     std::uint32_t base_color_mip_levels_{0};
     VkImage normal_image_{VK_NULL_HANDLE};
     VkDeviceMemory normal_memory_{VK_NULL_HANDLE};
