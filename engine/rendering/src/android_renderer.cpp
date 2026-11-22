@@ -8,6 +8,9 @@
 #include <limits>
 #include <cstdio>
 #include <vector>
+#include <cstddef>
+#include <cstdint>
+#include <android/asset_manager.h>
 
 extern "C" void arut_android_log(int priority, const char* message) noexcept;
 
@@ -31,12 +34,13 @@ bool has_device_extension(VkPhysicalDevice device, const char* name) {
 
 AndroidRenderer::~AndroidRenderer() { shutdown(); }
 
-bool AndroidRenderer::initialize(ANativeWindow* window) noexcept {
+bool AndroidRenderer::initialize(ANativeWindow* window, AAssetManager* assets) noexcept {
     shutdown();
     window_ = window;
-    if (!window || !create_instance() || !create_surface(window) ||
+    assets_ = assets;
+    if (!window || !assets_ || !create_instance() || !create_surface(window) ||
         !select_device() || !create_device() || !create_swapchain() ||
-        !create_render_targets() || !create_commands_and_sync()) {
+        !create_render_targets() || !create_triangle_geometry() || !create_triangle_pipeline() || !create_commands_and_sync()) {
         shutdown();
         return false;
     }
@@ -359,6 +363,193 @@ bool AndroidRenderer::create_render_targets() noexcept {
     return true;
 }
 
+bool AndroidRenderer::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
+                                    VkBuffer& buffer, VkDeviceMemory& memory) noexcept {
+    VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    info.size = size;
+    info.usage = usage;
+    info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkResult result = vkCreateBuffer(device_, &info, nullptr, &buffer);
+    if (result != VK_SUCCESS) {
+        log_error("vkCreateBuffer failed", result);
+        return false;
+    }
+    VkMemoryRequirements requirements{};
+    vkGetBufferMemoryRequirements(device_, buffer, &requirements);
+    const std::uint32_t type = find_memory_type(
+        requirements.memoryTypeBits,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    if (type == UINT32_MAX) {
+        log_error("No host-visible coherent memory type for geometry buffer");
+        return false;
+    }
+    VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    allocation.allocationSize = requirements.size;
+    allocation.memoryTypeIndex = type;
+    result = vkAllocateMemory(device_, &allocation, nullptr, &memory);
+    if (result != VK_SUCCESS) {
+        log_error("vkAllocateMemory for geometry buffer failed", result);
+        return false;
+    }
+    result = vkBindBufferMemory(device_, buffer, memory, 0);
+    if (result != VK_SUCCESS) {
+        log_error("vkBindBufferMemory for geometry buffer failed", result);
+        return false;
+    }
+    return true;
+}
+
+bool AndroidRenderer::create_triangle_geometry() noexcept {
+    struct Vertex final { float position[3]; float color[3]; };
+    constexpr std::array<Vertex, 3> vertices{{
+        {{ 0.0F, -0.65F, 0.0F}, {1.0F, 0.18F, 0.12F}},
+        {{ 0.65F, 0.55F, 0.0F}, {0.12F, 0.85F, 0.28F}},
+        {{-0.65F, 0.55F, 0.0F}, {0.15F, 0.38F, 1.0F}}
+    }};
+    const VkDeviceSize bytes = sizeof(vertices);
+    if (!create_buffer(bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                       triangle_vertex_buffer_, triangle_vertex_memory_)) return false;
+    void* mapped = nullptr;
+    const VkResult result = vkMapMemory(device_, triangle_vertex_memory_, 0, bytes, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("vkMapMemory for triangle vertices failed", result);
+        return false;
+    }
+    std::memcpy(mapped, vertices.data(), sizeof(vertices));
+    vkUnmapMemory(device_, triangle_vertex_memory_);
+    return true;
+}
+
+bool AndroidRenderer::create_triangle_pipeline() noexcept {
+    if (!assets_) return false;
+    const auto load_shader = [this](const char* path, std::vector<std::uint32_t>& words) -> bool {
+        AAsset* asset = AAssetManager_open(assets_, path, AASSET_MODE_BUFFER);
+        if (!asset) {
+            char message[256]{};
+            std::snprintf(message, sizeof(message), "Missing packaged shader asset: %s", path);
+            log_error(message);
+            return false;
+        }
+        const off_t length = AAsset_getLength(asset);
+        if (length <= 0 || (length % 4) != 0) {
+            AAsset_close(asset);
+            log_error("Invalid SPIR-V shader asset size");
+            return false;
+        }
+        words.resize(static_cast<std::size_t>(length) / sizeof(std::uint32_t));
+        const int read = AAsset_read(asset, words.data(), static_cast<std::size_t>(length));
+        AAsset_close(asset);
+        if (read != length || words.empty() || words.front() != 0x07230203U) {
+            log_error("SPIR-V shader asset read or magic validation failed");
+            return false;
+        }
+        return true;
+    };
+
+    std::vector<std::uint32_t> vertex_code;
+    std::vector<std::uint32_t> fragment_code;
+    if (!load_shader("shaders/first_triangle.vert.spv", vertex_code) ||
+        !load_shader("shaders/first_triangle.frag.spv", fragment_code)) return false;
+
+    VkShaderModuleCreateInfo vertex_info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    vertex_info.codeSize = vertex_code.size() * sizeof(std::uint32_t);
+    vertex_info.pCode = vertex_code.data();
+    VkShaderModule vertex_module = VK_NULL_HANDLE;
+    VkResult result = vkCreateShaderModule(device_, &vertex_info, nullptr, &vertex_module);
+    if (result != VK_SUCCESS) {
+        log_error("vkCreateShaderModule vertex failed", result);
+        return false;
+    }
+
+    VkShaderModuleCreateInfo fragment_info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    fragment_info.codeSize = fragment_code.size() * sizeof(std::uint32_t);
+    fragment_info.pCode = fragment_code.data();
+    VkShaderModule fragment_module = VK_NULL_HANDLE;
+    result = vkCreateShaderModule(device_, &fragment_info, nullptr, &fragment_module);
+    if (result != VK_SUCCESS) {
+        vkDestroyShaderModule(device_, vertex_module, nullptr);
+        log_error("vkCreateShaderModule fragment failed", result);
+        return false;
+    }
+
+    const std::array<VkPipelineShaderStageCreateInfo, 2> stages{{
+        {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vertex_module, "main", nullptr},
+        {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_module, "main", nullptr}
+    }};
+    struct Vertex final { float position[3]; float color[3]; };
+    VkVertexInputBindingDescription binding{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
+    const std::array<VkVertexInputAttributeDescription, 2> attributes{{
+        {0, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, position))},
+        {1, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, color))}
+    }};
+    VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    vertex_input.vertexBindingDescriptionCount = 1;
+    vertex_input.pVertexBindingDescriptions = &binding;
+    vertex_input.vertexAttributeDescriptionCount = static_cast<std::uint32_t>(attributes.size());
+    vertex_input.pVertexAttributeDescriptions = attributes.data();
+    VkPipelineInputAssemblyStateCreateInfo assembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+    assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkPipelineViewportStateCreateInfo viewport{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+    viewport.viewportCount = 1;
+    viewport.scissorCount = 1;
+    constexpr std::array<VkDynamicState, 2> dynamic_states{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dynamic{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+    dynamic.dynamicStateCount = static_cast<std::uint32_t>(dynamic_states.size());
+    dynamic.pDynamicStates = dynamic_states.data();
+
+    VkPipelineRasterizationStateCreateInfo raster{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+    raster.polygonMode = VK_POLYGON_MODE_FILL;
+    raster.cullMode = VK_CULL_MODE_NONE;
+    raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    raster.lineWidth = 1.0F;
+    VkPipelineMultisampleStateCreateInfo multisample{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+    multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    VkPipelineDepthStencilStateCreateInfo depth{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
+    depth.depthTestEnable = VK_TRUE;
+    depth.depthWriteEnable = VK_TRUE;
+    depth.depthCompareOp = VK_COMPARE_OP_LESS;
+    VkPipelineColorBlendAttachmentState blend_attachment{};
+    blend_attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    VkPipelineColorBlendStateCreateInfo blend{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+    blend.attachmentCount = 1;
+    blend.pAttachments = &blend_attachment;
+
+    VkPipelineLayoutCreateInfo layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    result = vkCreatePipelineLayout(device_, &layout, nullptr, &pipeline_layout_);
+    if (result != VK_SUCCESS) {
+        vkDestroyShaderModule(device_, fragment_module, nullptr);
+        vkDestroyShaderModule(device_, vertex_module, nullptr);
+        log_error("vkCreatePipelineLayout failed", result);
+        return false;
+    }
+
+    VkGraphicsPipelineCreateInfo pipeline{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+    pipeline.stageCount = static_cast<std::uint32_t>(stages.size());
+    pipeline.pStages = stages.data();
+    pipeline.pVertexInputState = &vertex_input;
+    pipeline.pInputAssemblyState = &assembly;
+    pipeline.pViewportState = &viewport;
+    pipeline.pRasterizationState = &raster;
+    pipeline.pMultisampleState = &multisample;
+    pipeline.pDepthStencilState = &depth;
+    pipeline.pColorBlendState = &blend;
+    pipeline.pDynamicState = &dynamic;
+    pipeline.layout = pipeline_layout_;
+    pipeline.renderPass = render_pass_;
+    pipeline.subpass = 0;
+    result = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr, &graphics_pipeline_);
+    vkDestroyShaderModule(device_, fragment_module, nullptr);
+    vkDestroyShaderModule(device_, vertex_module, nullptr);
+    if (result != VK_SUCCESS) {
+        log_error("vkCreateGraphicsPipelines for first triangle failed", result);
+        return false;
+    }
+    arut_android_log(ANDROID_LOG_INFO, "First-triangle Vulkan graphics pipeline created.");
+    return true;
+}
+
 bool AndroidRenderer::create_commands_and_sync() noexcept {
     VkCommandPoolCreateInfo pool{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -406,6 +597,20 @@ bool AndroidRenderer::draw_frame() noexcept {
     pass.clearValueCount = static_cast<std::uint32_t>(clears.size());
     pass.pClearValues = clears.data();
     vkCmdBeginRenderPass(command_buffers_[image_index], &pass, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(command_buffers_[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline_);
+    VkViewport viewport{};
+    viewport.x = 0.0F;
+    viewport.y = 0.0F;
+    viewport.width = static_cast<float>(extent_.width);
+    viewport.height = static_cast<float>(extent_.height);
+    viewport.minDepth = 0.0F;
+    viewport.maxDepth = 1.0F;
+    VkRect2D scissor{{0, 0}, extent_};
+    vkCmdSetViewport(command_buffers_[image_index], 0, 1, &viewport);
+    vkCmdSetScissor(command_buffers_[image_index], 0, 1, &scissor);
+    constexpr VkDeviceSize vertex_offset = 0;
+    vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 1, &triangle_vertex_buffer_, &vertex_offset);
+    vkCmdDraw(command_buffers_[image_index], 3, 1, 0, 0);
     vkCmdEndRenderPass(command_buffers_[image_index]);
     if (vkEndCommandBuffer(command_buffers_[image_index]) != VK_SUCCESS) return false;
     const VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -435,6 +640,10 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     if (device_ != VK_NULL_HANDLE) vkDeviceWaitIdle(device_);
     if (device_ != VK_NULL_HANDLE) {
         if (in_flight_) vkDestroyFence(device_, in_flight_, nullptr);
+        if (graphics_pipeline_) vkDestroyPipeline(device_, graphics_pipeline_, nullptr);
+        if (pipeline_layout_) vkDestroyPipelineLayout(device_, pipeline_layout_, nullptr);
+        if (triangle_vertex_buffer_) vkDestroyBuffer(device_, triangle_vertex_buffer_, nullptr);
+        if (triangle_vertex_memory_) vkFreeMemory(device_, triangle_vertex_memory_, nullptr);
         if (image_available_) vkDestroySemaphore(device_, image_available_, nullptr);
         for (auto semaphore : render_finished_) if (semaphore) vkDestroySemaphore(device_, semaphore, nullptr);
         if (command_pool_) vkDestroyCommandPool(device_, command_pool_, nullptr);
@@ -451,6 +660,10 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     render_finished_.clear();
     command_pool_ = VK_NULL_HANDLE;
     render_pass_ = VK_NULL_HANDLE;
+    graphics_pipeline_ = VK_NULL_HANDLE;
+    pipeline_layout_ = VK_NULL_HANDLE;
+    triangle_vertex_buffer_ = VK_NULL_HANDLE;
+    triangle_vertex_memory_ = VK_NULL_HANDLE;
     depth_view_ = VK_NULL_HANDLE;
     depth_image_ = VK_NULL_HANDLE;
     depth_memory_ = VK_NULL_HANDLE;
@@ -477,6 +690,7 @@ void AndroidRenderer::shutdown() noexcept {
     surface_ = VK_NULL_HANDLE;
     instance_ = VK_NULL_HANDLE;
     window_ = nullptr;
+    assets_ = nullptr;
     physical_device_ = VK_NULL_HANDLE;
     graphics_queue_ = VK_NULL_HANDLE;
     present_queue_ = VK_NULL_HANDLE;
