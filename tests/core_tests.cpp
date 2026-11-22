@@ -1,6 +1,7 @@
 #include "arut/core/version.hpp"
 #include "arut/rendering/pbr_brdf.hpp"
 #include "arut/rendering/mesh.hpp"
+#include "arut/rendering/image.hpp"
 #include "arut/rendering/render_quality.hpp"
 
 #include <cassert>
@@ -77,6 +78,32 @@ int main() {
     const auto view_projection = arut::rendering::multiply(projection, view);
     assert(std::isfinite(view_projection.value[0]));
     assert(std::isfinite(view_projection.value[14]));
+    constexpr std::array<std::uint8_t, 75> png_2x2{{
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02,
+        0x08, 0x06, 0x00, 0x00, 0x00, 0x72, 0xb6, 0x0d,
+        0x24, 0x00, 0x00, 0x00, 0x12, 0x49, 0x44, 0x41,
+        0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0xf0,
+        0x1f, 0x0c, 0x81, 0x34, 0x18, 0x00, 0x00, 0x49,
+        0xc8, 0x09, 0xf7, 0xf9, 0xab, 0xb6, 0x0d, 0x00,
+        0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+        0x42, 0x60, 0x82
+    }};
+    arut::rendering::Rgba8Image decoded{};
+    const auto decode_result = arut::rendering::decode_image_rgba8(png_2x2, decoded);
+    assert(decode_result && decoded.width == 2 && decoded.height == 2);
+    assert(decoded.pixels.size() == 16);
+    std::vector<arut::rendering::Rgba8Mip> srgb_mips;
+    assert(arut::rendering::build_rgba8_mip_chain(decoded, true, srgb_mips));
+    assert(srgb_mips.size() == 2 && srgb_mips[1].width == 1 && srgb_mips[1].height == 1);
+    assert(srgb_mips[1].pixels[0] >= 187 && srgb_mips[1].pixels[0] <= 189);
+    std::vector<arut::rendering::Rgba8Mip> linear_mips;
+    assert(arut::rendering::build_rgba8_mip_chain(decoded, false, linear_mips));
+    assert(linear_mips[1].pixels[0] >= 127 && linear_mips[1].pixels[0] <= 128);
+    arut::rendering::Rgba8Image invalid_image{};
+    assert(!arut::rendering::decode_image_rgba8({}, invalid_image));
+    assert(invalid_image.pixels.empty());
     const auto invalid_projection = arut::rendering::perspective_rh_zo(1.0F, 0.0F, 0.1F, 100.0F);
     for (const auto value : invalid_projection.value) assert(near(value, 0.0F));
     return 0;
