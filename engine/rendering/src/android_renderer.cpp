@@ -277,12 +277,14 @@ bool AndroidRenderer::record_gpu_visibility(VkCommandBuffer command_buffer) noex
         VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
         instance_buffer_, 0, VK_WHOLE_SIZE};
     after_compute[1] = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-        VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+        VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_HOST_WRITE_BIT,
+        VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_HOST_READ_BIT,
         VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
         indirect_draw_buffer_, 0, sizeof(arut::rendering::IndexedIndirectArguments)};
     vkCmdPipelineBarrier(command_buffer,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_HOST_BIT,
-        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0,
+        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
+            VK_PIPELINE_STAGE_HOST_BIT, 0,
         0, nullptr, static_cast<std::uint32_t>(after_compute.size()),
         after_compute.data(), 0, nullptr);
     return true;
