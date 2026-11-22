@@ -44,3 +44,33 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Test
         run: cargo test --workspace --locked
+
+  android-native-compile:
+    name: Android ARM64 native library (no APK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: "12266719"
+          packages: "platform-tools"
+          accept-android-sdk-licenses: true
+      - name: Install Android NDK and CMake
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "ndk;27.2.12479018" "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - name: Build Rust ARM64 static library
+        env:
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: aarch64-linux-android26-clang
+        run: cargo build --workspace --locked --release --target aarch64-linux-android
+      - name: Configure Android ARM64 native target
+        run: cmake --preset android-arm64
+      - name: Compile Android native library (no Gradle, no APK)
+        run: cmake --build --preset android-arm64 --parallel 2
