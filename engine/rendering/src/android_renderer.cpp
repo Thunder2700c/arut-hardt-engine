@@ -2676,7 +2676,7 @@ bool AndroidRenderer::draw_frame() noexcept {
     VkResult result = vkWaitForFences(device_, 1, &in_flight_, VK_TRUE, UINT64_MAX);
     if (result != VK_SUCCESS) return false;
     update_stress_camera(delta_seconds);
-    if (gpu_visibility_enabled_) {
+    if (gpu_visibility_enabled_ && gpu_visibility_result_pending_) {
         void* mapped = nullptr;
         const VkResult map_result = vkMapMemory(device_, indirect_draw_memory_, 0,
             sizeof(arut::rendering::IndexedIndirectArguments), 0, &mapped);
@@ -2685,27 +2685,29 @@ bool AndroidRenderer::draw_frame() noexcept {
             std::memcpy(&completed, mapped, sizeof(completed));
             vkUnmapMemory(device_, indirect_draw_memory_);
             last_visible_objects_ = completed.instance_count;
+            gpu_visibility_result_pending_ = false;
             ++culling_parity_checks_;
-            if (completed.instance_count != cpu_expected_visible_) {
+            if (completed.instance_count != submitted_cpu_expected_visible_) {
                 ++culling_parity_mismatches_;
                 if (culling_parity_mismatches_ < 5U || (culling_parity_mismatches_ % 120U) == 0U) {
                     char parity[192]{};
                     std::snprintf(parity, sizeof(parity), "GPU_CULL_PARITY mismatch gpu_visible=%u cpu_visible=%u source=%u",
-                        completed.instance_count, cpu_expected_visible_, visibility_source_instance_count_);
+                        completed.instance_count, submitted_cpu_expected_visible_, visibility_source_instance_count_);
                     arut_android_log(ANDROID_LOG_WARN, parity);
                 }
             } else if ((culling_parity_checks_ % 120U) == 0U) {
                 char parity[192]{};
                 std::snprintf(parity, sizeof(parity), "GPU_CULL_PARITY pass gpu_visible=%u cpu_visible=%u source=%u checks=%llu",
-                    completed.instance_count, cpu_expected_visible_, visibility_source_instance_count_,
+                    completed.instance_count, submitted_cpu_expected_visible_, visibility_source_instance_count_,
                     static_cast<unsigned long long>(culling_parity_checks_));
                 arut_android_log(ANDROID_LOG_INFO, parity);
             }
             last_triangles_ = (cube_index_count_ / 3U) * completed.instance_count;
         } else {
+            gpu_visibility_result_pending_ = false;
             log_error("Read completed GPU visibility count failed; retaining last profile counters", map_result);
         }
-    } else {
+    } else if (!gpu_visibility_enabled_) {
         last_visible_objects_ = instance_count_;
         last_triangles_ = (cube_index_count_ / 3U) * instance_count_;
     }
@@ -2871,6 +2873,10 @@ bool AndroidRenderer::draw_frame() noexcept {
         return false;
     }
     timestamp_data_pending_ = timestamp_queries_available_;
+    if (gpu_visibility_enabled_) {
+        submitted_cpu_expected_visible_ = cpu_expected_visible_;
+        gpu_visibility_result_pending_ = true;
+    }
     last_draw_calls_ = (shadow_enabled_ ? shadow_cascade_count_ : 0U) + 1U;
     VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     present.waitSemaphoreCount = 1;
