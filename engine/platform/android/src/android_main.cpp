@@ -1,6 +1,8 @@
 #include "arut/platform/android/runtime.hpp"
 #include "arut/core/version.hpp"
 #include "arut/core/cube_stress_scene.hpp"
+#include "arut/core/asset_manager.hpp"
+#include "arut/platform/android/asset_source.hpp"
 #include "arut/rendering/vulkan/android_renderer.hpp"
 #include <android/input.h>
 #include <android/log.h>
@@ -15,6 +17,7 @@
 #include <cstring>
 #include <ctime>
 #include <mutex>
+#include <memory>
 #include <cerrno>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -252,6 +255,14 @@ void run(android_app* app) {
  log_info("%.*s %u.%u.%u starting (NativeActivity).",
   static_cast<int>(arut::core::name().size()), arut::core::name().data(), v.major, v.minor, v.patch);
  log_info("Rust systems ABI version: 0x%06x", arut_tasks_abi_version());
+ auto asset_source = std::make_shared<arut::platform::android::AndroidAssetSource>(
+  app->activity ? app->activity->assetManager : nullptr);
+ arut::core::AssetManager asset_manager(asset_source);
+ const auto default_environment = asset_manager.load("environments/default.hdr");
+ const auto asset_stats = asset_manager.stats();
+ log_info("ASSET_MANAGER smoke_test=%s path=environments/default.hdr bytes=%zu cache_entries=%zu",
+  default_environment ? "passed" : "failed",
+  default_environment ? default_environment.bytes->size() : 0U, asset_stats.entries);
  if (g_log_file) log_info("Persistent runtime log: %s", g_log_path);
  else log_warn("Persistent runtime log unavailable; logcat remains active.");
  try {
