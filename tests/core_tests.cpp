@@ -70,6 +70,13 @@ int main() {
     assert(projection.value[0] > 0.0F);
     assert(projection.value[5] < 0.0F);
     assert(near(projection.value[11], -1.0F));
+    const auto view = arut::rendering::look_at_rh({0.0F, 0.0F, 3.0F},
+                                                  {0.0F, 0.0F, 0.0F},
+                                                  {0.0F, 1.0F, 0.0F});
+    assert(near(view.value[14], -3.0F));
+    const auto view_projection = arut::rendering::multiply(projection, view);
+    assert(std::isfinite(view_projection.value[0]));
+    assert(std::isfinite(view_projection.value[14]));
     const auto invalid_projection = arut::rendering::perspective_rh_zo(1.0F, 0.0F, 0.1F, 100.0F);
     for (const auto value : invalid_projection.value) assert(near(value, 0.0F));
     return 0;
