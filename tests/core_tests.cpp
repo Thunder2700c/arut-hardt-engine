@@ -59,6 +59,37 @@ int main() {
         {0.8F, 0.2F, 0.1F}, 0.0F, 0.5F, {2.0F, 2.0F, 2.0F});
     assert(near(unlit.x, 0.0F) && near(unlit.y, 0.0F) && near(unlit.z, 0.0F));
 
+    constexpr int polar_steps = 48;
+    constexpr int azimuth_steps = 96;
+    constexpr float pi = 3.14159265358979323846F;
+    const Vec3 albedo{0.78F, 0.42F, 0.18F};
+    for (const float metallic : {0.0F, 0.5F, 1.0F}) {
+        for (const float roughness : {0.10F, 0.50F, 0.90F}) {
+            Vec3 integrated{};
+            for (int polar = 0; polar < polar_steps; ++polar) {
+                const float z = (static_cast<float>(polar) + 0.5F) /
+                                static_cast<float>(polar_steps);
+                const float radial = std::sqrt(std::max(0.0F, 1.0F - z * z));
+                for (int azimuth = 0; azimuth < azimuth_steps; ++azimuth) {
+                    const float phi = 2.0F * pi *
+                        (static_cast<float>(azimuth) + 0.5F) /
+                        static_cast<float>(azimuth_steps);
+                    const Vec3 light_direction{radial * std::cos(phi), radial * std::sin(phi), z};
+                    const Vec3 response = evaluate_direct_brdf(
+                        {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 1.0F}, light_direction,
+                        albedo, metallic, roughness, {1.0F, 1.0F, 1.0F});
+                    integrated = integrated + response;
+                }
+            }
+            const float solid_angle_per_sample =
+                (2.0F * pi) / static_cast<float>(polar_steps * azimuth_steps);
+            integrated = integrated * solid_angle_per_sample;
+            assert(integrated.x >= 0.0F && integrated.x <= 1.05F);
+            assert(integrated.y >= 0.0F && integrated.y <= 1.05F);
+            assert(integrated.z >= 0.0F && integrated.z <= 1.05F);
+        }
+    }
+
     const Vec3 mapped = tone_map_aces({4.0F, 1.0F, 0.25F});
     assert(mapped.x <= 1.0F && mapped.x > mapped.y && mapped.y > mapped.z);
     const auto cube = arut::rendering::make_unit_cube();
