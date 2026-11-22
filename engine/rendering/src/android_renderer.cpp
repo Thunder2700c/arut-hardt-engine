@@ -926,6 +926,27 @@ bool AndroidRenderer::create_brdf_lut() noexcept {
         log_error("Split-sum BRDF integration LUT upload failed");
         return false;
     }
+    // A BRDF LUT is a parameter lookup, not a roughness-prefiltered image.
+    // Keep it pinned to mip zero while retaining bilinear interpolation.
+    if (brdf_lut_sampler_) vkDestroySampler(device_, brdf_lut_sampler_, nullptr);
+    brdf_lut_sampler_ = VK_NULL_HANDLE;
+    VkFormatProperties lut_format_properties{};
+    vkGetPhysicalDeviceFormatProperties(physical_device_, VK_FORMAT_R8G8B8A8_UNORM, &lut_format_properties);
+    const bool linear_filter =
+        (lut_format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0U;
+    VkSamplerCreateInfo lut_sampler{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    lut_sampler.magFilter = linear_filter ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+    lut_sampler.minFilter = linear_filter ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+    lut_sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    lut_sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    lut_sampler.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    lut_sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    lut_sampler.maxLod = 0.0F;
+    const VkResult sampler_result = vkCreateSampler(device_, &lut_sampler, nullptr, &brdf_lut_sampler_);
+    if (sampler_result != VK_SUCCESS) {
+        log_error("Create BRDF integration LUT sampler failed", sampler_result);
+        return false;
+    }
     arut_android_log(ANDROID_LOG_INFO, "64x64 split-sum GGX BRDF integration LUT generated and uploaded.");
     return true;
 }
