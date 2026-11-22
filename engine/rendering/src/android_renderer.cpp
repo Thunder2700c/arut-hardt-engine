@@ -47,6 +47,7 @@ bool AndroidRenderer::initialize(ANativeWindow* window, AAssetManager* assets) n
         !select_device() || !create_device() || !create_swapchain() ||
         !create_render_targets() || !create_triangle_geometry() || !create_triangle_pipeline() ||
         !create_pbr_geometry() || !create_fallback_texture() || !create_pbr_pipeline() ||
+        !create_shadow_resources() || !create_shadow_pipeline() ||
         !create_pbr_descriptors() || !create_commands_and_sync()) {
         shutdown();
         return false;
@@ -1252,8 +1253,9 @@ bool AndroidRenderer::create_pbr_pipeline() noexcept {
     result = vkCreateShaderModule(device_, &module_info, nullptr, &fragment_module);
     if (result != VK_SUCCESS) { vkDestroyShaderModule(device_, vertex_module, nullptr); log_error("Create PBR fragment shader module failed", result); return false; }
 
-    const std::array<VkDescriptorSetLayoutBinding, 1> frame_bindings{{
-        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}
+    const std::array<VkDescriptorSetLayoutBinding, 2> frame_bindings{{
+        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+        {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}
     }};
     VkDescriptorSetLayoutCreateInfo set_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     set_info.bindingCount = static_cast<std::uint32_t>(frame_bindings.size());
@@ -1333,6 +1335,7 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
         float camera_position[4];
         float light_direction[4];
         float light_radiance[4];
+        float light_view_projection[16];
     };
     struct alignas(16) MaterialData final {
         float base_color[4];
@@ -1340,7 +1343,7 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
         float roughness_normal_occlusion_alpha[4];
         std::uint32_t flags[4];
     };
-    static_assert(sizeof(FrameData) == 112);
+    static_assert(sizeof(FrameData) == 176);
     static_assert(sizeof(MaterialData) == 64);
     if (!load_texture_asset("textures/demo_base_color.png", VK_FORMAT_R8G8B8A8_SRGB, true,
                             base_color_image_, base_color_memory_, base_color_view_,
@@ -1349,15 +1352,22 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
         !create_buffer(sizeof(MaterialData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, material_uniform_buffer_, material_uniform_memory_)) return false;
 
     const FrameData frame{
-        {0}, {2.2F, 1.8F, 2.8F, 1.0F}, {0.45F, -1.0F, 0.35F, 0.0F}, {3.0F, 2.8F, 2.5F, 0.0F}
+        {0}, {2.2F, 1.8F, 2.8F, 1.0F}, {0.45F, -1.0F, 0.35F, 0.0F},
+        {3.0F, 2.8F, 2.5F, 0.0F}, {0}
     };
     const auto view = arut::rendering::look_at_rh({frame.camera_position[0], frame.camera_position[1], frame.camera_position[2]},
                                                   {0.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F});
     const auto projection = arut::rendering::perspective_rh_zo(0.785398163F,
         static_cast<float>(extent_.width) / static_cast<float>(std::max(1U, extent_.height)), 0.1F, 100.0F);
     const auto vp = arut::rendering::multiply(projection, view);
+    const auto light_view = arut::rendering::look_at_rh({-4.0F, 6.0F, -4.0F},
+                                                        {0.0F, 0.0F, 0.0F},
+                                                        {0.0F, 1.0F, 0.0F});
+    const auto light_projection = arut::rendering::orthographic_rh_zo(-4.0F, 4.0F, -4.0F, 4.0F, 0.1F, 20.0F);
+    const auto light_vp = arut::rendering::multiply(light_projection, light_view);
     FrameData frame_upload = frame;
     std::copy(vp.value.begin(), vp.value.end(), frame_upload.view_projection);
+    std::copy(light_vp.value.begin(), light_vp.value.end(), frame_upload.light_view_projection);
     void* mapped = nullptr;
     VkResult result = vkMapMemory(device_, frame_uniform_memory_, 0, sizeof(FrameData), 0, &mapped);
     if (result != VK_SUCCESS || !mapped) { log_error("Map frame uniform buffer failed", result); return false; }
@@ -1372,7 +1382,7 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
 
     const std::array<VkDescriptorPoolSize, 2> sizes{{
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2},
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3}
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4}
     }};
     VkDescriptorPoolCreateInfo pool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool.maxSets = 2; pool.poolSizeCount = static_cast<std::uint32_t>(sizes.size()); pool.pPoolSizes = sizes.data();
@@ -1388,14 +1398,16 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
 
     VkDescriptorBufferInfo frame_info{frame_uniform_buffer_, 0, sizeof(FrameData)};
     VkDescriptorBufferInfo material_info{material_uniform_buffer_, 0, sizeof(MaterialData)};
+    const VkDescriptorImageInfo shadow_info{shadow_sampler_, shadow_view_, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
     const VkDescriptorImageInfo base_color_info{base_color_sampler_, base_color_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     const VkDescriptorImageInfo fallback_info{fallback_sampler_, fallback_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    std::array<VkWriteDescriptorSet, 5> writes{};
+    std::array<VkWriteDescriptorSet, 6> writes{};
     writes[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &frame_info, nullptr};
-    writes[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &material_info, nullptr};
-    writes[2] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &base_color_info, nullptr, nullptr};
-    writes[3] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 2, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &fallback_info, nullptr, nullptr};
-    writes[4] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 3, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &fallback_info, nullptr, nullptr};
+    writes[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &shadow_info, nullptr, nullptr};
+    writes[2] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &material_info, nullptr};
+    writes[3] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &base_color_info, nullptr, nullptr};
+    writes[4] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 2, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &fallback_info, nullptr, nullptr};
+    writes[5] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 3, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &fallback_info, nullptr, nullptr};
     vkUpdateDescriptorSets(device_, static_cast<std::uint32_t>(writes.size()), writes.data(), 0, nullptr);
     arut_android_log(ANDROID_LOG_INFO, "PBR frame/material descriptors and fallback texture bound.");
     return true;
