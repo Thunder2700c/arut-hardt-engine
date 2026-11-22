@@ -137,6 +137,18 @@ int main() {
         0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
         0x42, 0x60, 0x82
     }};
+    constexpr std::string_view hdr_header = "#?RADIANCE\\nFORMAT=32-bit_rle_rgbe\\n\\n-Y 1 +X 1\\n";
+    std::vector<std::uint8_t> hdr_pixel(hdr_header.begin(), hdr_header.end());
+    hdr_pixel.insert(hdr_pixel.end(), {128U, 64U, 32U, 129U});
+    arut::rendering::Rgba32fImage decoded_hdr{};
+    const auto hdr_result = arut::rendering::decode_image_rgba32f(hdr_pixel, decoded_hdr);
+    assert(hdr_result && decoded_hdr.valid());
+    assert(decoded_hdr.width == 1U && decoded_hdr.height == 1U);
+    assert(near(decoded_hdr.pixels[0], 1.0F));
+    assert(near(decoded_hdr.pixels[1], 0.5F));
+    assert(near(decoded_hdr.pixels[2], 0.25F));
+    assert(near(decoded_hdr.pixels[3], 1.0F));
+
     arut::rendering::Rgba8Image decoded{};
     const auto decode_result = arut::rendering::decode_image_rgba8(png_2x2, decoded);
     assert(decode_result && decoded.width == 2 && decoded.height == 2);
