@@ -31,58 +31,6 @@ void log_warn(const char* format, ...) {
  __android_log_vprint(ANDROID_LOG_WARN, kLogTag, format, args);
  va_end(args);
 }
-void report_vulkan_device() {
- VkApplicationInfo app_info{};
- app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
- app_info.pApplicationName = "ARUT-HARDT";
- app_info.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
- app_info.pEngineName = "ARUT-HARDT Engine";
- app_info.engineVersion = VK_MAKE_VERSION(0, 1, 0);
- app_info.apiVersion = VK_API_VERSION_1_0;
- VkInstanceCreateInfo create_info{};
- create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
- create_info.pApplicationInfo = &app_info;
- VkInstance instance = VK_NULL_HANDLE;
- const VkResult create_result = vkCreateInstance(&create_info, nullptr, &instance);
- if (create_result != VK_SUCCESS) {
-  log_warn("Vulkan unavailable (VkResult=%d); native runtime continues without renderer.", static_cast<int>(create_result));
-  return;
- }
- std::uint32_t device_count = 0;
- VkResult result = vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
- if (result != VK_SUCCESS || device_count == 0) {
-  log_warn("No Vulkan physical devices (VkResult=%d, count=%u).", static_cast<int>(result), device_count);
-  vkDestroyInstance(instance, nullptr); return;
- }
- VkPhysicalDevice devices[8]{};
- const std::uint32_t reported_count = device_count;
- std::uint32_t capacity = device_count < 8 ? device_count : 8;
- result = vkEnumeratePhysicalDevices(instance, &capacity, devices);
- if (result != VK_SUCCESS) {
-  log_warn("Vulkan device enumeration failed (VkResult=%d).", static_cast<int>(result));
-  vkDestroyInstance(instance, nullptr); return;
- }
- log_info("Vulkan devices=%u (reporting up to %u).", reported_count, capacity);
- for (std::uint32_t i = 0; i < capacity; ++i) {
-  VkPhysicalDeviceProperties props{};
-  vkGetPhysicalDeviceProperties(devices[i], &props);
-  VkPhysicalDeviceMemoryProperties memory{};
-  vkGetPhysicalDeviceMemoryProperties(devices[i], &memory);
-  std::uint64_t local_bytes = 0;
-  for (std::uint32_t h = 0; h < memory.memoryHeapCount; ++h)
-   if ((memory.memoryHeaps[h].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0)
-    local_bytes += memory.memoryHeaps[h].size;
-  std::uint32_t queues = 0;
-  vkGetPhysicalDeviceQueueFamilyProperties(devices[i], &queues, nullptr);
-  std::uint32_t extensions = 0;
-  const VkResult ext_result = vkEnumerateDeviceExtensionProperties(devices[i], nullptr, &extensions, nullptr);
-  log_info("GPU[%u] %s vendor=0x%04x device=0x%04x API=%u.%u.%u driver=%u local=%" PRIu64 "MiB queues=%u extensions=%u extResult=%d",
-   i, props.deviceName, props.vendorID, props.deviceID,
-   VK_VERSION_MAJOR(props.apiVersion), VK_VERSION_MINOR(props.apiVersion), VK_VERSION_PATCH(props.apiVersion),
-   props.driverVersion, local_bytes / (1024ULL * 1024ULL), queues, extensions, static_cast<int>(ext_result));
- }
- vkDestroyInstance(instance, nullptr);
-}
 void handle_app_command(android_app* app, std::int32_t command) {
  auto* state = static_cast<RuntimeState*>(app->userData);
  if (!state) return;
