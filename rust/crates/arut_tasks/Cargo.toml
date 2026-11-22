@@ -1,0 +1,13 @@
+[package]
+name = "arut_tasks"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Rust systems component for the ARUT-HARDT engine"
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
