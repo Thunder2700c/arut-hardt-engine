@@ -219,6 +219,74 @@ bool AndroidRenderer::create_gpu_visibility_resources() noexcept {
     return true;
 }
 
+bool AndroidRenderer::record_gpu_visibility(VkCommandBuffer command_buffer) noexcept {
+    if (!gpu_visibility_enabled_) return true;
+
+    const arut::rendering::IndexedIndirectArguments reset_arguments{
+        cube_index_count_, 0U, 0U, 0, 0U
+    };
+    void* mapped = nullptr;
+    VkResult result = vkMapMemory(device_, indirect_draw_memory_, 0,
+                                  sizeof(reset_arguments), 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map indexed indirect arguments before GPU culling failed", result);
+        return false;
+    }
+    std::memcpy(mapped, &reset_arguments, sizeof(reset_arguments));
+    vkUnmapMemory(device_, indirect_draw_memory_);
+
+    std::array<VkBufferMemoryBarrier, 3> before_compute{};
+    before_compute[0] = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+        VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+        VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+        visibility_input_buffer_, 0, VK_WHOLE_SIZE};
+    before_compute[1] = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+        VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+        VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+        indirect_draw_buffer_, 0, sizeof(arut::rendering::IndexedIndirectArguments)};
+    before_compute[2] = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+        VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+        VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+        instance_buffer_, 0, VK_WHOLE_SIZE};
+    vkCmdPipelineBarrier(command_buffer,
+        VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+        0, nullptr, static_cast<std::uint32_t>(before_compute.size()),
+        before_compute.data(), 0, nullptr);
+
+    arut::rendering::GpuVisibilityPushConstants push{};
+    for (std::size_t plane = 0; plane < 6U; ++plane) {
+        for (std::size_t component = 0; component < 4U; ++component) {
+            push.frustum_planes[plane][component] =
+                visibility_frustum_planes_[plane * 4U + component];
+        }
+    }
+    push.instance_count = visibility_source_instance_count_;
+    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, visibility_compute_pipeline_);
+    vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            visibility_pipeline_layout_, 0, 1,
+                            &visibility_descriptor_set_, 0, nullptr);
+    vkCmdPushConstants(command_buffer, visibility_pipeline_layout_, VK_SHADER_STAGE_COMPUTE_BIT,
+                       0, sizeof(push), &push);
+    vkCmdDispatch(command_buffer,
+        arut::rendering::visibility_workgroup_count(visibility_source_instance_count_), 1U, 1U);
+
+    std::array<VkBufferMemoryBarrier, 2> after_compute{};
+    after_compute[0] = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+        VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
+        VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+        instance_buffer_, 0, VK_WHOLE_SIZE};
+    after_compute[1] = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+        VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+        VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+        indirect_draw_buffer_, 0, sizeof(arut::rendering::IndexedIndirectArguments)};
+    vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0,
+        0, nullptr, static_cast<std::uint32_t>(after_compute.size()),
+        after_compute.data(), 0, nullptr);
+    return true;
+}
+
 bool AndroidRenderer::create_instance() noexcept {
     const std::array<const char*, 2> extensions{
         VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_ANDROID_SURFACE_EXTENSION_NAME
