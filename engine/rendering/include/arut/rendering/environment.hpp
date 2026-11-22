@@ -18,4 +18,10 @@ struct EnvironmentCubeMip final {
 [[nodiscard]] bool build_procedural_environment_cube(
     std::uint32_t base_size, std::vector<EnvironmentCubeMip>& output) noexcept;
 
+// Integrates incoming radiance over a cosine-weighted hemisphere for each output normal.
+// The resulting cubemap stores irradiance divided by PI for the Lambertian diffuse term.
+[[nodiscard]] bool build_diffuse_irradiance_cube(
+    const EnvironmentCubeMip& source_base, std::uint32_t output_size,
+    std::uint32_t sample_count, EnvironmentCubeMip& output) noexcept;
+
 } // namespace arut::rendering
