@@ -1263,35 +1263,70 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         static_cast<float>(extent_.width) / static_cast<float>(std::max(1U, extent_.height)), 0.1F, 100.0F);
     const auto view_projection = arut::rendering::multiply(projection, view);
     const auto frustum = arut::rendering::extract_vulkan_frustum(view_projection);
-    std::vector<arut::rendering::Mat4> visible_instances;
-    visible_instances.reserve(specs.size());
+
+    std::vector<arut::rendering::GpuVisibilityInstance> source_instances;
+    std::vector<arut::rendering::Mat4> cpu_visible_instances;
+    source_instances.reserve(specs.size());
+    cpu_visible_instances.reserve(specs.size());
     for (const auto& spec : specs) {
         const float radius = spec.scale * 0.866025404F;
+        const auto model = make_instance(spec.x, spec.scale, spec.yaw);
+        arut::rendering::GpuVisibilityInstance source{};
+        source.bounds = {spec.x, 0.0F, 0.0F, radius};
+        source.model = model.value;
+        source_instances.push_back(source);
         const arut::rendering::BoundingSphere bounds{{spec.x, 0.0F, 0.0F}, radius};
         if (arut::rendering::sphere_visible(frustum, bounds))
-            visible_instances.push_back(make_instance(spec.x, spec.scale, spec.yaw));
+            cpu_visible_instances.push_back(model);
     }
-    if (visible_instances.empty()) {
-        log_error("CPU visibility culling removed every PBR test instance");
+    if (source_instances.empty() || cpu_visible_instances.empty()) {
+        log_error("CPU visibility fallback removed every PBR test instance");
         return false;
     }
-    const VkDeviceSize instance_bytes = visible_instances.size() * sizeof(arut::rendering::Mat4);
-    if (!create_buffer(instance_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+
+    for (std::size_t plane_index = 0; plane_index < frustum.planes.size(); ++plane_index) {
+        const auto& plane = frustum.planes[plane_index];
+        visibility_frustum_planes_[plane_index * 4U + 0U] = plane.normal[0];
+        visibility_frustum_planes_[plane_index * 4U + 1U] = plane.normal[1];
+        visibility_frustum_planes_[plane_index * 4U + 2U] = plane.normal[2];
+        visibility_frustum_planes_[plane_index * 4U + 3U] = plane.distance;
+    }
+    visibility_source_instance_count_ = static_cast<std::uint32_t>(source_instances.size());
+
+    const VkDeviceSize input_bytes = source_instances.size() * sizeof(arut::rendering::GpuVisibilityInstance);
+    if (!create_buffer(input_bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                       visibility_input_buffer_, visibility_input_memory_)) return false;
+    mapped = nullptr;
+    result = vkMapMemory(device_, visibility_input_memory_, 0, input_bytes, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map GPU visibility input buffer failed", result);
+        return false;
+    }
+    std::memcpy(mapped, source_instances.data(), static_cast<std::size_t>(input_bytes));
+    vkUnmapMemory(device_, visibility_input_memory_);
+
+    const VkDeviceSize instance_capacity_bytes =
+        source_instances.size() * sizeof(arut::rendering::Mat4);
+    if (!create_buffer(instance_capacity_bytes,
+                       VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                        instance_buffer_, instance_memory_)) return false;
     mapped = nullptr;
-    result = vkMapMemory(device_, instance_memory_, 0, instance_bytes, 0, &mapped);
+    result = vkMapMemory(device_, instance_memory_, 0, instance_capacity_bytes, 0, &mapped);
     if (result != VK_SUCCESS || !mapped) {
-        log_error("Map PBR instance buffer failed", result);
+        log_error("Map PBR instance output buffer failed", result);
         return false;
     }
-    std::memcpy(mapped, visible_instances.data(), static_cast<std::size_t>(instance_bytes));
+    std::memset(mapped, 0, static_cast<std::size_t>(instance_capacity_bytes));
+    std::memcpy(mapped, cpu_visible_instances.data(),
+                cpu_visible_instances.size() * sizeof(arut::rendering::Mat4));
     vkUnmapMemory(device_, instance_memory_);
-    instance_count_ = static_cast<std::uint32_t>(visible_instances.size());
+    instance_count_ = static_cast<std::uint32_t>(cpu_visible_instances.size());
 
-    const VkDrawIndexedIndirectCommand indirect_command{
+    const arut::rendering::IndexedIndirectArguments indirect_command{
         cube_index_count_, instance_count_, 0U, 0, 0U
     };
-    if (!create_buffer(sizeof(indirect_command), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+    if (!create_buffer(sizeof(indirect_command),
+                       VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                        indirect_draw_buffer_, indirect_draw_memory_)) return false;
     mapped = nullptr;
     result = vkMapMemory(device_, indirect_draw_memory_, 0, sizeof(indirect_command), 0, &mapped);
@@ -1302,9 +1337,11 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
     std::memcpy(mapped, &indirect_command, sizeof(indirect_command));
     vkUnmapMemory(device_, indirect_draw_memory_);
 
-    char message[160]{};
-    std::snprintf(message, sizeof(message), "PBR mesh: vertices=%zu indices=%u instances=%u culled=%zu",
-                  mesh.vertices.size(), cube_index_count_, instance_count_, specs.size() - visible_instances.size());
+    char message[192]{};
+    std::snprintf(message, sizeof(message),
+                  "PBR mesh: vertices=%zu indices=%u source_instances=%u CPU_visible=%u culled=%u",
+                  mesh.vertices.size(), cube_index_count_, visibility_source_instance_count_,
+                  instance_count_, visibility_source_instance_count_ - instance_count_);
     arut_android_log(ANDROID_LOG_INFO, message);
     return true;
 }
