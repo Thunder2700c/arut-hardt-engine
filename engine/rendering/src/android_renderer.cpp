@@ -3024,6 +3024,8 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     in_flight_ = VK_NULL_HANDLE;
     timestamp_query_pool_ = VK_NULL_HANDLE;
     timestamp_data_pending_ = false;
+    gpu_visibility_result_pending_ = false;
+    submitted_cpu_expected_visible_ = 0U;
     image_available_ = VK_NULL_HANDLE;
     render_finished_.clear();
     command_pool_ = VK_NULL_HANDLE;
