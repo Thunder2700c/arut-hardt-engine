@@ -227,6 +227,9 @@ private:
     float look_last_x_{0.0F};
     float look_last_y_{0.0F};
     std::uint32_t cpu_expected_visible_{0};
+    // CPU count captured for the exact frame whose GPU indirect count is read back next frame.
+    std::uint32_t submitted_cpu_expected_visible_{0};
+    bool gpu_visibility_result_pending_{false};
     std::uint64_t culling_parity_checks_{0};
     std::uint64_t culling_parity_mismatches_{0};
     std::chrono::steady_clock::time_point last_camera_update_{};
