@@ -264,8 +264,11 @@ bool AndroidRenderer::create_commands_and_sync() noexcept {
     alloc.commandBufferCount = static_cast<std::uint32_t>(command_buffers_.size());
     if (vkAllocateCommandBuffers(device_, &alloc, command_buffers_.data()) != VK_SUCCESS) return false;
     VkSemaphoreCreateInfo semaphore{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    if (vkCreateSemaphore(device_, &semaphore, nullptr, &image_available_) != VK_SUCCESS ||
-        vkCreateSemaphore(device_, &semaphore, nullptr, &render_finished_) != VK_SUCCESS) return false;
+    if (vkCreateSemaphore(device_, &semaphore, nullptr, &image_available_) != VK_SUCCESS) return false;
+    render_finished_.assign(images_.size(), VK_NULL_HANDLE);
+    for (auto& finished : render_finished_) {
+        if (vkCreateSemaphore(device_, &semaphore, nullptr, &finished) != VK_SUCCESS) return false;
+    }
     VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     fence.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     return vkCreateFence(device_, &fence, nullptr, &in_flight_) == VK_SUCCESS;
@@ -305,12 +308,12 @@ bool AndroidRenderer::draw_frame() noexcept {
     submit.commandBufferCount = 1;
     submit.pCommandBuffers = &command_buffers_[image_index];
     submit.signalSemaphoreCount = 1;
-    submit.pSignalSemaphores = &render_finished_;
+    submit.pSignalSemaphores = &render_finished_[image_index];
     result = vkQueueSubmit(graphics_queue_, 1, &submit, in_flight_);
     if (result != VK_SUCCESS) { log_error("vkQueueSubmit failed", result); return false; }
     VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     present.waitSemaphoreCount = 1;
-    present.pWaitSemaphores = &render_finished_;
+    present.pWaitSemaphores = &render_finished_[image_index];
     present.swapchainCount = 1;
     present.pSwapchains = &swapchain_;
     present.pImageIndices = &image_index;
@@ -325,7 +328,7 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     if (device_ != VK_NULL_HANDLE) {
         if (in_flight_) vkDestroyFence(device_, in_flight_, nullptr);
         if (image_available_) vkDestroySemaphore(device_, image_available_, nullptr);
-        if (render_finished_) vkDestroySemaphore(device_, render_finished_, nullptr);
+        for (auto semaphore : render_finished_) if (semaphore) vkDestroySemaphore(device_, semaphore, nullptr);
         if (command_pool_) vkDestroyCommandPool(device_, command_pool_, nullptr);
         for (auto fb : framebuffers_) if (fb) vkDestroyFramebuffer(device_, fb, nullptr);
         if (render_pass_) vkDestroyRenderPass(device_, render_pass_, nullptr);
@@ -334,7 +337,7 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     }
     in_flight_ = VK_NULL_HANDLE;
     image_available_ = VK_NULL_HANDLE;
-    render_finished_ = VK_NULL_HANDLE;
+    render_finished_.clear();
     command_pool_ = VK_NULL_HANDLE;
     render_pass_ = VK_NULL_HANDLE;
     swapchain_ = VK_NULL_HANDLE;
