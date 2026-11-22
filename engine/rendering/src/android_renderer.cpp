@@ -369,6 +369,7 @@ bool AndroidRenderer::create_render_targets() noexcept {
 
 bool AndroidRenderer::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
                                     VkBuffer& buffer, VkDeviceMemory& memory) noexcept {
+    if (size == 0 || device_ == VK_NULL_HANDLE) return false;
     VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     info.size = size;
     info.usage = usage;
@@ -384,7 +385,9 @@ bool AndroidRenderer::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
         requirements.memoryTypeBits,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     if (type == UINT32_MAX) {
-        log_error("No host-visible coherent memory type for geometry buffer");
+        vkDestroyBuffer(device_, buffer, nullptr);
+        buffer = VK_NULL_HANDLE;
+        log_error("No host-visible coherent memory type for buffer");
         return false;
     }
     VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
@@ -392,12 +395,18 @@ bool AndroidRenderer::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
     allocation.memoryTypeIndex = type;
     result = vkAllocateMemory(device_, &allocation, nullptr, &memory);
     if (result != VK_SUCCESS) {
-        log_error("vkAllocateMemory for geometry buffer failed", result);
+        vkDestroyBuffer(device_, buffer, nullptr);
+        buffer = VK_NULL_HANDLE;
+        log_error("vkAllocateMemory for buffer failed", result);
         return false;
     }
     result = vkBindBufferMemory(device_, buffer, memory, 0);
     if (result != VK_SUCCESS) {
-        log_error("vkBindBufferMemory for geometry buffer failed", result);
+        vkFreeMemory(device_, memory, nullptr);
+        vkDestroyBuffer(device_, buffer, nullptr);
+        memory = VK_NULL_HANDLE;
+        buffer = VK_NULL_HANDLE;
+        log_error("vkBindBufferMemory failed", result);
         return false;
     }
     return true;
