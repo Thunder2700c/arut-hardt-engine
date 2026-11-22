@@ -1,112 +1,149 @@
-# Development Roadmap
+# ARUT-HARDT Engine Development Roadmap
 
-## Phase 0 — Clean native foundation
-- [x] C++20 CMake project.
-- [x] Rust workspace and initial ABI symbol.
-- [x] C++ and Rust tests.
-- [x] Linux CI verified.
-- [x] Android NDK CI added with native target.
-Status: Foundation established.
+> **Canonical roadmap:** This document follows the user's approved Phase 0–10 plan exactly. Phase numbers, names, scope and deliverables must not be renumbered, merged, silently redefined or replaced. Progress notes may be added without changing the canonical scope.
 
-## Phase 1 — Android native runtime (active)
-- [x] NativeActivity app shell and ARM64 Gradle/NDK build.
-- [x] Native C++ entry point and Android NDK glue.
-- [x] Start/resume/pause/stop, focus, window, configuration and low-memory callbacks.
-- [x] Native touch and key input queue.
-- [x] Vulkan instance and physical-device capability query.
-- [x] Rust ARM64 static library and C++ ABI version call.
-- [x] Android CI and APK artifact upload.
-- [ ] Confirm CI builds the APK.
-- [ ] Install and smoke-test on a physical ARM64 Android device.
-- [ ] Verify repeated pause/resume and surface recreation.
-- [ ] Verify touch/key input and Vulkan reporting in device logs.
+## Phase 0 — Architecture and infrastructure
 
-Exit gate: APK installs and starts on a physical ARM64 device, handles lifecycle/input/surface changes, reports GPU capabilities when available, and calls the Rust ABI. CI alone is not physical-device validation.
+- [ ] Technical specifications.
+- [ ] C++ coding standards.
+- [ ] CMake configuration.
+- [ ] Dependency and license audit.
+- [ ] CI/CD Android ARM64 build.
+- [ ] Runtime module interfaces.
 
-## Phase 2 — Vulkan renderer bootstrap (in progress)
-- [x] Android Vulkan instance with surface extensions.
-- [x] Android window surface creation and graphics/present queue selection.
-- [x] VK_KHR_swapchain device selection and FIFO swapchain creation.
-- [x] Swapchain image views, clear render pass, framebuffers and command buffers.
-- [x] Frame synchronization with acquire/submit/present and out-of-date swapchain recreation.
-- [x] Connect renderer lifetime to NativeActivity window lifecycle.
-- [ ] Confirm Android ARM64 native compilation (source is present; no APK build has been requested).
-- [ ] Install and run on the Galaxy S23 FE; verify the triangle, depth attachment and rotation/resume (deferred until testing stage).
-- [x] Add packaged SPIR-V loading, shader modules and a first-triangle graphics pipeline.
-- [x] Add a host-visible vertex buffer and a depth image/view/render-pass attachment with depth testing enabled.
-- [x] Add a standard PBR-ready vertex layout, procedural unit-cube mesh data and Vulkan-compatible perspective matrix helper.
-- [x] Add indexed unit-cube mesh buffers, camera/view transforms, frame/material uniforms and an active mobile PBR draw path.
-- [x] Add bounded PNG/JPEG/BMP/TGA decoding into RGBA8 pixels.
-- [x] Add CPU mip-chain generation with linear-light filtering for sRGB base-colour images.
-- [x] Add Vulkan staging-buffer texture upload, sampled image/view/sampler creation and mip-level sampling.
-- [x] Load a bundled sRGB base-colour PNG and bind it to the active PBR material.
-- [ ] Add more material texture maps, texture cache/handles and asynchronous texture streaming.
-- [ ] Compile the Android-native renderer and validate on device (deferred until the agreed testing stage).
-Exit gate: Android renders a textured 3D scene with validation and frame/GPU timing.
+**Deliverable:** clean engine skeleton that compiles.
 
-## Phase 3 — Rendering and materials (implementation complete; device validation pending)
-- [x] Define a PBR material data contract (base colour, metallic, roughness, emissive, normal scale, occlusion and alpha cutoff).
-- [x] Add finite-value handling and safe material parameter normalization.
-- [x] Define Low/Medium/High/Ultra mobile quality presets with render scale, shadow budget and light limits.
-- [x] Define a renderer profiling snapshot contract.
-- [x] Add a CPU reference implementation for Schlick Fresnel, GGX distribution, Smith geometry, Cook-Torrance direct lighting and ACES tone mapping.
-- [x] Decode and upload bundled base-colour, tangent-normal and metallic-roughness texture assets with sRGB/linear colour-space handling and mip chains.
-- [x] Add mobile forward PBR vertex/fragment shader source and host-CI GLSL compilation, connected to the Vulkan PBR pipeline.
-- [x] Add host tests for BRDF limits, front/back lighting and tone mapping.
-- [x] Integrate shader compilation, descriptor layouts, vertex formats and graphics pipeline into Vulkan.
-- [x] Add a numerical hemisphere-integration energy-budget regression for the CPU Cook-Torrance reference across dielectric, mixed and metallic materials.
-- [ ] Compare actual GPU shader output against the CPU reference during authorized device validation.
-- [x] Add a directional depth-only shadow pass, depth-array sampling and 3x3 PCF.
-- [x] Add a four-layer directional shadow depth array with 1/2/4 active cascades, per-cascade light matrices, view-depth selection, texel snapping and cascade cross-fading.
-- [x] Connect Low/Medium/High/Ultra quality tiers to shadow resolution/cascade count, with mobile-bounded 512/512/1024/1536 maps.
-- [x] Add a per-instance model-matrix vertex stream and indexed instanced cube drawing.
-- [x] Add CPU frustum extraction and bounding-sphere culling for test instances.
-- [x] Add CPU-generated indexed indirect draw commands for instanced main and shadow passes.
-- [x] Add an optional Vulkan compute frustum-culling path that compacts visible instance transforms and atomically writes indexed indirect draw arguments.
-- [x] Add CPU fallback for devices without a compute-capable graphics queue or a valid compute shader/pipeline.
-- [x] Synchronize compute output for vertex fetch, indirect command reads and host profiling readback; add compute ABI/workgroup tests.
-- [ ] Validate GPU/CPU visible-instance parity and performance on physical Android GPUs.
-- [x] Add a procedural six-face sky/ground environment cubemap, GGX importance-sampled specular mips and PBR diffuse/specular environment sampling.
-- [x] Add a CPU split-sum GGX BRDF integration LUT baker, upload it as a sampled Vulkan texture and use it in the PBR specular environment response.
-- [x] Add a separately convolved diffuse irradiance cubemap using cosine-weighted hemisphere sampling.
-- [x] Add a tested CPU environment-probe influence contract with smooth AABB edge fades, normalized overlap weights and priority resolution.
-- [x] Decode bounded Radiance RGBE images to linear RGBA32F and convert equirectangular HDR radiance into a seam-wrapped six-face RGBA32F cubemap.
-- [x] Add HDR float GGX specular prefiltering and cosine-convolved diffuse irradiance; convert the results to validated RGBA16F and support Vulkan cubemap upload with an RGBA8 procedural fallback.
-- [x] Add optional Android loading of `environments/default.hdr` and connect the HDR import/convolution/upload path to the active PBR descriptors.
-- [x] Add a four-slot GPU probe uniform buffer, priority-aware world-position AABB selection, weighted specular/diffuse cubemap blending, runtime probe registration, and optional per-slot HDR probe asset loading with global-environment fallback.
-- [ ] Validate distinct probe assets and blended output on physical devices.
-- [x] Connect profile snapshots to CPU frame time, separate GPU visibility/shadow/full-frame timestamp intervals, draw calls, visible objects and triangle counts.
-- [x] Track persistent renderer-owned Vulkan buffer/image allocation sizes in runtime profiling logs.
-- [x] Add optional VK_EXT_memory_budget device-local heap usage/budget queries and separate visibility, shadow and main-scene GPU timestamp intervals.
-- [x] Export main-pass timing and optional driver heap usage/budget values in Android runtime profile logs.
-- [ ] Add per-material GPU timing after Phase 4 introduces material handles/batching; deferred because the current validation scene has one material and cannot produce meaningful per-material comparisons.
-- [ ] Validate graceful quality fallback on two Android GPU families.
-Exit gate: PBR test scene works across two Android GPU families with graceful fallback and measured CPU/GPU costs.
+## Phase 1 — Native Android runtime
 
-## Phase 4 — Resources and world streaming
-Resource handles, asynchronous asset loading, world coordinates/cells, cancellation, prioritization, eviction, budgets, terrain and LOD.
-Exit gate: test world streams without stalls, leaks or invalid resource access.
+- [ ] Android lifecycle.
+- [ ] JNI integration.
+- [ ] Input and touch.
+- [ ] Surface creation.
+- [ ] Logging and crash handling.
+- [ ] Vulkan initialization.
 
-## Phase 5 — Character and animation
-Character controller, skeleton/clip import, playback, blending, state machines, IK, foot placement and ragdoll handoff.
-Exit gate: third-person character traverses a test environment on Android.
+**Deliverable:** native ARUT application running on S23 FE.
 
-## Phase 6 — Vehicle and physics
-Physics backend, collision, fixed-step integration, vehicle prototype, steering, suspension, tire response, transmission and entry/exit.
-Exit gate: drivable vehicle handles repeatable benchmark routes with measured stability and frame cost.
+## Phase 2 — Vulkan renderer
 
-## Phase 7 — Open-world simulation
-Road graph, traffic, intersections, pedestrians, navigation, police pursuit, distance-based simulation and persistent world state.
-Exit gate: small city block runs concurrent agents in repeatable stress scenarios.
+- [ ] Swapchain.
+- [ ] GPU memory management.
+- [ ] Shader pipeline.
+- [ ] Textures and meshes.
+- [ ] PBR materials.
+- [ ] Camera and lighting.
 
-## Phase 8 — Environment, audio and gameplay
-Weather, water, fog, wind, vegetation, spatial audio, interactions, combat primitives, mission API and saves.
-Exit gate: playable vertical slice with measured Android performance budget.
+**Deliverable:** textured 3D environment on Android.
+
+## Phase 3 — Core world system
+
+- [ ] ECS.
+- [ ] Scene graph.
+- [ ] Asset manager.
+- [ ] Terrain.
+- [ ] LOD.
+- [ ] World partitioning.
+
+**Deliverable:** navigable streamed environment.
+
+## Phase 4 — Character and animation
+
+- [ ] Robot mannequin.
+- [ ] Locomotion.
+- [ ] Animation blending.
+- [ ] IK.
+- [ ] Character controller.
+
+**Deliverable:** playable third-person character.
+
+## Phase 5 — Vehicle system
+
+- [ ] Vehicle physics.
+- [ ] Suspension.
+- [ ] Steering.
+- [ ] Transmission.
+- [ ] Wheel animation.
+- [ ] Vehicle interaction.
+
+**Deliverable:** drivable car with realistic handling.
+
+## Phase 6 — Open-world simulation
+
+- [ ] Road networks.
+- [ ] Traffic.
+- [ ] Pedestrians.
+- [ ] Navigation.
+- [ ] Police AI.
+- [ ] Background simulation.
+
+**Deliverable:** living miniature city.
+
+## Phase 7 — Environment and atmosphere
+
+- [ ] Weather.
+- [ ] Day/night.
+- [ ] Water.
+- [ ] Fog.
+- [ ] Vegetation.
+- [ ] Destruction.
+
+**Deliverable:** dynamic environment.
+
+## Phase 8 — Audio and gameplay framework
+
+- [ ] 3D audio.
+- [ ] Missions.
+- [ ] Interactions.
+- [ ] Combat.
+- [ ] Save system.
+
+**Deliverable:** complete gameplay prototype.
 
 ## Phase 9 — ARUT Studio
-Desktop editor, viewport, hierarchy, inspectors, asset import/browser, world tools, profiler and packaging.
-Exit gate: small world can be authored and packaged without editing engine internals.
 
-## Phase 10 — Production hardening
-Regression scenes, device matrix, thermal soak, memory/battery/load-time/frame pacing, crash recovery and reproducible releases.
-Exit gate: release candidate passes declared Android device matrix and desktop smoke tests.
+- [ ] World editor.
+- [ ] Material tools.
+- [ ] Animation tools.
+- [ ] Asset pipeline.
+- [ ] Profiling tools.
+
+**Deliverable:** usable independent engine editor.
+
+## Phase 10 — Optimization and production
+
+- [ ] Memory optimization.
+- [ ] GPU optimization.
+- [ ] Thermal testing.
+- [ ] Stability testing.
+- [ ] Android and desktop packaging.
+
+**Deliverable:** production-oriented engine release.
+
+---
+
+## Progress and phase gates (tracking only; does not alter the canonical scope)
+
+Status is based on repository inspection, CI evidence and user-provided device logs. A source file or successful CI build is not by itself proof of a device-level exit gate.
+
+| Canonical phase | Current assessment |
+|---|---|
+| Phase 0 — Architecture and infrastructure | Foundation established; audit each listed specification and governance item before marking the whole phase complete. |
+| Phase 1 — Native Android runtime | Substantial implementation and S23 FE runtime evidence; lifecycle repetition, surface recreation and full smoke-test gate need explicit verification. |
+| Phase 2 — Vulkan renderer | Substantial Vulkan/PBR implementation and S23 FE stress-test evidence; finish visual correctness, GPU-vs-CPU reference comparison, graceful fallback and second-GPU-family validation before declaring the phase complete. |
+| Phase 3 — Core world system | Not started as a complete phase. The required ECS, scene graph, asset manager, terrain, LOD and world partitioning deliverable has not been demonstrated. |
+| Phases 4–10 | Not started; remain locked behind their preceding phase exit gates. |
+
+### Current execution order
+
+1. Keep the canonical Phase 0–10 scope unchanged.
+2. Finish and document the remaining Phase 2 validation gates.
+3. Start Phase 3 — Core world system.
+4. Do not start Phase 4 — Character and animation until Phase 3's navigable streamed environment is implemented and validated.
+
+### Validation evidence discipline
+
+- Record source changes and commits separately from CI build results.
+- Record CI build/test results separately from physical-device results.
+- Preserve runtime logs for each device test.
+- Do not mark a phase complete until its stated deliverable and exit checks are demonstrated.
+- For multi-GPU claims, identify each tested GPU/device; do not infer cross-device support from one phone.
