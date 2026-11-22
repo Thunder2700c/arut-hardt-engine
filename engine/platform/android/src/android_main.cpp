@@ -100,7 +100,8 @@ void run(android_app* app) {
   const int ident = ALooper_pollOnce(timeout, nullptr, nullptr, reinterpret_cast<void**>(&source));
   if (ident >= 0 && source) source->process(app, source);
   if (ident == ALOOPER_POLL_ERROR) log_warn("Android looper returned an error.");
-  if (can_render && !state.renderer.draw_frame()) log_warn("Vulkan frame submission/presentation failed.");
+  if (state.resumed && state.has_window && state.focused && state.renderer.ready() && !state.renderer.draw_frame())
+   log_warn("Vulkan frame submission/presentation failed.");
  }
  log_info("Runtime shutdown. lifecycle=%" PRIu64 " input=%" PRIu64, state.lifecycle_events, state.input_events);
 }
