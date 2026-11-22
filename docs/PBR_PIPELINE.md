@@ -40,11 +40,11 @@ The runtime profile snapshot now includes CPU frame time, GPU timestamp duration
 - Host CI compiles PBR and shadow GLSL and runs C++/Rust checks.
 - CI also compiles the Android ARM64 native library without running Gradle or building an APK.
 - No physical Android device has yet validated shadow-map sampling, visual energy behaviour, image uploads or performance.
-- IBL (irradiance, prefiltered environment maps and BRDF LUT), ambient occlusion texture, local lights, cascades and multi-GPU tuning remain future work.
+- The procedural environment cube now has GGX importance-sampled specular roughness mips. Diffuse irradiance is approximated from its broadest mip, and the split-sum BRDF response uses a small analytic approximation. Cosine-convolved irradiance, a BRDF integration LUT, HDR environment import and probe blending remain future refinements.
 
 ## Remaining integration work
 1. Add normal and metallic-roughness sample assets and real per-material descriptor binding.
-2. Implement IBL using a defined environment-map and prefiltered mip contract.
+2. Improve IBL with cosine-convolved irradiance, a split-sum BRDF integration LUT, HDR environment import and environment probe blending.
 3. Add cascade shadow quality tiers and light-space stabilization.
 4. Add GPU/indirect visibility, GPU-memory accounting and per-pass profiling.
 5. During the separately agreed testing stage, compare GPU output with the CPU BRDF reference on two Android GPU families.
