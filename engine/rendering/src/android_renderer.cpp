@@ -446,13 +446,30 @@ bool AndroidRenderer::create_shadow_resources() noexcept {
     if (!shadow_enabled_) {
         VkBuffer staging = VK_NULL_HANDLE;
         VkDeviceMemory staging_memory = VK_NULL_HANDLE;
-        if (!create_buffer(sizeof(std::uint16_t), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, staging, staging_memory))
+        std::array<std::uint8_t, 4> fully_lit_depth_bytes{};
+        VkDeviceSize fallback_depth_size = 0;
+        if (shadow_format_ == VK_FORMAT_D32_SFLOAT) {
+            const float fully_lit_depth = 1.0F;
+            std::memcpy(fully_lit_depth_bytes.data(), &fully_lit_depth, sizeof(fully_lit_depth));
+            fallback_depth_size = sizeof(fully_lit_depth);
+        } else if (shadow_format_ == VK_FORMAT_D24_UNORM_S8_UINT) {
+            const std::uint32_t fully_lit_depth = 0x00ffffffU;
+            std::memcpy(fully_lit_depth_bytes.data(), &fully_lit_depth, sizeof(fully_lit_depth));
+            fallback_depth_size = sizeof(fully_lit_depth);
+        } else if (shadow_format_ == VK_FORMAT_D16_UNORM) {
+            const std::uint16_t fully_lit_depth = 0xffffU;
+            std::memcpy(fully_lit_depth_bytes.data(), &fully_lit_depth, sizeof(fully_lit_depth));
+            fallback_depth_size = sizeof(fully_lit_depth);
+        } else {
+            log_error("Unsupported sampled depth fallback format");
             return false;
-        const std::uint16_t fully_lit_depth = 0xffffU;
+        }
+        if (!create_buffer(fallback_depth_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, staging, staging_memory))
+            return false;
         void* mapped = nullptr;
-        result = vkMapMemory(device_, staging_memory, 0, sizeof(fully_lit_depth), 0, &mapped);
+        result = vkMapMemory(device_, staging_memory, 0, fallback_depth_size, 0, &mapped);
         if (result == VK_SUCCESS && mapped) {
-            std::memcpy(mapped, &fully_lit_depth, sizeof(fully_lit_depth));
+            std::memcpy(mapped, fully_lit_depth_bytes.data(), static_cast<std::size_t>(fallback_depth_size));
             vkUnmapMemory(device_, staging_memory);
         } else {
             vkDestroyBuffer(device_, staging, nullptr);
