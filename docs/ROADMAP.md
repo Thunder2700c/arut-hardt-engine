@@ -54,11 +54,14 @@ Exit gate: Android renders a textured 3D scene with validation and frame/GPU tim
 - [x] Add host tests for BRDF limits, front/back lighting and tone mapping.
 - [x] Integrate shader compilation, descriptor layouts, vertex formats and graphics pipeline into Vulkan.
 - [ ] Validate energy conservation and compare GPU output against the CPU reference.
-- [ ] Add mobile shadow maps and cascade quality tiers.
+- [x] Add a single directional depth shadow map, depth-only Vulkan pass, instanced shadow draw, depth comparison sampling and 3x3 PCF.
+- [ ] Add cascade shadow maps and quality-tier-controlled shadow resolution.
 - [x] Add a per-instance model-matrix vertex stream and indexed instanced cube drawing.
-- [ ] Add CPU frustum culling and GPU visibility/indirect drawing.
+- [x] Add CPU frustum extraction and bounding-sphere culling for test instances.
+- [ ] Add GPU visibility/indirect drawing.
 - [ ] Add environment lighting / image-based lighting (ACES tone-map source exists; runtime integration remains pending).
-- [ ] Connect profile snapshots to actual renderer counters and GPU timestamp queries.
+- [x] Connect profile snapshots to CPU frame time, GPU timestamp queries, shadow-pass time, draw calls, visible objects and triangle counts.
+- [ ] Add GPU memory accounting and multi-pass/per-material breakdowns.
 - [ ] Validate graceful quality fallback on two Android GPU families.
 Exit gate: PBR test scene works across two Android GPU families with graceful fallback and measured CPU/GPU costs.
 
