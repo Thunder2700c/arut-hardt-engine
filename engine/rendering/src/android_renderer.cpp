@@ -67,6 +67,158 @@ bool AndroidRenderer::create_frame_resources() noexcept {
            create_commands_and_sync();
 }
 
+bool AndroidRenderer::create_gpu_visibility_resources() noexcept {
+    gpu_visibility_enabled_ = false;
+    if (!compute_queue_supported_) {
+        arut_android_log(ANDROID_LOG_WARN, "GPU visibility unavailable: selected graphics queue has no compute capability; using CPU culling.");
+        return true;
+    }
+    if (!visibility_input_buffer_ || !instance_buffer_ || !indirect_draw_buffer_ ||
+        visibility_source_instance_count_ == 0U) {
+        log_error("GPU visibility buffers are not initialized; using CPU culling.");
+        return true;
+    }
+
+    const auto disable_gpu_visibility = [this]() {
+        if (visibility_compute_pipeline_) vkDestroyPipeline(device_, visibility_compute_pipeline_, nullptr);
+        if (visibility_pipeline_layout_) vkDestroyPipelineLayout(device_, visibility_pipeline_layout_, nullptr);
+        if (visibility_descriptor_pool_) vkDestroyDescriptorPool(device_, visibility_descriptor_pool_, nullptr);
+        if (visibility_set_layout_) vkDestroyDescriptorSetLayout(device_, visibility_set_layout_, nullptr);
+        visibility_compute_pipeline_ = VK_NULL_HANDLE;
+        visibility_pipeline_layout_ = VK_NULL_HANDLE;
+        visibility_descriptor_pool_ = VK_NULL_HANDLE;
+        visibility_descriptor_set_ = VK_NULL_HANDLE;
+        visibility_set_layout_ = VK_NULL_HANDLE;
+        gpu_visibility_enabled_ = false;
+    };
+
+    const std::array<VkDescriptorSetLayoutBinding, 3> bindings{{
+        {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}
+    }};
+    VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    layout_info.bindingCount = static_cast<std::uint32_t>(bindings.size());
+    layout_info.pBindings = bindings.data();
+    VkResult result = vkCreateDescriptorSetLayout(device_, &layout_info, nullptr, &visibility_set_layout_);
+    if (result != VK_SUCCESS) {
+        log_error("Create GPU visibility descriptor layout failed", result);
+        disable_gpu_visibility();
+        return true;
+    }
+
+    VkDescriptorPoolSize pool_size{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3};
+    VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    pool_info.maxSets = 1;
+    pool_info.poolSizeCount = 1;
+    pool_info.pPoolSizes = &pool_size;
+    result = vkCreateDescriptorPool(device_, &pool_info, nullptr, &visibility_descriptor_pool_);
+    if (result != VK_SUCCESS) {
+        log_error("Create GPU visibility descriptor pool failed; retaining CPU fallback", result);
+        disable_gpu_visibility();
+        return true;
+    }
+    VkDescriptorSetAllocateInfo set_allocation{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    set_allocation.descriptorPool = visibility_descriptor_pool_;
+    set_allocation.descriptorSetCount = 1;
+    set_allocation.pSetLayouts = &visibility_set_layout_;
+    result = vkAllocateDescriptorSets(device_, &set_allocation, &visibility_descriptor_set_);
+    if (result != VK_SUCCESS) {
+        log_error("Allocate GPU visibility descriptor set failed; retaining CPU fallback", result);
+        disable_gpu_visibility();
+        return true;
+    }
+
+    const VkDeviceSize input_bytes =
+        static_cast<VkDeviceSize>(visibility_source_instance_count_) *
+        sizeof(arut::rendering::GpuVisibilityInstance);
+    const VkDeviceSize output_bytes =
+        static_cast<VkDeviceSize>(visibility_source_instance_count_) *
+        sizeof(arut::rendering::Mat4);
+    const std::array<VkDescriptorBufferInfo, 3> buffer_infos{{
+        {visibility_input_buffer_, 0, input_bytes},
+        {instance_buffer_, 0, output_bytes},
+        {indirect_draw_buffer_, 0, sizeof(arut::rendering::IndexedIndirectArguments)}
+    }};
+    std::array<VkWriteDescriptorSet, 3> writes{};
+    for (std::uint32_t index = 0; index < writes.size(); ++index) {
+        writes[index] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
+                         visibility_descriptor_set_, index, 0, 1,
+                         VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr,
+                         &buffer_infos[index], nullptr};
+    }
+    vkUpdateDescriptorSets(device_, static_cast<std::uint32_t>(writes.size()),
+                           writes.data(), 0, nullptr);
+
+    VkPushConstantRange push{};
+    push.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    push.offset = 0;
+    push.size = sizeof(arut::rendering::GpuVisibilityPushConstants);
+    VkPipelineLayoutCreateInfo pipeline_layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    pipeline_layout.setLayoutCount = 1;
+    pipeline_layout.pSetLayouts = &visibility_set_layout_;
+    pipeline_layout.pushConstantRangeCount = 1;
+    pipeline_layout.pPushConstantRanges = &push;
+    result = vkCreatePipelineLayout(device_, &pipeline_layout, nullptr, &visibility_pipeline_layout_);
+    if (result != VK_SUCCESS) {
+        log_error("Create GPU visibility pipeline layout failed; retaining CPU fallback", result);
+        disable_gpu_visibility();
+        return true;
+    }
+
+    AAsset* asset = AAssetManager_open(assets_, "shaders/visibility_cull.comp.spv", AASSET_MODE_BUFFER);
+    if (!asset) {
+        log_error("GPU visibility SPIR-V missing; retaining CPU fallback");
+        disable_gpu_visibility();
+        return true;
+    }
+    const off_t length = AAsset_getLength(asset);
+    if (length <= 0 || (length % 4) != 0) {
+        AAsset_close(asset);
+        log_error("GPU visibility SPIR-V has invalid size; retaining CPU fallback");
+        disable_gpu_visibility();
+        return true;
+    }
+    std::vector<std::uint32_t> code(static_cast<std::size_t>(length) / sizeof(std::uint32_t));
+    const int bytes_read = AAsset_read(asset, code.data(), static_cast<std::size_t>(length));
+    AAsset_close(asset);
+    if (bytes_read != length || code.empty() || code.front() != 0x07230203U) {
+        log_error("GPU visibility SPIR-V failed read/magic validation; retaining CPU fallback");
+        disable_gpu_visibility();
+        return true;
+    }
+
+    VkShaderModuleCreateInfo module_info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    module_info.codeSize = code.size() * sizeof(std::uint32_t);
+    module_info.pCode = code.data();
+    VkShaderModule module = VK_NULL_HANDLE;
+    result = vkCreateShaderModule(device_, &module_info, nullptr, &module);
+    if (result != VK_SUCCESS) {
+        log_error("Create GPU visibility shader module failed; retaining CPU fallback", result);
+        disable_gpu_visibility();
+        return true;
+    }
+    VkPipelineShaderStageCreateInfo stage{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
+    stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    stage.module = module;
+    stage.pName = "main";
+    VkComputePipelineCreateInfo compute_pipeline{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+    compute_pipeline.stage = stage;
+    compute_pipeline.layout = visibility_pipeline_layout_;
+    result = vkCreateComputePipelines(device_, VK_NULL_HANDLE, 1, &compute_pipeline,
+                                      nullptr, &visibility_compute_pipeline_);
+    vkDestroyShaderModule(device_, module, nullptr);
+    if (result != VK_SUCCESS) {
+        log_error("Create GPU visibility compute pipeline failed; retaining CPU fallback", result);
+        disable_gpu_visibility();
+        return true;
+    }
+
+    gpu_visibility_enabled_ = true;
+    arut_android_log(ANDROID_LOG_INFO, "GPU frustum culling enabled: compute compaction writes vertex instances and indexed indirect arguments.");
+    return true;
+}
+
 bool AndroidRenderer::create_instance() noexcept {
     const std::array<const char*, 2> extensions{
         VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_ANDROID_SURFACE_EXTENSION_NAME
