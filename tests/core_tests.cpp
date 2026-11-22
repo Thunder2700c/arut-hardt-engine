@@ -177,6 +177,15 @@ int main() {
     assert(environment_mips[0].pixels.size() == 8U * 8U * 4U * 6U);
     assert(environment_mips[3].width == 1 && environment_mips[3].height == 1);
     assert(environment_mips[3].pixels.size() == 4U * 6U);
+    arut::rendering::EnvironmentCubeMip irradiance{};
+    assert(arut::rendering::build_diffuse_irradiance_cube(environment_mips.front(), 4U, 64U, irradiance));
+    assert(irradiance.width == 4U && irradiance.height == 4U);
+    assert(irradiance.pixels.size() == 4U * 4U * 4U * 6U);
+    assert(irradiance.pixels[3] == 255U);
+    assert(irradiance.pixels[(2U * 4U * 4U * 4U) + 3U] == 255U);
+    arut::rendering::EnvironmentCubeMip invalid_irradiance{};
+    assert(!arut::rendering::build_diffuse_irradiance_cube(environment_mips.front(), 4U, 4U, invalid_irradiance));
+    assert(invalid_irradiance.pixels.empty());
     assert(!arut::rendering::build_procedural_environment_cube(0, environment_mips));
     assert(environment_mips.empty());
     assert(!arut::rendering::build_procedural_environment_cube(512, environment_mips));
