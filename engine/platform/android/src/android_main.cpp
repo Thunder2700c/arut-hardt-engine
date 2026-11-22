@@ -126,10 +126,13 @@ bool export_runtime_log(android_app* app) {
  jstring class_name = env->NewStringUTF("com.arut.engine.LogExporter");
  jobject exporter_object = (load_class && class_name) ? env->CallObjectMethod(loader, load_class, class_name) : nullptr;
  jclass exporter = static_cast<jclass>(exporter_object);
- jmethodID export_method = exporter ? env->GetStaticMethodID(exporter, "exportRuntimeLog", "(Landroid/app/Activity;Ljava/lang/String;)Z") : nullptr;
+ jmethodID export_method = exporter ? env->GetStaticMethodID(exporter, "exportRuntimeLog", "(Landroid/app/Activity;Ljava/lang/String;Ljava/lang/String;)Z") : nullptr;
  jstring source_path = env->NewStringUTF(g_log_path);
- if (export_method && source_path) {
-  exported = env->CallStaticBooleanMethod(exporter, export_method, activity, source_path) == JNI_TRUE;
+ char previous_path[1050]{};
+ std::snprintf(previous_path, sizeof(previous_path), "%s.1", g_log_path);
+ jstring previous_log_path = env->NewStringUTF(previous_path);
+ if (export_method && source_path && previous_log_path) {
+  exported = env->CallStaticBooleanMethod(exporter, export_method, activity, source_path, previous_log_path) == JNI_TRUE;
  }
  if (env->ExceptionCheck()) {
   env->ExceptionDescribe();
@@ -137,6 +140,7 @@ bool export_runtime_log(android_app* app) {
   exported = false;
  }
  if (source_path) env->DeleteLocalRef(source_path);
+ if (previous_log_path) env->DeleteLocalRef(previous_log_path);
  if (exporter_object) env->DeleteLocalRef(exporter_object);
  if (class_name) env->DeleteLocalRef(class_name);
  if (loader_class) env->DeleteLocalRef(loader_class);
@@ -245,7 +249,7 @@ void run(android_app* app) {
   const auto metrics_now = std::chrono::steady_clock::now();
   const double metrics_seconds = std::chrono::duration<double>(metrics_now - metrics_start).count();
   if (metrics_seconds >= 5.0) {
-   if (frame_count > 0) log_info("PERF window=%.2fs fps=%.2f frame_avg_ms=%.3f frame_max_ms=%.3f frames=%" PRIu64,
+   if (frame_count > 0) log_info("PERF window=%.2fs fps=%.2f frame_interval_avg_ms=%.3f frame_interval_max_ms=%.3f frames=%" PRIu64,
     metrics_seconds, static_cast<double>(frame_count) / metrics_seconds,
     frame_ms_total / static_cast<double>(frame_count), frame_ms_max, frame_count);
    else log_info("PERF window=%.2fs renderer_idle=true", metrics_seconds);
