@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <chrono>
+#include <jni.h>
 #include <stdarg.h>
 extern "C" std::uint32_t arut_tasks_abi_version() noexcept;
 namespace {
@@ -104,6 +105,46 @@ void log_warn(const char* format, ...) {
  write_log(ANDROID_LOG_WARN, "WARN", format, args);
  va_end(args);
 }
+bool export_runtime_log(android_app* app) {
+ if (!app || !app->activity || !app->activity->vm || !g_log_path[0]) return false;
+ JavaVM* vm = app->activity->vm;
+ JNIEnv* env = nullptr;
+ bool attached = false;
+ const jint state = vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+ if (state == JNI_EDETACHED) {
+  if (vm->AttachCurrentThread(&env, nullptr) != JNI_OK) return false;
+  attached = true;
+ } else if (state != JNI_OK) return false;
+
+ bool exported = false;
+ jobject activity = app->activity->clazz;
+ jclass activity_class = env->GetObjectClass(activity);
+ jmethodID get_loader = activity_class ? env->GetMethodID(activity_class, "getClassLoader", "()Ljava/lang/ClassLoader;") : nullptr;
+ jobject loader = get_loader ? env->CallObjectMethod(activity, get_loader) : nullptr;
+ jclass loader_class = loader ? env->GetObjectClass(loader) : nullptr;
+ jmethodID load_class = loader_class ? env->GetMethodID(loader_class, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;") : nullptr;
+ jstring class_name = env->NewStringUTF("com.arut.engine.LogExporter");
+ jobject exporter_object = (load_class && class_name) ? env->CallObjectMethod(loader, load_class, class_name) : nullptr;
+ jclass exporter = static_cast<jclass>(exporter_object);
+ jmethodID export_method = exporter ? env->GetStaticMethodID(exporter, "exportRuntimeLog", "(Landroid/app/Activity;Ljava/lang/String;)Z") : nullptr;
+ jstring source_path = env->NewStringUTF(g_log_path);
+ if (export_method && source_path) {
+  exported = env->CallStaticBooleanMethod(exporter, export_method, activity, source_path) == JNI_TRUE;
+ }
+ if (env->ExceptionCheck()) {
+  env->ExceptionDescribe();
+  env->ExceptionClear();
+  exported = false;
+ }
+ if (source_path) env->DeleteLocalRef(source_path);
+ if (exporter_object) env->DeleteLocalRef(exporter_object);
+ if (class_name) env->DeleteLocalRef(class_name);
+ if (loader_class) env->DeleteLocalRef(loader_class);
+ if (loader) env->DeleteLocalRef(loader);
+ if (activity_class) env->DeleteLocalRef(activity_class);
+ if (attached) vm->DetachCurrentThread();
+ return exported;
+}
 void close_file_log() {
  std::lock_guard<std::mutex> lock(g_log_mutex);
  if (g_log_file) { std::fflush(g_log_file); std::fclose(g_log_file); g_log_file = nullptr; }
@@ -115,7 +156,10 @@ void handle_app_command(android_app* app, std::int32_t command) {
  switch (command) {
   case APP_CMD_START: log_info("Lifecycle START"); break;
   case APP_CMD_RESUME: state->resumed = true; log_info("Lifecycle RESUME"); break;
-  case APP_CMD_PAUSE: state->resumed = false; log_info("Lifecycle PAUSE"); break;
+  case APP_CMD_PAUSE: state->resumed = false; log_info("Lifecycle PAUSE");
+   if (export_runtime_log(app)) __android_log_print(ANDROID_LOG_INFO, kLogTag, "Runtime log exported to Downloads/ARUT-HARDT/ARUT-HARDT-runtime.log");
+   else __android_log_print(ANDROID_LOG_WARN, kLogTag, "Runtime log export failed; private app log retained.");
+   break;
   case APP_CMD_STOP: log_info("Lifecycle STOP"); break;
   case APP_CMD_INIT_WINDOW:
    state->has_window = app->window != nullptr;
@@ -210,6 +254,8 @@ void run(android_app* app) {
  }
  log_info("Runtime shutdown. lifecycle=%" PRIu64 " input=%" PRIu64, state.lifecycle_events, state.input_events);
  close_file_log();
+ if (export_runtime_log(app)) __android_log_print(ANDROID_LOG_INFO, kLogTag, "Final runtime log exported to Downloads/ARUT-HARDT/ARUT-HARDT-runtime.log");
+ else __android_log_print(ANDROID_LOG_WARN, kLogTag, "Final runtime log export failed; private app log retained.");
 }
 }
 void android_main(android_app* app) {
