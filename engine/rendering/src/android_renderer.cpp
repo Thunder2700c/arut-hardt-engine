@@ -1702,8 +1702,12 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
 
     const auto view = arut::rendering::look_at_rh(camera, {0.0F, 0.0F, 0.0F},
                                                   {0.0F, 1.0F, 0.0F});
-    const auto projection = arut::rendering::perspective_rh_zo(0.785398163F,
-        static_cast<float>(extent_.width) / static_cast<float>(std::max(1U, extent_.height)), 0.1F, 100.0F);
+    const float camera_aspect = static_cast<float>(extent_.width) /
+                                static_cast<float>(std::max(1U, extent_.height));
+    constexpr float camera_fov_y = 0.785398163F;
+    const float camera_tan_half_fov = std::tan(camera_fov_y * 0.5F);
+    const auto projection = arut::rendering::perspective_rh_zo(camera_fov_y,
+        camera_aspect, 0.1F, 100.0F);
     const auto view_projection = arut::rendering::multiply(projection, view);
     std::copy(view_projection.value.begin(), view_projection.value.end(), frame.view_projection);
 
@@ -1731,7 +1735,13 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
             camera[1] + forward[1] * midpoint,
             camera[2] + forward[2] * midpoint
         };
-        const float radius = std::max(2.0F, (end_distance - start_distance) * 0.5F + 1.0F);
+        const float half_width = end_distance * camera_tan_half_fov * camera_aspect;
+        const float half_height = end_distance * camera_tan_half_fov;
+        const float half_depth = (end_distance - start_distance) * 0.5F;
+        // Enclose the far-plane corners and the longitudinal extent of this camera slice.
+        const float radius = std::max(2.0F,
+            std::sqrt(half_width * half_width + half_height * half_height +
+                      half_depth * half_depth) + 0.5F);
         const std::array<float, 3> light_eye{
             center[0] + direction_to_light[0] * radius * 3.0F,
             center[1] + direction_to_light[1] * radius * 3.0F,
