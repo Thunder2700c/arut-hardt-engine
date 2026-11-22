@@ -7,11 +7,14 @@
 #include <cstring>
 #include <limits>
 
+extern "C" void arut_android_log(int priority, const char* message) noexcept;
+
 namespace arut::rendering::vulkan {
 namespace {
 constexpr char kTag[] = "ARUT-HARDT";
 void log_error(const char* message, VkResult result = VK_SUCCESS) {
-    __android_log_print(ANDROID_LOG_ERROR, kTag, "%s (VkResult=%d)", message, static_cast<int>(result));
+    char buffer[512]{}; std::snprintf(buffer, sizeof(buffer), "%s (VkResult=%d)", message, static_cast<int>(result));
+    arut_android_log(ANDROID_LOG_ERROR, buffer);
 }
 bool has_device_extension(VkPhysicalDevice device, const char* name) {
     std::uint32_t count = 0;
@@ -35,8 +38,8 @@ bool AndroidRenderer::initialize(ANativeWindow* window) noexcept {
         shutdown();
         return false;
     }
-    __android_log_print(ANDROID_LOG_INFO, kTag, "Vulkan swapchain ready: %ux%u, images=%zu",
-                        extent_.width, extent_.height, images_.size());
+    char ready_message[256]{}; std::snprintf(ready_message, sizeof(ready_message), "Vulkan swapchain ready: %ux%u, images=%zu", extent_.width, extent_.height, images_.size());
+    arut_android_log(ANDROID_LOG_INFO, ready_message);
     return true;
 }
 
@@ -98,7 +101,8 @@ bool AndroidRenderer::select_device() noexcept {
             present_family_ = present;
             VkPhysicalDeviceProperties properties{};
             vkGetPhysicalDeviceProperties(candidate, &properties);
-            __android_log_print(ANDROID_LOG_INFO, kTag, "Selected Vulkan GPU: %s", properties.deviceName);
+            char gpu_message[512]{}; std::snprintf(gpu_message, sizeof(gpu_message), "Selected Vulkan GPU: %s vendor=0x%04x device=0x%04x api=%u.%u.%u driver=%u type=%d", properties.deviceName, properties.vendorID, properties.deviceID, VK_VERSION_MAJOR(properties.apiVersion), VK_VERSION_MINOR(properties.apiVersion), VK_VERSION_PATCH(properties.apiVersion), properties.driverVersion, static_cast<int>(properties.deviceType));
+            arut_android_log(ANDROID_LOG_INFO, gpu_message);
             return true;
         }
     }
