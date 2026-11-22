@@ -199,6 +199,8 @@ private:
     std::uint32_t visibility_source_instance_count_{0};
     std::array<float, 24> visibility_frustum_planes_{};
     bool compute_queue_supported_{false};
+    bool properties2_extension_enabled_{false};
+    bool memory_budget_extension_enabled_{false};
     bool gpu_visibility_enabled_{false};
     bool shadow_enabled_{false};
     std::vector<VkFramebuffer> framebuffers_;
@@ -216,6 +218,7 @@ private:
     double last_gpu_frame_ms_{0.0};
     double last_visibility_pass_ms_{0.0};
     double last_shadow_pass_ms_{0.0};
+    double last_main_pass_ms_{0.0};
     std::uint64_t tracked_gpu_memory_bytes_{0};
     std::uint32_t last_draw_calls_{0};
     std::uint32_t last_visible_objects_{0};
