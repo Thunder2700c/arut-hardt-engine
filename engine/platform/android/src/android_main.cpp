@@ -41,6 +41,7 @@ struct RuntimeState final {
  arut::core::TerrainMesh terrain_mesh{};
  arut::core::LodSystem lod_system{};
  arut::core::WorldPartition world_partition{128.0F};
+ arut::core::WorldCellStreamer world_streamer{};
  bool ecs_scene_ready{false};
  arut::rendering::vulkan::AndroidRenderer renderer{};
  std::uint64_t lifecycle_events{0};
@@ -271,11 +272,24 @@ void run(android_app* app) {
   default_environment ? default_environment.bytes->size() : 0U, asset_stats.entries);
  try {
   state.terrain_mesh = arut::core::TerrainSystem::build(512.0F, 128U);
-  const auto activated_cells = state.world_partition.update_streaming(0.0F, 0.0F, 2U);
+  const auto streaming = state.world_streamer.update(
+   state.world_partition, 0.0F, 0.0F, 2U,
+   [&state](arut::core::WorldCell cell, arut::core::WorldCellContent& content) {
+    content.cell = cell;
+    content.terrain = arut::core::TerrainSystem::build(state.world_partition.cell_size(), 16U);
+    const float offset_x = static_cast<float>(cell.x) * state.world_partition.cell_size();
+    const float offset_z = static_cast<float>(cell.z) * state.world_partition.cell_size();
+    for (auto& vertex : content.terrain.vertices) {
+     vertex.x += offset_x;
+     vertex.z += offset_z;
+    }
+    return content.terrain.valid();
+   });
   log_info("TERRAIN generated=true resolution=%u vertices=%zu indices=%zu",
    state.terrain_mesh.resolution, state.terrain_mesh.vertices.size(), state.terrain_mesh.indices.size());
-  log_info("WORLD_PARTITION active_cells=%zu newly_activated=%zu cell_size=%.1f",
-   state.world_partition.active_count(), activated_cells.size(), state.world_partition.cell_size());
+  log_info("WORLD_STREAMING active_cells=%zu resident_cells=%zu loaded=%zu unloaded=%zu failed=%zu cell_size=%.1f",
+   state.world_partition.active_count(), streaming.resident, streaming.loaded,
+   streaming.unloaded, streaming.failed, state.world_partition.cell_size());
  } catch (const std::exception& error) {
   log_warn("Phase 3 world-system initialization failed: %s", error.what());
  }
