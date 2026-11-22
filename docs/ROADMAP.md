@@ -40,9 +40,9 @@
 - [x] ECS (generational handles, packed sparse-set pools, typed component iteration, `CubeSpawnSystem` creates 5,000 cubes, and ECS-derived renderer extraction; host stress test and S23 FE/Xclipse 920 APK runtime test passed).
 - [x] Scene graph (base hierarchy, cycle rejection, local/world transforms, subtree deletion, ECS entity bindings and synchronization; host tests and CI passed).
 - [x] Asset manager core cache, path validation, immutable asset handles, size limits, eviction, Android packaged-asset adapter and startup smoke test; CI passed. Runtime asset load is logged; broader streaming integration remains part of world integration.
-- [x] Terrain heightfield mesh generation with finite-difference normals and indexed grid; host test and Android runtime initialization added, awaiting CI/device validation.
-- [x] Distance-based four-tier LOD selection with hysteresis and per-object state; host test and Android runtime classification added, awaiting CI/device validation.
-- [x] Spatial cell mapping and bounded active-cell streaming window with activation/eviction; host test and Android runtime streaming-window initialization added, awaiting CI/device validation.
+- [x] Terrain heightfield mesh generation with finite-difference normals and indexed grid; Vulkan PBR vertex/index/instance buffers are uploaded and the terrain is issued as an indexed draw in both the main and shadow passes. Android ARM64 native CI passed (run `45085631234`); S23 FE device validation of the terrain draw is still pending.
+- [x] Distance-based four-tier LOD selection with hysteresis and per-object state; runtime classification now occurs after ECS extraction so it tracks the 5,000 spawned objects. CI/device validation of this corrected runtime path is pending. LOD levels are not yet connected to distinct rendered mesh variants.
+- [x] Spatial cell mapping and bounded active-cell window with activation/eviction; host tests cover mapping and residency bookkeeping. Runtime still uses active-cell bookkeeping only; cell asset loading/unloading and asynchronous streaming are not yet integrated.
 
 **Deliverable:** navigable streamed environment.
 
@@ -130,7 +130,7 @@ Status is based on repository inspection, CI evidence and user-provided device l
 | Phase 0 — Architecture and infrastructure | Foundation established; audit each listed specification and governance item before marking the whole phase complete. |
 | Phase 1 — Native Android runtime | Substantial implementation and S23 FE runtime evidence; lifecycle repetition, surface recreation and full smoke-test gate need explicit verification. |
 | Phase 2 — Vulkan renderer | **Complete for the canonical Android deliverable on S23 FE/Xclipse 920.** All six scope items are implemented; CI passed C++/Rust/Android ARM64 builds, shader compilation and four-case Vulkan GPU-to-CPU PBR readback. User logs verify the 5,000-instance renderer, HDR/probe path, GPU culling, camera controls and repeated CPU/GPU visibility parity. Graceful CPU fallback is implemented. Second-GPU-family validation remains a non-blocking compatibility check before making a multi-vendor support claim. |
-| Phase 3 — Core world system | In progress. ECS 5,000-cube spawn/extraction passed host tests and S23 FE/Xclipse 920 runtime validation. Scene graph synchronization, asset cache/source, terrain mesh generation, distance LOD and bounded cell partitioning are implemented in core; newest CI and physical-device validation are pending. Terrain mesh upload/drawing and asynchronous asset/cell streaming are not yet demonstrated, so the navigable streamed environment deliverable is not yet met. |
+| Phase 3 — Core world system | In progress. ECS 5,000-cube spawn/extraction passed host tests and S23 FE/Xclipse 920 runtime validation. Scene graph synchronization and asset cache/source have passed CI. Terrain heightfield generation plus Vulkan PBR upload/draw code is implemented; Android ARM64 native CI passed in run `45085631234`, but terrain rendering has not yet been physically verified on the S23 FE. Four-tier LOD classification is implemented but not connected to actual mesh variants. World partition currently tracks active cells but does not yet load/unload cell content. The navigable streamed environment deliverable is not yet met. |
 | Phases 4–10 | Not started; remain locked behind their preceding phase exit gates. |
 
 ### Current execution order
@@ -138,7 +138,7 @@ Status is based on repository inspection, CI evidence and user-provided device l
 1. Keep the canonical Phase 0–10 scope unchanged.
 2. Record second-GPU-family validation as an outstanding compatibility check; do not misrepresent it as tested.
 3. The 5,000-cube ECS gate is complete: `CubeSpawnSystem` creates the grid, ECS components produce render instances, host stress tests pass, and the S23 FE/Xclipse 920 APK log confirms runtime rendering and repeated GPU/CPU visibility parity.
-4. Continue Phase 3 integration: connect terrain mesh and streamed cell residency to renderer/assets, validate all systems in CI, then build and device-test the complete Phase 3 APK. Preserve the cross-GPU limitation in release notes until another device is tested.
+4. Continue Phase 3 integration: connect LOD decisions to actual mesh variants and world-cell residency to real asset load/unload; validate all systems in CI, then build and device-test the complete Phase 3 APK. Preserve the cross-GPU limitation in release notes until another device is tested.
 5. Do not start Phase 4 — Character and animation until Phase 3's navigable streamed environment is implemented and validated.
 
 ### Validation evidence discipline
