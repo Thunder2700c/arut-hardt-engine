@@ -8,8 +8,10 @@
 #include "arut/rendering/environment.hpp"
 #include "arut/rendering/gpu_visibility.hpp"
 #include "arut/rendering/environment_probe.hpp"
+#include "arut/core/cube_stress_scene.hpp"
 #include <array>
 #include <cstdint>
+#include <span>
 #include <cstddef>
 #include <chrono>
 #include <vector>
@@ -23,7 +25,8 @@ public:
     AndroidRenderer(const AndroidRenderer&) = delete;
     AndroidRenderer& operator=(const AndroidRenderer&) = delete;
 
-    bool initialize(ANativeWindow* window, AAssetManager* assets) noexcept;
+    bool initialize(ANativeWindow* window, AAssetManager* assets,
+                    std::span<const arut::core::CubeRenderInstance> ecs_instances) noexcept;
     void shutdown() noexcept;
     bool set_quality_tier(arut::rendering::RenderQualityTier tier) noexcept;
     bool set_environment_probes(std::span<const arut::rendering::EnvironmentProbeInfluence> probes) noexcept;
