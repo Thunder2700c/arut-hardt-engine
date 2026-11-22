@@ -8,7 +8,7 @@ The NativeActivity writes timestamped engine messages to:
 
 `<app internal data directory>/logs/runtime.log`
 
-The file is flushed after each message and rotates at approximately 2 MiB, retaining one previous file as `runtime.log.1`. The same messages are also sent to Android logcat under the `ARUT-HARDT` tag.
+The file is flushed after each message and rotates at approximately 2 MiB, retaining one previous file as `runtime.log.1`. The Downloads export concatenates the previous log (when present) and the current log. The same messages are also sent to Android logcat under the `ARUT-HARDT` tag.
 
 When the activity pauses and when the native runtime shuts down, the app exports the current log to:
 
@@ -21,7 +21,7 @@ The runtime stream includes:
 - Android lifecycle, window and input events;
 - Vulkan GPU vendor/device IDs, API and driver versions;
 - swapchain creation failures and renderer errors;
-- five-second CPU frame-loop summaries (FPS, average and maximum measured frame duration);
+- five-second frame-loop interval summaries (FPS, average and maximum frame interval);
 - runtime shutdown event and input counters.
 
 The current frame timing is CPU-side frame-loop timing, not GPU timestamp-query timing. GPU timings are not claimed until timestamp queries are implemented.
