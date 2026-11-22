@@ -1598,6 +1598,12 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     if (!load_texture_asset("textures/demo_base_color.png", VK_FORMAT_R8G8B8A8_SRGB, true,
                             base_color_image_, base_color_memory_, base_color_view_,
                             base_color_sampler_, base_color_mip_levels_)) return false;
+    if (!load_texture_asset("textures/demo_normal.tga", VK_FORMAT_R8G8B8A8_UNORM, false,
+                            normal_image_, normal_memory_, normal_view_,
+                            normal_sampler_, normal_mip_levels_)) return false;
+    if (!load_texture_asset("textures/demo_metallic_roughness.tga", VK_FORMAT_R8G8B8A8_UNORM, false,
+                            metallic_roughness_image_, metallic_roughness_memory_, metallic_roughness_view_,
+                            metallic_roughness_sampler_, metallic_roughness_mip_levels_)) return false;
     if (!create_buffer(sizeof(FrameData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, frame_uniform_buffer_, frame_uniform_memory_) ||
         !create_buffer(sizeof(MaterialData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, material_uniform_buffer_, material_uniform_memory_)) return false;
 
@@ -1623,8 +1629,8 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     if (result != VK_SUCCESS || !mapped) { log_error("Map frame uniform buffer failed", result); return false; }
     std::memcpy(mapped, &frame_upload, sizeof(FrameData)); vkUnmapMemory(device_, frame_uniform_memory_);
 
-    const MaterialData material{{1.0F, 1.0F, 1.0F, 1.0F}, {0.0F, 0.0F, 0.0F, 0.05F},
-                                {0.48F, 1.0F, 1.0F, 0.5F}, {1U, 0U, 0U, 0U}};
+    const MaterialData material{{1.0F, 1.0F, 1.0F, 1.0F}, {0.0F, 0.0F, 0.0F, 0.25F},
+                                {0.68F, 1.0F, 1.0F, 0.5F}, {7U, 0U, 0U, 0U}};
     mapped = nullptr;
     result = vkMapMemory(device_, material_uniform_memory_, 0, sizeof(MaterialData), 0, &mapped);
     if (result != VK_SUCCESS || !mapped) { log_error("Map material uniform buffer failed", result); return false; }
@@ -1652,7 +1658,8 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     const VkDescriptorImageInfo environment_info{environment_sampler_, environment_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     const VkDescriptorImageInfo brdf_lut_info{brdf_lut_sampler_, brdf_lut_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     const VkDescriptorImageInfo base_color_info{base_color_sampler_, base_color_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    const VkDescriptorImageInfo fallback_info{fallback_sampler_, fallback_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    const VkDescriptorImageInfo normal_info{normal_sampler_, normal_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    const VkDescriptorImageInfo metallic_roughness_info{metallic_roughness_sampler_, metallic_roughness_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     std::array<VkWriteDescriptorSet, 8> writes{};
     writes[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &frame_info, nullptr};
     writes[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &shadow_info, nullptr, nullptr};
@@ -1660,8 +1667,8 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     writes[3] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 3, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &brdf_lut_info, nullptr, nullptr};
     writes[4] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &material_info, nullptr};
     writes[5] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &base_color_info, nullptr, nullptr};
-    writes[6] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 2, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &fallback_info, nullptr, nullptr};
-    writes[7] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 3, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &fallback_info, nullptr, nullptr};
+    writes[6] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 2, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normal_info, nullptr, nullptr};
+    writes[7] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 3, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &metallic_roughness_info, nullptr, nullptr};
     vkUpdateDescriptorSets(device_, static_cast<std::uint32_t>(writes.size()), writes.data(), 0, nullptr);
     arut_android_log(ANDROID_LOG_INFO, "PBR frame/material descriptors and fallback texture bound.");
     return true;
