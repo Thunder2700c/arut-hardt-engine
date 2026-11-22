@@ -582,6 +582,36 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
     std::memcpy(mapped, mesh.indices.data(), static_cast<std::size_t>(index_bytes));
     vkUnmapMemory(device_, cube_index_memory_);
     cube_index_count_ = static_cast<std::uint32_t>(mesh.indices.size());
+
+    const auto make_instance = [](float x, float scale, float yaw) {
+        arut::rendering::Mat4 model = arut::rendering::Mat4::identity();
+        const float cosine = std::cos(yaw);
+        const float sine = std::sin(yaw);
+        model.value[0] = cosine * scale;
+        model.value[2] = -sine * scale;
+        model.value[5] = scale;
+        model.value[8] = sine * scale;
+        model.value[10] = cosine * scale;
+        model.value[12] = x;
+        return model;
+    };
+    const std::array<arut::rendering::Mat4, 3> instances{{
+        make_instance(-1.05F, 0.68F, -0.45F),
+        make_instance(0.0F, 0.82F, 0.15F),
+        make_instance(1.05F, 0.68F, 0.55F)
+    }};
+    const VkDeviceSize instance_bytes = sizeof(instances);
+    if (!create_buffer(instance_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                       instance_buffer_, instance_memory_)) return false;
+    mapped = nullptr;
+    result = vkMapMemory(device_, instance_memory_, 0, instance_bytes, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map PBR instance buffer failed", result);
+        return false;
+    }
+    std::memcpy(mapped, instances.data(), sizeof(instances));
+    vkUnmapMemory(device_, instance_memory_);
+    instance_count_ = static_cast<std::uint32_t>(instances.size());
     return true;
 }
 
