@@ -35,7 +35,9 @@ A successful CI APK build is not proof of device behaviour. Physical-device life
 
 ## Vulkan renderer bootstrap — Phase 2
 
-The Android Vulkan renderer now includes the swapchain and surface lifecycle, depth-tested mesh rendering, a mobile forward PBR pipeline, texture and mesh uploads, HDR environment lighting, directional shadow cascades, instanced drawing, CPU/GPU frustum culling and optional GPU timestamp profiling. The current device stress fixture contains 5,000 cubes.
+The Android Vulkan renderer now includes the swapchain and surface lifecycle, depth-tested mesh rendering, a mobile forward PBR pipeline, texture and mesh uploads, HDR environment lighting, directional shadow cascades, instanced drawing, CPU/GPU frustum culling and optional GPU timestamp profiling. The 5,000-cube stress grid is now created by the core ECS `CubeSpawnSystem`; `CubeRenderExtractionSystem` reads transform, mesh and bounds components and hands renderer-neutral instances to Vulkan. The renderer does not create cube entities or generate the stress-grid transforms.
+
+The host stress test verifies 5,000 live ECS entities, all required components, idempotent spawning, grid bounds and 5,000 extracted instances. Android ARM64 native compilation passed in CI. S23 FE APK/runtime validation is pending; the app startup log reports the ECS entity and extraction counts before renderer initialization.
 
 Surface-bound resources are destroyed on `APP_CMD_TERM_WINDOW` and rebuilt on `APP_CMD_INIT_WINDOW`. Swapchain out-of-date/suboptimal results trigger recreation.
 
