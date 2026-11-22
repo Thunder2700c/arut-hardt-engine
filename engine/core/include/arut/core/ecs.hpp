@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -20,6 +21,15 @@ struct Entity final {
 
     [[nodiscard]] constexpr bool valid() const noexcept { return index != invalid_index; }
     friend constexpr bool operator==(Entity, Entity) noexcept = default;
+};
+
+class World;
+
+// Systems implement game-world behavior by mutating or querying an ECS World.
+class System {
+public:
+    virtual ~System() = default;
+    virtual void update(World& world) = 0;
 };
 
 class World final {
