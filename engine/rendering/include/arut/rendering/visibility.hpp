@@ -18,6 +18,9 @@ struct ViewFrustum final {
     std::array<FrustumPlane, 6> planes{};
 };
 
+// Shared conservative margin for CPU/GPU plane tests (world-space units).
+inline constexpr float kVisibilityBoundaryEpsilon = 1.0e-4F;
+
 struct BoundingSphere final {
     std::array<float, 3> center{};
     float radius{0.0F};
@@ -72,7 +75,9 @@ struct BoundingSphere final {
             plane.normal[0] * sphere.center[0] +
             plane.normal[1] * sphere.center[1] +
             plane.normal[2] * sphere.center[2] + plane.distance;
-        if (std::isfinite(signed_distance) && signed_distance < -sphere.radius) return false;
+        // Keep CPU and GPU culling conservative at floating-point frustum boundaries.
+        if (std::isfinite(signed_distance) &&
+            signed_distance < -sphere.radius - kVisibilityBoundaryEpsilon) return false;
     }
     return true;
 }
