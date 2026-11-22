@@ -1,11 +1,9 @@
 #include "arut/rendering/brdf_lut.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 
 namespace arut::rendering {
 namespace {
@@ -18,9 +16,6 @@ struct Vec3 final { float x, y, z; };
     const float length_squared = dot(value, value);
     if (!(length_squared > 1.0e-12F) || !std::isfinite(length_squared)) return {0.0F, 0.0F, 1.0F};
     return value * (1.0F / std::sqrt(length_squared));
-}
-[[nodiscard]] Vec3 operator+(Vec3 a, Vec3 b) noexcept {
-    return {a.x+b.x, a.y+b.y, a.z+b.z};
 }
 [[nodiscard]] float geometry_schlick_ggx(float n_dot_v, float roughness) noexcept {
     const float k = (roughness * roughness) * 0.5F;
