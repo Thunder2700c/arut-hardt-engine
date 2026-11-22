@@ -1,5 +1,6 @@
 #include "arut/platform/android/runtime.hpp"
 #include "arut/core/version.hpp"
+#include "arut/rendering/vulkan/android_renderer.hpp"
 #include <android/input.h>
 #include <android/log.h>
 #include <android/native_window.h>
@@ -16,6 +17,7 @@ struct RuntimeState final {
  bool resumed{false};
  bool focused{false};
  bool has_window{false};
+ arut::rendering::vulkan::AndroidRenderer renderer{};
  std::uint64_t lifecycle_events{0};
  std::uint64_t input_events{0};
 };
@@ -94,12 +96,13 @@ void handle_app_command(android_app* app, std::int32_t command) {
    state->has_window = app->window != nullptr;
    if (state->has_window) {
     log_info("Window created: %dx%d", ANativeWindow_getWidth(app->window), ANativeWindow_getHeight(app->window));
-    report_vulkan_device();
+    if (!state->renderer.initialize(app->window)) log_warn("Vulkan renderer unavailable; activity remains alive.");
    }
    break;
   case APP_CMD_TERM_WINDOW:
    state->has_window = false;
-   log_info("Window destroyed; renderer must release surface-bound resources.");
+   state->renderer.shutdown();
+   log_info("Window destroyed; Vulkan surface and swapchain released.");
    break;
   case APP_CMD_GAINED_FOCUS: state->focused = true; log_info("Focus gained"); break;
   case APP_CMD_LOST_FOCUS: state->focused = false; log_info("Focus lost"); break;
@@ -144,10 +147,12 @@ void run(android_app* app) {
  log_info("Rust systems ABI version: 0x%06x", arut_tasks_abi_version());
  while (app->destroyRequested == 0) {
   android_poll_source* source = nullptr;
-  const int timeout = (state.resumed && state.has_window && state.focused) ? 100 : -1;
+  const bool can_render = state.resumed && state.has_window && state.focused && state.renderer.ready();
+  const int timeout = can_render ? 16 : (state.has_window ? 100 : -1);
   const int ident = ALooper_pollOnce(timeout, nullptr, nullptr, reinterpret_cast<void**>(&source));
   if (ident >= 0 && source) source->process(app, source);
   if (ident == ALOOPER_POLL_ERROR) log_warn("Android looper returned an error.");
+  if (can_render && !state.renderer.draw_frame()) log_warn("Vulkan frame submission/presentation failed.");
  }
  log_info("Runtime shutdown. lifecycle=%" PRIu64 " input=%" PRIu64, state.lifecycle_events, state.input_events);
 }
