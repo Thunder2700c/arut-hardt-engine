@@ -27,13 +27,14 @@ The shader interface is currently an engine-internal prototype, not a stable ext
 Texture cache/handles, async decode/upload queues, KTX2, more production-resolution textures and texture streaming are pending.
 
 ## Shadows and visibility
-- One directional depth map is created when a depth format supports both depth attachment and sampled-image use.
-- The shadow pass draws the same indexed instanced mesh using an orthographic light camera.
-- The PBR fragment shader uses a depth-comparison sampler with 3x3 PCF and a slope-dependent bias.
+- A four-layer directional depth array is created when a depth format supports both depth attachment and sampled-image use.
+- The shadow pass draws the same indexed instanced mesh into one framebuffer per active cascade using per-cascade orthographic light cameras.
+- Cascade selection uses camera-forward view depth and split distances; the shader samples the selected depth-array layer with 3x3 PCF and slope-dependent bias.
+- The PBR fragment shader uses a depth-array comparison sampler with 3x3 PCF and a slope-dependent bias.
 - When the selected depth format cannot be used as a depth attachment but is sampleable, a 1x1 fully-lit shadow fallback is uploaded instead.
 - CPU view-frustum extraction uses Vulkan zero-to-one clip depth; bounding-sphere tests cull instances before the instance buffer upload.
 
-Cascaded shadows, resolution selection from quality tiers, cascade stabilization, spot/point-light shadows and GPU/indirect visibility are pending.
+Quality presets select 1/2/4 active cascades and 512/512/1024/1536 map resolutions for Low/Medium/High/Ultra. Cascade stabilization, split blending, spot/point-light shadows and GPU/indirect visibility remain pending.
 
 ## Profiling
 The runtime profile snapshot now includes CPU frame time, GPU timestamp duration when supported, shadow-pass GPU duration, draw calls, visible instances and triangle count. The GPU timestamp query pool is optional and disabled when the selected queue does not expose valid timestamp bits. GPU memory totals and detailed per-pass/per-material counters are not yet implemented.
@@ -42,15 +43,14 @@ The runtime profile snapshot now includes CPU frame time, GPU timestamp duration
 - Host CI compiles PBR and shadow GLSL and runs C++/Rust checks.
 - The CPU BRDF reference has a hemispherical energy-budget regression across metallic values 0, 0.5 and 1.0 and roughness values 0.1, 0.5 and 0.9.
 - The split-sum LUT is generated on CPU with Hammersley/GGX sampling (64x64, 128 samples per texel), uploaded through Vulkan and sampled by the PBR fragment shader.
-- The CPU reference has a numerical hemispherical integration regression over metallic values 0, 0.5 and 1.0 and roughness values 0.1, 0.5 and 0.9.
-- The 64x64 split-sum BRDF LUT is generated on the CPU with 128 Hammersley/GGX samples per texel, uploaded to Vulkan and sampled at frame set 0 binding 3.
+
 - CI also compiles the Android ARM64 native library without running Gradle or building an APK.
 - No physical Android device has yet validated shadow-map sampling, visual energy behaviour, image uploads or performance.
-- The procedural environment cube has GGX importance-sampled specular roughness mips. Diffuse irradiance is still approximated from its broadest mip; cosine-convolved diffuse irradiance, HDR environment import and probe blending remain future refinements. The specular response now uses the generated split-sum BRDF LUT.
+- The procedural environment cube has GGX importance-sampled specular roughness mips. Diffuse irradiance uses a separate cosine-convolved cubemap. HDR environment import and probe blending remain future refinements.
 
 ## Remaining integration work
-1. Add normal and metallic-roughness sample assets and real per-material descriptor binding.
-2. Improve IBL with cosine-convolved diffuse irradiance, HDR environment import and environment probe blending.
-3. Add cascade shadow quality tiers and light-space stabilization.
+1. Add a material asset/cache/handle layer and asynchronous decode/upload queues.
+2. Improve IBL with HDR environment import and environment probe blending.
+3. Add cascade stabilization, split blending and local-light shadows.
 4. Add GPU/indirect visibility, GPU-memory accounting and per-pass profiling.
 5. During the separately agreed testing stage, compare GPU output with the CPU BRDF reference on two Android GPU families.
