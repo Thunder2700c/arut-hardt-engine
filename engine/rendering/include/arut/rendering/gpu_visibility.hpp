@@ -37,7 +37,11 @@ inline constexpr std::uint32_t kVisibilityWorkgroupSize = 64U;
 
 static_assert(sizeof(GpuVisibilityInstance) == 80U);
 static_assert(alignof(GpuVisibilityInstance) == 16U);
+static_assert(offsetof(GpuVisibilityInstance, model) == 16U);
 static_assert(sizeof(GpuVisibilityPushConstants) == 112U);
+static_assert(offsetof(GpuVisibilityPushConstants, instance_count) == 96U);
+static_assert(offsetof(GpuVisibilityPushConstants, padding) == 100U);
 static_assert(sizeof(IndexedIndirectArguments) == 20U);
+static_assert(offsetof(IndexedIndirectArguments, instance_count) == 4U);
 
 } // namespace arut::rendering
