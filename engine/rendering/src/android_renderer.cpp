@@ -2356,12 +2356,8 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
                        environment_probe_uniform_buffer_, environment_probe_uniform_memory_)) return false;
 
     FrameData frame{};
-    // The sample scene starts with one local probe. The remaining three GPU
-    // slots stay inactive and are reserved for independently loaded probe assets.
-    std::array<arut::rendering::EnvironmentProbeInfluence, 1> scene_probes{};
-    scene_probes[0].bounds = {-4.0F, -4.0F, -4.0F, 4.0F, 4.0F, 4.0F};
-    scene_probes[0].blend_distance = 4.0F;
-    scene_probes[0].priority = 0;
+    const std::span<const arut::rendering::EnvironmentProbeInfluence> scene_probes(
+        environment_probe_influences_.data(), environment_probe_count_);
     arut::rendering::EnvironmentProbeGpuData environment_probe_data{};
     if (!arut::rendering::build_environment_probe_gpu_data(
             scene_probes, environment_probe_data)) {
@@ -3003,6 +2999,43 @@ bool AndroidRenderer::recreate_swapchain() noexcept {
     if (!device_) return false;
     destroy_swapchain();
     return create_swapchain() && create_frame_resources();
+}
+
+bool AndroidRenderer::set_environment_probes(
+    std::span<const arut::rendering::EnvironmentProbeInfluence> probes) noexcept {
+    if (probes.size() > arut::rendering::kMaxEnvironmentProbes ||
+        device_ == VK_NULL_HANDLE ||
+        environment_probe_uniform_buffer_ == VK_NULL_HANDLE ||
+        environment_probe_uniform_memory_ == VK_NULL_HANDLE) {
+        return false;
+    }
+
+    arut::rendering::EnvironmentProbeGpuData gpu_data{};
+    if (!arut::rendering::build_environment_probe_gpu_data(probes, gpu_data)) {
+        log_error("Rejected invalid environment-probe registration data");
+        return false;
+    }
+
+    const VkResult idle = vkDeviceWaitIdle(device_);
+    if (idle != VK_SUCCESS) {
+        log_error("Wait for device idle before updating environment probes failed", idle);
+        return false;
+    }
+    void* mapped = nullptr;
+    const VkResult map_result = vkMapMemory(
+        device_, environment_probe_uniform_memory_, 0, sizeof(gpu_data), 0, &mapped);
+    if (map_result != VK_SUCCESS || !mapped) {
+        log_error("Map environment-probe uniform buffer for update failed", map_result);
+        return false;
+    }
+    std::memcpy(mapped, &gpu_data, sizeof(gpu_data));
+    vkUnmapMemory(device_, environment_probe_uniform_memory_);
+
+    environment_probe_influences_.fill({});
+    std::copy(probes.begin(), probes.end(), environment_probe_influences_.begin());
+    environment_probe_count_ = static_cast<std::uint32_t>(probes.size());
+    arut_android_log(ANDROID_LOG_INFO, "Runtime environment-probe registration updated.");
+    return true;
 }
 
 bool AndroidRenderer::set_quality_tier(arut::rendering::RenderQualityTier tier) noexcept {
