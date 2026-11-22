@@ -53,14 +53,16 @@ Exit gate: Android renders a textured 3D scene with validation and frame/GPU tim
 - [x] Add mobile forward PBR vertex/fragment shader source and host-CI GLSL compilation, connected to the Vulkan PBR pipeline.
 - [x] Add host tests for BRDF limits, front/back lighting and tone mapping.
 - [x] Integrate shader compilation, descriptor layouts, vertex formats and graphics pipeline into Vulkan.
-- [ ] Validate energy conservation and compare GPU output against the CPU reference.
+- [x] Add a numerical hemisphere-integration energy-budget regression for the CPU Cook-Torrance reference across dielectric, mixed and metallic materials.
+- [ ] Compare actual GPU shader output against the CPU reference during authorized device validation.
 - [x] Add a single directional depth shadow map, depth-only Vulkan pass, instanced shadow draw, depth comparison sampling and 3x3 PCF.
 - [ ] Add cascade shadow maps and quality-tier-controlled shadow resolution.
 - [x] Add a per-instance model-matrix vertex stream and indexed instanced cube drawing.
 - [x] Add CPU frustum extraction and bounding-sphere culling for test instances.
 - [ ] Add GPU visibility/indirect drawing.
 - [x] Add a procedural six-face sky/ground environment cubemap, GGX importance-sampled specular mips and PBR diffuse/specular environment sampling.
-- [ ] Add cosine-convolved diffuse irradiance, a split-sum BRDF integration LUT and HDR environment asset import.
+- [x] Add a CPU split-sum GGX BRDF integration LUT baker, upload it as a sampled Vulkan texture and use it in the PBR specular environment response.
+- [ ] Add cosine-convolved diffuse irradiance and HDR environment asset/probe import.
 - [x] Connect profile snapshots to CPU frame time, GPU timestamp queries, shadow-pass time, draw calls, visible objects and triangle counts.
 - [ ] Add GPU memory accounting and multi-pass/per-material breakdowns.
 - [ ] Validate graceful quality fallback on two Android GPU families.
