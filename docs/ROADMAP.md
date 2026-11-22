@@ -35,7 +35,8 @@ Exit gate: APK installs and starts on a physical ARM64 device, handles lifecycle
 - [x] Add packaged SPIR-V loading, shader modules and a first-triangle graphics pipeline.
 - [x] Add a host-visible vertex buffer and a depth image/view/render-pass attachment with depth testing enabled.
 - [x] Add a standard PBR-ready vertex layout, procedural unit-cube mesh data and Vulkan-compatible perspective matrix helper.
-- [ ] Add indexed mesh buffers, camera/view transforms and a first lit PBR 3D scene.
+- [x] Add indexed unit-cube mesh buffers, camera/view transforms, frame/material uniforms and an active mobile PBR draw path.
+- [ ] Add real texture asset decoding/upload, mipmaps and texture streaming.
 - [ ] Compile the Android-native renderer and validate on device (deferred until the agreed testing stage).
 Exit gate: Android renders a textured 3D scene with validation and frame/GPU timing.
 
