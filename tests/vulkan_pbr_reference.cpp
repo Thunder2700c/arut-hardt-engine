@@ -11,6 +11,7 @@
 
 namespace {
 struct GpuResult { float x, y, z, w; };
+constexpr std::size_t kCaseCount = 4U;
 
 bool check(VkResult result, const char* operation) {
     if (result == VK_SUCCESS) return true;
@@ -110,7 +111,7 @@ int main(int argc, char** argv) {
         vkGetDeviceQueue(device, queue_family, 0, &queue);
 
         VkBufferCreateInfo buffer_info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-        buffer_info.size = sizeof(GpuResult);
+        buffer_info.size = sizeof(GpuResult) * kCaseCount;
         buffer_info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         if (!check(vkCreateBuffer(device, &buffer_info, nullptr, &buffer), "vkCreateBuffer")) goto cleanup;
@@ -142,7 +143,7 @@ int main(int argc, char** argv) {
         set_alloc.descriptorPool = descriptor_pool; set_alloc.descriptorSetCount = 1; set_alloc.pSetLayouts = &set_layout;
         VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
         if (!check(vkAllocateDescriptorSets(device, &set_alloc, &descriptor_set), "vkAllocateDescriptorSets")) goto cleanup;
-        VkDescriptorBufferInfo buffer_descriptor{buffer, 0, sizeof(GpuResult)};
+        VkDescriptorBufferInfo buffer_descriptor{buffer, 0, sizeof(GpuResult) * kCaseCount};
         VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
         write.dstSet = descriptor_set; write.dstBinding = 0; write.descriptorCount = 1;
         write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; write.pBufferInfo = &buffer_descriptor;
@@ -175,7 +176,7 @@ int main(int argc, char** argv) {
         if (!check(vkBeginCommandBuffer(command, &begin), "vkBeginCommandBuffer")) goto cleanup;
         vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
         vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
-        vkCmdDispatch(command, 1, 1, 1);
+        vkCmdDispatch(command, static_cast<std::uint32_t>(kCaseCount), 1, 1);
         if (!check(vkEndCommandBuffer(command), "vkEndCommandBuffer")) goto cleanup;
         VkFenceCreateInfo fence_info{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
         if (!check(vkCreateFence(device, &fence_info, nullptr, &fence), "vkCreateFence")) goto cleanup;
@@ -185,27 +186,49 @@ int main(int argc, char** argv) {
             !check(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX), "vkWaitForFences")) goto cleanup;
 
         void* mapped = nullptr;
-        if (!check(vkMapMemory(device, memory, 0, sizeof(GpuResult), 0, &mapped), "vkMapMemory")) goto cleanup;
-        const auto gpu = *static_cast<const GpuResult*>(mapped);
-        vkUnmapMemory(device, memory);
-        const auto cpu = arut::rendering::pbr::evaluate_direct_brdf(
-            {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 1.0F}, {0.6F, 0.0F, 0.8F},
-            {0.8F, 0.2F, 0.1F}, 0.2F, 0.35F, {3.0F, 2.0F, 1.0F});
-        const std::array<float, 3> gpu_values{gpu.x, gpu.y, gpu.z};
-        const std::array<float, 3> cpu_values{cpu.x, cpu.y, cpu.z};
-        for (std::size_t i = 0; i < gpu_values.size(); ++i) {
-            const float tolerance = 2.0e-4F * std::max(1.0F, std::abs(cpu_values[i]));
-            if (!std::isfinite(gpu_values[i]) || std::abs(gpu_values[i] - cpu_values[i]) > tolerance) {
-                std::cerr << "GPU/CPU BRDF mismatch channel " << i << ": GPU="
-                          << gpu_values[i] << " CPU=" << cpu_values[i]
-                          << " tolerance=" << tolerance << '\n';
+        if (!check(vkMapMemory(device, memory, 0, sizeof(GpuResult) * kCaseCount, 0, &mapped), "vkMapMemory")) goto cleanup;
+        const auto* gpu = static_cast<const GpuResult*>(mapped);
+        const std::array<arut::rendering::pbr::Vec3, kCaseCount> cpu{{
+            arut::rendering::pbr::evaluate_direct_brdf(
+                {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 1.0F}, {0.6F, 0.0F, 0.8F},
+                {0.8F, 0.2F, 0.1F}, 0.2F, 0.35F, {3.0F, 2.0F, 1.0F}),
+            arut::rendering::pbr::evaluate_direct_brdf(
+                {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 1.0F},
+                {0.78F, 0.42F, 0.18F}, 0.0F, 0.5F, {2.0F, 1.5F, 0.75F}),
+            arut::rendering::pbr::evaluate_direct_brdf(
+                {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 1.0F}, {0.3F, 0.4F, 0.8660254F},
+                {0.7F, 0.7F, 0.7F}, 1.0F, 0.9F, {1.0F, 2.0F, 4.0F}),
+            arut::rendering::pbr::evaluate_direct_brdf(
+                {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, -1.0F},
+                {0.8F, 0.2F, 0.1F}, 0.5F, 0.045F, {3.0F, 2.0F, 1.0F})
+        }};
+        for (std::size_t test = 0; test < kCaseCount; ++test) {
+            const std::array<float, 3> gpu_values{gpu[test].x, gpu[test].y, gpu[test].z};
+            const std::array<float, 3> cpu_values{cpu[test].x, cpu[test].y, cpu[test].z};
+            for (std::size_t channel = 0; channel < gpu_values.size(); ++channel) {
+                const float tolerance = 2.0e-4F * std::max(1.0F, std::abs(cpu_values[channel]));
+                if (!std::isfinite(gpu_values[channel]) ||
+                    std::abs(gpu_values[channel] - cpu_values[channel]) > tolerance) {
+                    std::cerr << "GPU/CPU BRDF mismatch case " << test << " channel "
+                              << channel << ": GPU=" << gpu_values[channel]
+                              << " CPU=" << cpu_values[channel]
+                              << " tolerance=" << tolerance << '\\n';
+                    vkUnmapMemory(device, memory);
+                    goto cleanup;
+                }
+            }
+            if (std::abs(gpu[test].w - 1.0F) > 1.0e-6F) {
+                std::cerr << "GPU result sentinel mismatch in case " << test << '\\n';
+                vkUnmapMemory(device, memory);
                 goto cleanup;
             }
+            std::cout << "BRDF case " << test << " GPU: " << gpu[test].x << ", "
+                      << gpu[test].y << ", " << gpu[test].z << " | CPU: "
+                      << cpu[test].x << ", " << cpu[test].y << ", " << cpu[test].z << '\\n';
         }
-        if (std::abs(gpu.w - 1.0F) > 1.0e-6F) { std::cerr << "GPU result sentinel mismatch\n"; goto cleanup; }
-        std::cout << "GPU BRDF: " << gpu.x << ", " << gpu.y << ", " << gpu.z << '\n';
-        std::cout << "CPU BRDF: " << cpu.x << ", " << cpu.y << ", " << cpu.z << '\n';
-        std::cout << "PASS: GPU shader readback matches C++ reference within tolerance\n";
+        vkUnmapMemory(device, memory);
+        std::cout << "PASS: all " << kCaseCount
+                  << " GPU shader readbacks match C++ references within tolerance\\n";
         exit_code = 0;
     }
 
