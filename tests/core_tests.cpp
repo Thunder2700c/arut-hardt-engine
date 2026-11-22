@@ -3,6 +3,7 @@
 #include "arut/rendering/mesh.hpp"
 #include "arut/rendering/image.hpp"
 #include "arut/rendering/environment.hpp"
+#include "arut/rendering/environment_probe.hpp"
 #include "arut/rendering/brdf_lut.hpp"
 #include "arut/rendering/visibility.hpp"
 #include "arut/rendering/shadow.hpp"
@@ -14,6 +15,7 @@
 #include <initializer_list>
 #include <cassert>
 #include <cmath>
+#include <limits>
 #include <string_view>
 #include <vector>
 
@@ -249,5 +251,28 @@ int main() {
     for (const auto value : invalid_ortho.value) assert(near(value, 0.0F));
     const auto invalid_projection = arut::rendering::perspective_rh_zo(1.0F, 0.0F, 0.1F, 100.0F);
     for (const auto value : invalid_projection.value) assert(near(value, 0.0F));
+
+    const std::array<arut::rendering::EnvironmentProbeInfluence, 2> overlapping_probes{{
+        {{{-2.0F, -2.0F, -2.0F, 2.0F, 2.0F, 2.0F}}, 4.0F, 1},
+        {{{-1.0F, -1.0F, -1.0F, 1.0F, 1.0F, 1.0F}}, 4.0F, 1}
+    }};
+    std::vector<float> probe_weights;
+    assert(arut::rendering::evaluate_environment_probe_weights(
+        overlapping_probes, 0.0F, 0.0F, 0.0F, probe_weights));
+    assert(probe_weights.size() == 2U);
+    assert(near(probe_weights[0], 0.5F) && near(probe_weights[1], 0.5F));
+    assert(arut::rendering::evaluate_environment_probe_weights(
+        overlapping_probes, 4.0F, 0.0F, 0.0F, probe_weights));
+    assert(near(probe_weights[0], 1.0F) && near(probe_weights[1], 0.0F));
+    const std::array<arut::rendering::EnvironmentProbeInfluence, 2> priority_probes{{
+        {{{-5.0F, -5.0F, -5.0F, 5.0F, 5.0F, 5.0F}}, 0.0F, 1},
+        {{{-1.0F, -1.0F, -1.0F, 1.0F, 1.0F, 1.0F}}, 0.0F, 5}
+    }};
+    assert(arut::rendering::evaluate_environment_probe_weights(
+        priority_probes, 0.0F, 0.0F, 0.0F, probe_weights));
+    assert(near(probe_weights[0], 0.0F) && near(probe_weights[1], 1.0F));
+    assert(!arut::rendering::evaluate_environment_probe_weights(
+        overlapping_probes, std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F, probe_weights));
+    assert(probe_weights.empty());
     return 0;
 }
