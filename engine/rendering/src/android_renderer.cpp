@@ -1122,13 +1122,6 @@ bool AndroidRenderer::load_environment_probe_cubemap(
 
     const std::vector<arut::rendering::EnvironmentCubeF16Mip> diffuse_mips{
         std::move(diffuse_half)};
-    if (!upload_environment_cube_rgba16f(
-            specular_half, specular_image, specular_memory, specular_view,
-            specular_sampler, specular_mip_levels)) return false;
-    if (upload_environment_cube_rgba16f(
-            diffuse_mips, diffuse_image, diffuse_memory, diffuse_view,
-            diffuse_sampler, diffuse_mip_levels)) return true;
-
     const auto release_partial = [this](VkImage& image, VkDeviceMemory& memory,
                                         VkImageView& view, VkSampler& sampler) {
         if (sampler) vkDestroySampler(device_, sampler, nullptr);
@@ -1146,8 +1139,21 @@ bool AndroidRenderer::load_environment_probe_cubemap(
         view = VK_NULL_HANDLE;
         sampler = VK_NULL_HANDLE;
     };
+    if (!upload_environment_cube_rgba16f(
+            specular_half, specular_image, specular_memory, specular_view,
+            specular_sampler, specular_mip_levels)) {
+        release_partial(specular_image, specular_memory, specular_view, specular_sampler);
+        specular_mip_levels = 0U;
+        return false;
+    }
+    if (upload_environment_cube_rgba16f(
+            diffuse_mips, diffuse_image, diffuse_memory, diffuse_view,
+            diffuse_sampler, diffuse_mip_levels)) return true;
+
     release_partial(specular_image, specular_memory, specular_view, specular_sampler);
+    release_partial(diffuse_image, diffuse_memory, diffuse_view, diffuse_sampler);
     specular_mip_levels = 0U;
+    diffuse_mip_levels = 0U;
     return false;
 }
 
