@@ -1284,6 +1284,21 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
     std::memcpy(mapped, visible_instances.data(), static_cast<std::size_t>(instance_bytes));
     vkUnmapMemory(device_, instance_memory_);
     instance_count_ = static_cast<std::uint32_t>(visible_instances.size());
+
+    const VkDrawIndexedIndirectCommand indirect_command{
+        cube_index_count_, instance_count_, 0U, 0, 0U
+    };
+    if (!create_buffer(sizeof(indirect_command), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                       indirect_draw_buffer_, indirect_draw_memory_)) return false;
+    mapped = nullptr;
+    result = vkMapMemory(device_, indirect_draw_memory_, 0, sizeof(indirect_command), 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map indexed indirect command buffer failed", result);
+        return false;
+    }
+    std::memcpy(mapped, &indirect_command, sizeof(indirect_command));
+    vkUnmapMemory(device_, indirect_draw_memory_);
+
     char message[160]{};
     std::snprintf(message, sizeof(message), "PBR mesh: vertices=%zu indices=%u instances=%u culled=%zu",
                   mesh.vertices.size(), cube_index_count_, instance_count_, specs.size() - visible_instances.size());
@@ -1922,7 +1937,8 @@ bool AndroidRenderer::draw_frame() noexcept {
             vkCmdBeginRenderPass(command_buffers_[image_index], &shadow_pass, VK_SUBPASS_CONTENTS_INLINE);
             vkCmdPushConstants(command_buffers_[image_index], pbr_pipeline_layout_,
                                VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cascade), &cascade);
-            vkCmdDrawIndexed(command_buffers_[image_index], cube_index_count_, instance_count_, 0, 0, 0);
+            vkCmdDrawIndexedIndirect(command_buffers_[image_index], indirect_draw_buffer_, 0, 1,
+                                     sizeof(VkDrawIndexedIndirectCommand));
             vkCmdEndRenderPass(command_buffers_[image_index]);
         }
     }
@@ -1962,7 +1978,8 @@ bool AndroidRenderer::draw_frame() noexcept {
                            static_cast<std::uint32_t>(vertex_buffers.size()),
                            vertex_buffers.data(), vertex_offsets.data());
     vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_, 0, VK_INDEX_TYPE_UINT32);
-    vkCmdDrawIndexed(command_buffers_[image_index], cube_index_count_, instance_count_, 0, 0, 0);
+    vkCmdDrawIndexedIndirect(command_buffers_[image_index], indirect_draw_buffer_, 0, 1,
+                             sizeof(VkDrawIndexedIndirectCommand));
     vkCmdEndRenderPass(command_buffers_[image_index]);
     if (timestamp_queries_available_) {
         vkCmdWriteTimestamp(command_buffers_[image_index], VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
@@ -2054,6 +2071,8 @@ void AndroidRenderer::destroy_swapchain() noexcept {
         if (cube_index_memory_) vkFreeMemory(device_, cube_index_memory_, nullptr);
         if (instance_buffer_) vkDestroyBuffer(device_, instance_buffer_, nullptr);
         if (instance_memory_) vkFreeMemory(device_, instance_memory_, nullptr);
+        if (indirect_draw_buffer_) vkDestroyBuffer(device_, indirect_draw_buffer_, nullptr);
+        if (indirect_draw_memory_) vkFreeMemory(device_, indirect_draw_memory_, nullptr);
         if (brdf_lut_sampler_) vkDestroySampler(device_, brdf_lut_sampler_, nullptr);
         if (brdf_lut_view_) vkDestroyImageView(device_, brdf_lut_view_, nullptr);
         if (brdf_lut_image_) vkDestroyImage(device_, brdf_lut_image_, nullptr);
@@ -2126,6 +2145,8 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     cube_vertex_memory_ = cube_index_memory_ = VK_NULL_HANDLE;
     instance_buffer_ = VK_NULL_HANDLE;
     instance_memory_ = VK_NULL_HANDLE;
+    indirect_draw_buffer_ = VK_NULL_HANDLE;
+    indirect_draw_memory_ = VK_NULL_HANDLE;
     cube_index_count_ = 0;
     instance_count_ = 0;
     brdf_lut_sampler_ = VK_NULL_HANDLE;
