@@ -2331,6 +2331,12 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     if (device_ != VK_NULL_HANDLE) {
         if (in_flight_) vkDestroyFence(device_, in_flight_, nullptr);
         if (timestamp_query_pool_) vkDestroyQueryPool(device_, timestamp_query_pool_, nullptr);
+        if (visibility_compute_pipeline_) vkDestroyPipeline(device_, visibility_compute_pipeline_, nullptr);
+        if (visibility_pipeline_layout_) vkDestroyPipelineLayout(device_, visibility_pipeline_layout_, nullptr);
+        if (visibility_descriptor_pool_) vkDestroyDescriptorPool(device_, visibility_descriptor_pool_, nullptr);
+        if (visibility_set_layout_) vkDestroyDescriptorSetLayout(device_, visibility_set_layout_, nullptr);
+        if (visibility_input_buffer_) vkDestroyBuffer(device_, visibility_input_buffer_, nullptr);
+        if (visibility_input_memory_) vkFreeMemory(device_, visibility_input_memory_, nullptr);
         if (shadow_pipeline_) vkDestroyPipeline(device_, shadow_pipeline_, nullptr);
         if (pbr_pipeline_) vkDestroyPipeline(device_, pbr_pipeline_, nullptr);
         if (pbr_descriptor_pool_) vkDestroyDescriptorPool(device_, pbr_descriptor_pool_, nullptr);
@@ -2475,6 +2481,17 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     shadow_framebuffers_.fill(VK_NULL_HANDLE);
     shadow_layer_views_.fill(VK_NULL_HANDLE);
     shadow_pipeline_ = VK_NULL_HANDLE;
+    visibility_compute_pipeline_ = VK_NULL_HANDLE;
+    visibility_pipeline_layout_ = VK_NULL_HANDLE;
+    visibility_descriptor_pool_ = VK_NULL_HANDLE;
+    visibility_descriptor_set_ = VK_NULL_HANDLE;
+    visibility_set_layout_ = VK_NULL_HANDLE;
+    visibility_input_buffer_ = VK_NULL_HANDLE;
+    visibility_input_memory_ = VK_NULL_HANDLE;
+    visibility_input_info_ = {};
+    visibility_source_instance_count_ = 0;
+    visibility_frustum_planes_.fill(0.0F);
+    gpu_visibility_enabled_ = false;
     shadow_enabled_ = false;
     swapchain_ = VK_NULL_HANDLE;
     framebuffers_.clear();
