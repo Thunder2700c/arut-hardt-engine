@@ -42,7 +42,7 @@ Runtime profile logs include CPU frame duration, separate GPU visibility-compute
 ## Limits
 - The scene is a small renderer test fixture, not a game world.
 - The base-colour PNG, tangent-normal TGA and metallic-roughness TGA are decoded and uploaded into their matching material descriptors. The split-sum BRDF integration LUT is procedurally generated on CPU and uploaded as an RGBA8 lookup texture.
-- The procedural cubemap is a bounded bootstrap environment, not an HDR environment asset or probe system.
+- The procedural cubemap remains the fallback bootstrap environment. When `environments/default.hdr` is packaged, the renderer decodes it as linear RGBA32F, converts it to a cube, prefilters float GGX mips, convolves diffuse irradiance and uploads both maps as RGBA16F when the format is supported. GPU environment-probe arrays and runtime multi-probe blending remain pending; no sample HDR asset is bundled yet.
 - Directional shadows support a quality-selected 1/2/4-cascade path with texel-snapped projections and cross-fade between cascades; local-light shadows remain pending.
 - No APK, emulator or physical-device testing is performed by normal CI. The manual Android APK workflow remains separately gated.
 - Android GPU visual correctness and measured costs remain unverified until the user authorizes testing.
