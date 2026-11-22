@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
+#include <functional>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -131,7 +133,7 @@ struct WorldCellHash final {
     [[nodiscard]] std::size_t operator()(WorldCell cell) const noexcept {
         const auto x = static_cast<std::uint32_t>(cell.x);
         const auto z = static_cast<std::uint32_t>(cell.z);
-        return (static_cast<std::size_t>(x) << 32U) ^ z;
+        return std::hash<std::uint32_t>{}(x) ^ (std::hash<std::uint32_t>{}(z) + 0x9e3779b9U + (static_cast<std::size_t>(x) << 6U) + (static_cast<std::size_t>(x) >> 2U));
     }
 };
 
@@ -145,8 +147,14 @@ public:
     [[nodiscard]] WorldCell cell_at(float x, float z) const {
         if (!std::isfinite(x) || !std::isfinite(z))
             throw std::invalid_argument("world position must be finite");
-        return {static_cast<std::int32_t>(std::floor(x / cell_size_)),
-                static_cast<std::int32_t>(std::floor(z / cell_size_))};
+        const double cell_x = std::floor(static_cast<double>(x) / cell_size_);
+        const double cell_z = std::floor(static_cast<double>(z) / cell_size_);
+        if (cell_x < std::numeric_limits<std::int32_t>::min() ||
+            cell_x > std::numeric_limits<std::int32_t>::max() ||
+            cell_z < std::numeric_limits<std::int32_t>::min() ||
+            cell_z > std::numeric_limits<std::int32_t>::max())
+            throw std::out_of_range("world position exceeds partition coordinate range");
+        return {static_cast<std::int32_t>(cell_x), static_cast<std::int32_t>(cell_z)};
     }
 
     // Computes the desired square streaming window. Returns newly activated cells;
@@ -159,10 +167,19 @@ public:
         const std::int64_t count = (2 * r + 1) * (2 * r + 1);
         if (count > 1000000) throw std::length_error("streaming window is too large");
         desired.reserve(static_cast<std::size_t>(count));
-        for (std::int64_t z = -r; z <= r; ++z)
-            for (std::int64_t x = -r; x <= r; ++x)
-                desired.insert({static_cast<std::int32_t>(center.x + x),
-                                static_cast<std::int32_t>(center.z + z)});
+        for (std::int64_t z = -r; z <= r; ++z) {
+            for (std::int64_t x = -r; x <= r; ++x) {
+                const std::int64_t cell_x = static_cast<std::int64_t>(center.x) + x;
+                const std::int64_t cell_z = static_cast<std::int64_t>(center.z) + z;
+                if (cell_x < std::numeric_limits<std::int32_t>::min() ||
+                    cell_x > std::numeric_limits<std::int32_t>::max() ||
+                    cell_z < std::numeric_limits<std::int32_t>::min() ||
+                    cell_z > std::numeric_limits<std::int32_t>::max())
+                    throw std::out_of_range("streaming window exceeds partition coordinate range");
+                desired.insert({static_cast<std::int32_t>(cell_x),
+                                static_cast<std::int32_t>(cell_z)});
+            }
+        }
         std::vector<WorldCell> activated;
         for (const auto cell : desired)
             if (active_.insert(cell).second) activated.push_back(cell);
