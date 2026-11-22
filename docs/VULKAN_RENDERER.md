@@ -1,33 +1,42 @@
 # Vulkan Renderer Bring-up
 
-Status: mobile PBR renderer, PNG base-colour texture upload and indexed instancing are implemented in source. Host and Android-native CI compile checks run without packaging an APK.
+Status: the source now contains a mobile forward PBR path, real base-colour texture upload, CPU frustum culling, instanced geometry, a directional shadow pass and optional GPU timestamps. CI compiles the host targets and Android ARM64 native library without packaging an APK.
 
-## Current render path
-1. Create Android Vulkan instance and surface.
-2. Select a graphics/present queue pair and enable swapchain support.
-3. Create FIFO swapchain and color image views.
-4. Select a supported depth format (D32 float, D24/S8, or D16), allocate a device-local depth image and view.
-5. Create a render pass with color and depth attachments and framebuffers.
-6. Decode the bundled PNG base-colour asset into RGBA8, generate CPU mip levels in linear-light space for the sRGB image, and upload all mip levels with a staging buffer.
-7. Upload a 1x1 fallback texture for optional normal/metallic-roughness maps.
-8. Load mobile_pbr_forward.vert.spv and mobile_pbr_forward.frag.spv from Android assets.
-9. Create frame/material descriptor layouts, bind the sRGB base-colour texture and fallback data textures, and create the mobile forward PBR graphics pipeline.
-10. Generate an indexed unit cube with position/normal/tangent/UV vertices and upload shared vertex/index buffers.
-11. Upload three model matrices to an instance-rate vertex buffer. Each frame, issue one indexed instanced draw for all three cube instances, submit and present.
+## Frame setup
+1. Create Android Vulkan instance/surface, choose graphics and presentation queues, and create the FIFO swapchain.
+2. Create colour image views, depth attachment, render pass and swapchain framebuffers.
+3. Decode app/src/main/assets/textures/demo_base_color.png into RGBA8.
+4. Generate sRGB-aware mip levels on CPU and upload them through a host-visible staging buffer into an optimal tiled sampled image.
+5. Create fallback sampled resources for normal/metallic-roughness maps and, when needed, an all-lit depth fallback.
+6. Load PBR and shadow SPIR-V shader assets from Android assets.
+7. Create frame/material descriptor layouts, PBR and shadow pipelines, and frame/material uniform buffers.
+8. Generate an indexed unit cube and upload mesh buffers.
+9. Compute a camera frustum, cull the sample instances with bounding spheres and upload visible model matrices to an instance-rate vertex stream.
 
-## Shader asset contract
-GLSL source lives in engine/rendering/shaders/. Host CI compiles all PBR and triangle shaders with glslangValidator to validate syntax. The explicitly approved Android APK workflow compiles the two first-triangle shaders into app/src/main/assets/shaders/ before Gradle packaging. Android runtime loads these SPIR-V assets through AAssetManager.
+## Per-frame commands
+1. Reset and begin the command buffer.
+2. If a sampled depth format is also depth-attachment capable, clear and render the directional shadow map using the shared indexed instanced mesh.
+3. Transition the shadow map to depth-read-only layout at the end of the shadow render pass.
+4. Begin the main colour/depth pass, bind the PBR pipeline, frame/material descriptor sets, mesh and visible instance buffers, and issue an indexed instanced draw.
+5. Submit and present. Optional Vulkan timestamp queries measure total GPU frame time and shadow-pass GPU time separately.
 
-## Geometry and camera foundations
-engine/rendering/include/arut/rendering/mesh.hpp defines a PBR-ready interleaved vertex (position, normal, tangent, UV), a CPU unit-cube generator, column-major matrices, a right-handed look-at view matrix and a Vulkan zero-to-one perspective matrix with framebuffer Y inversion.
+## Shader contracts
+- PBR vertex locations 0–3: position, normal, tangent, UV.
+- PBR vertex locations 4–7: four columns of the per-instance model matrix.
+- Frame set 0 binding 0: view-projection, camera position, directional-light direction/radiance and light view-projection matrices.
+- Frame set 0 binding 1: comparison-sampled directional shadow map.
+- Material set 1 binding 0: material factors/flags; bindings 1–3: base colour, normal, metallic-roughness sampled images.
+- Shadow vertex stage uses frame set 0 binding 0 and vertex locations 0, 4–7.
 
-## Deliberate limits
-- The active draw path is now three camera-driven indexed cube instances sharing one mesh and sRGB checker base-colour texture. It uses mobile metallic-roughness PBR shaders, GGX distribution, Schlick Fresnel, Smith geometry and ACES tone mapping.
-- The PBR material currently uses constant factors and no texture maps. Descriptor slots are valid and point to a one-pixel fallback texture; real image decoding, upload, mipmaps and streaming remain pending.
-- Ambient lighting is a small placeholder term; image-based lighting, environment probes, shadow maps and local lights remain pending.
-- The original RGB triangle pipeline remains as a bootstrap/reference path but is no longer the active draw.
-- One depth image is shared by swapchain framebuffers. The renderer currently has one frame in flight, so depth writes are serialized.
-- No APK, emulator run or physical-device rendering test is performed by normal CI.
+## Visibility and quality
+CPU culling currently uses Vulkan zero-to-one clip-space frustum planes and bounding spheres. One 1024x1024 directional shadow map is the current default; cascades and shadow-resolution selection from Low/Medium/High/Ultra presets are not yet connected. GPU/indirect culling is pending.
 
-## Lifecycle
-Swapchain recreation destroys and recreates triangle/PBR pipelines, mesh/instance buffers, textures, descriptor resources, depth target, render targets, command buffers and synchronization objects. Resource destruction waits for device idle before releasing GPU objects.
+## Diagnostics
+Runtime profile logs include CPU frame duration, GPU timestamp duration when available, shadow-pass duration, draw calls, visible instances and triangle count. Unsupported timestamp queries are gracefully disabled. GPU memory totals and detailed pass breakdowns remain pending.
+
+## Limits
+- The scene is a small renderer test fixture, not a game world.
+- Only the base-colour map uses a real image asset; normal and metallic-roughness maps use fallback textures.
+- IBL uses a temporary ambient term; environment probes, irradiance, prefiltered specular maps and BRDF LUT are not implemented.
+- No APK, emulator or physical-device testing is performed by normal CI. The manual Android APK workflow remains separately gated.
+- Android GPU visual correctness and measured costs remain unverified until the user authorizes testing.
