@@ -44,11 +44,13 @@ void main() {
     const VisibilityInstance instance = inputData.instances[instanceIndex];
     const vec3 center = instance.bounds.xyz;
     const float radius = max(instance.bounds.w, 0.0);
+    // Match the CPU reference's conservative floating-point boundary margin.
+    const float boundaryEpsilon = 1.0e-4;
 
     for (uint planeIndex = 0u; planeIndex < 6u; ++planeIndex) {
         const vec4 plane = pushData.frustumPlanes[planeIndex];
         const float signedDistance = dot(plane.xyz, center) + plane.w;
-        if (signedDistance < -radius) {
+        if (signedDistance < -radius - boundaryEpsilon) {
             return;
         }
     }
