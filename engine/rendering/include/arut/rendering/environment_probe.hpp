@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <span>
@@ -18,6 +19,42 @@ struct EnvironmentProbeInfluence final {
     float blend_distance{0.0F};
     std::int32_t priority{0};
 };
+
+inline constexpr std::size_t kMaxEnvironmentProbes = 4U;
+
+// std140-compatible probe bounds and priority block for the PBR fragment shader.
+struct alignas(16) EnvironmentProbeGpuData final {
+    std::array<std::array<float, 4>, kMaxEnvironmentProbes> bounds_min_blend{};
+    std::array<std::array<float, 4>, kMaxEnvironmentProbes> bounds_max{};
+    std::array<std::int32_t, 4> priorities{};
+    std::array<std::uint32_t, 4> metadata{}; // x = active probe count
+};
+static_assert(sizeof(EnvironmentProbeGpuData) == 160U);
+
+[[nodiscard]] inline bool build_environment_probe_gpu_data(
+    std::span<const EnvironmentProbeInfluence> probes,
+    EnvironmentProbeGpuData& output) noexcept {
+    output = {};
+    if (probes.size() > kMaxEnvironmentProbes) return false;
+    for (std::size_t i = 0; i < probes.size(); ++i) {
+        const auto& probe = probes[i];
+        const auto& b = probe.bounds;
+        if (!std::isfinite(b.min_x) || !std::isfinite(b.min_y) ||
+            !std::isfinite(b.min_z) || !std::isfinite(b.max_x) ||
+            !std::isfinite(b.max_y) || !std::isfinite(b.max_z) ||
+            b.min_x > b.max_x || b.min_y > b.max_y || b.min_z > b.max_z ||
+            !std::isfinite(probe.blend_distance) || probe.blend_distance < 0.0F) {
+            output = {};
+            return false;
+        }
+        output.bounds_min_blend[i] = {
+            b.min_x, b.min_y, b.min_z, probe.blend_distance};
+        output.bounds_max[i] = {b.max_x, b.max_y, b.max_z, 0.0F};
+        output.priorities[i] = probe.priority;
+    }
+    output.metadata[0] = static_cast<std::uint32_t>(probes.size());
+    return true;
+}
 
 // Returns normalized influence weights in input order. Only probes at the
 // highest priority with non-zero influence participate in the blend.
