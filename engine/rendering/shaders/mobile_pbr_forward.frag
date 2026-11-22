@@ -12,6 +12,7 @@ layout(location = 3) in vec2 inUv;
 layout(set = 0, binding = 0, std140) uniform FrameData {
     mat4 viewProjection;
     vec4 cameraPosition;
+    vec4 cameraForward;
     vec4 directionalLightDirection;
     vec4 directionalLightRadiance;
     mat4 lightViewProjection[4];
@@ -62,7 +63,8 @@ float geometrySmith(float nDotV, float nDotL, float roughness) {
 }
 
 float directionalShadowVisibility(vec3 normal, vec3 lightDirection) {
-    float viewDistance = length(frameData.cameraPosition.xyz - inWorldPosition);
+    float viewDistance = dot(inWorldPosition - frameData.cameraPosition.xyz,
+                             normalize(frameData.cameraForward.xyz));
     int cascade = 0;
     if (viewDistance > frameData.cascadeSplits.x) cascade = 1;
     if (viewDistance > frameData.cascadeSplits.y) cascade = 2;
