@@ -57,7 +57,8 @@ Exit gate: Android renders a textured 3D scene with validation and frame/GPU tim
 - [x] Add a numerical hemisphere-integration energy-budget regression for the CPU Cook-Torrance reference across dielectric, mixed and metallic materials.
 - [ ] Compare actual GPU shader output against the CPU reference during authorized device validation.
 - [x] Add a single directional depth shadow map, depth-only Vulkan pass, instanced shadow draw, depth comparison sampling and 3x3 PCF.
-- [ ] Add cascade shadow maps and quality-tier-controlled shadow resolution.
+- [x] Add a four-layer directional shadow depth array with 1/2/4 active cascades, per-cascade light matrices, view-depth selection and 3x3 PCF.
+- [x] Connect Low/Medium/High/Ultra quality tiers to shadow resolution/cascade count, with mobile-bounded 512/512/1024/1536 maps.
 - [x] Add a per-instance model-matrix vertex stream and indexed instanced cube drawing.
 - [x] Add CPU frustum extraction and bounding-sphere culling for test instances.
 - [ ] Add GPU visibility/indirect drawing.
