@@ -25,6 +25,7 @@ public:
     bool initialize(ANativeWindow* window, AAssetManager* assets) noexcept;
     void shutdown() noexcept;
     bool set_quality_tier(arut::rendering::RenderQualityTier tier) noexcept;
+    bool set_environment_probes(std::span<const arut::rendering::EnvironmentProbeInfluence> probes) noexcept;
     bool draw_frame() noexcept;
     [[nodiscard]] arut::rendering::RenderProfileSnapshot profile_snapshot() const noexcept;
     bool ready() const noexcept { return device_ != VK_NULL_HANDLE && swapchain_ != VK_NULL_HANDLE; }
@@ -117,6 +118,13 @@ private:
     VkDeviceMemory material_uniform_memory_{VK_NULL_HANDLE};
     VkBuffer environment_probe_uniform_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory environment_probe_uniform_memory_{VK_NULL_HANDLE};
+    std::array<arut::rendering::EnvironmentProbeInfluence,
+               arut::rendering::kMaxEnvironmentProbes> environment_probe_influences_{
+        arut::rendering::EnvironmentProbeInfluence{
+            arut::rendering::EnvironmentProbeAabb{-4.0F, -4.0F, -4.0F, 4.0F, 4.0F, 4.0F},
+            4.0F, 0}
+    };
+    std::uint32_t environment_probe_count_{1U};
     VkBuffer cube_vertex_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory cube_vertex_memory_{VK_NULL_HANDLE};
     VkBuffer cube_index_buffer_{VK_NULL_HANDLE};
