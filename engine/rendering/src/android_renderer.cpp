@@ -886,15 +886,9 @@ bool AndroidRenderer::create_pbr_pipeline() noexcept {
     if (result != VK_SUCCESS) { vkDestroyShaderModule(device_, fragment_module, nullptr); vkDestroyShaderModule(device_, vertex_module, nullptr); log_error("Create material descriptor layout failed", result); return false; }
 
     const std::array<VkDescriptorSetLayout, 2> layouts{frame_set_layout_, material_set_layout_};
-    VkPushConstantRange push{};
-    push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    push.offset = 0;
-    push.size = 64;
     VkPipelineLayoutCreateInfo pipeline_layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     pipeline_layout.setLayoutCount = static_cast<std::uint32_t>(layouts.size());
     pipeline_layout.pSetLayouts = layouts.data();
-    pipeline_layout.pushConstantRangeCount = 1;
-    pipeline_layout.pPushConstantRanges = &push;
     result = vkCreatePipelineLayout(device_, &pipeline_layout, nullptr, &pbr_pipeline_layout_);
     if (result != VK_SUCCESS) { vkDestroyShaderModule(device_, fragment_module, nullptr); vkDestroyShaderModule(device_, vertex_module, nullptr); log_error("Create PBR pipeline layout failed", result); return false; }
 
@@ -902,16 +896,25 @@ bool AndroidRenderer::create_pbr_pipeline() noexcept {
         {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vertex_module, "main", nullptr},
         {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_module, "main", nullptr}
     }};
-    const VkVertexInputBindingDescription binding{0, sizeof(arut::rendering::MeshVertex), VK_VERTEX_INPUT_RATE_VERTEX};
-    const std::array<VkVertexInputAttributeDescription, 4> attributes{{
+    const std::array<VkVertexInputBindingDescription, 2> bindings{{
+        {0, sizeof(arut::rendering::MeshVertex), VK_VERTEX_INPUT_RATE_VERTEX},
+        {1, sizeof(arut::rendering::Mat4), VK_VERTEX_INPUT_RATE_INSTANCE}
+    }};
+    const std::array<VkVertexInputAttributeDescription, 8> attributes{{
         {0, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, position))},
         {1, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, normal))},
         {2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, tangent))},
-        {3, 0, VK_FORMAT_R32G32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, uv))}
+        {3, 0, VK_FORMAT_R32G32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, uv))},
+        {4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0},
+        {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16},
+        {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32},
+        {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48}
     }};
     VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-    vertex_input.vertexBindingDescriptionCount = 1; vertex_input.pVertexBindingDescriptions = &binding;
-    vertex_input.vertexAttributeDescriptionCount = static_cast<std::uint32_t>(attributes.size()); vertex_input.pVertexAttributeDescriptions = attributes.data();
+    vertex_input.vertexBindingDescriptionCount = static_cast<std::uint32_t>(bindings.size());
+    vertex_input.pVertexBindingDescriptions = bindings.data();
+    vertex_input.vertexAttributeDescriptionCount = static_cast<std::uint32_t>(attributes.size());
+    vertex_input.pVertexAttributeDescriptions = attributes.data();
     VkPipelineInputAssemblyStateCreateInfo assembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
     assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     VkPipelineViewportStateCreateInfo viewport{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO}; viewport.viewportCount = 1; viewport.scissorCount = 1;
@@ -1095,9 +1098,6 @@ bool AndroidRenderer::draw_frame() noexcept {
     vkCmdBindDescriptorSets(command_buffers_[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pbr_pipeline_layout_, 0, static_cast<std::uint32_t>(pbr_sets.size()),
                             pbr_sets.data(), 0, nullptr);
-    const auto model = arut::rendering::Mat4::identity();
-    vkCmdPushConstants(command_buffers_[image_index], pbr_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT,
-                       0, sizeof(model), model.value.data());
     VkViewport viewport{};
     viewport.x = 0.0F;
     viewport.y = 0.0F;
@@ -1109,9 +1109,13 @@ bool AndroidRenderer::draw_frame() noexcept {
     vkCmdSetViewport(command_buffers_[image_index], 0, 1, &viewport);
     vkCmdSetScissor(command_buffers_[image_index], 0, 1, &scissor);
     constexpr VkDeviceSize vertex_offset = 0;
-    vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 1, &cube_vertex_buffer_, &vertex_offset);
+    const std::array<VkBuffer, 2> vertex_buffers{cube_vertex_buffer_, instance_buffer_};
+    const std::array<VkDeviceSize, 2> vertex_offsets{0, 0};
+    vkCmdBindVertexBuffers(command_buffers_[image_index], 0,
+                           static_cast<std::uint32_t>(vertex_buffers.size()),
+                           vertex_buffers.data(), vertex_offsets.data());
     vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_, 0, VK_INDEX_TYPE_UINT32);
-    vkCmdDrawIndexed(command_buffers_[image_index], cube_index_count_, 1, 0, 0, 0);
+    vkCmdDrawIndexed(command_buffers_[image_index], cube_index_count_, instance_count_, 0, 0, 0);
     vkCmdEndRenderPass(command_buffers_[image_index]);
     result = vkEndCommandBuffer(command_buffers_[image_index]);
     if (result != VK_SUCCESS) {
@@ -1176,6 +1180,8 @@ void AndroidRenderer::destroy_swapchain() noexcept {
         if (cube_vertex_memory_) vkFreeMemory(device_, cube_vertex_memory_, nullptr);
         if (cube_index_buffer_) vkDestroyBuffer(device_, cube_index_buffer_, nullptr);
         if (cube_index_memory_) vkFreeMemory(device_, cube_index_memory_, nullptr);
+        if (instance_buffer_) vkDestroyBuffer(device_, instance_buffer_, nullptr);
+        if (instance_memory_) vkFreeMemory(device_, instance_memory_, nullptr);
         if (base_color_sampler_) vkDestroySampler(device_, base_color_sampler_, nullptr);
         if (base_color_view_) vkDestroyImageView(device_, base_color_view_, nullptr);
         if (base_color_image_) vkDestroyImage(device_, base_color_image_, nullptr);
@@ -1215,7 +1221,10 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     frame_uniform_memory_ = material_uniform_memory_ = VK_NULL_HANDLE;
     cube_vertex_buffer_ = cube_index_buffer_ = VK_NULL_HANDLE;
     cube_vertex_memory_ = cube_index_memory_ = VK_NULL_HANDLE;
+    instance_buffer_ = VK_NULL_HANDLE;
+    instance_memory_ = VK_NULL_HANDLE;
     cube_index_count_ = 0;
+    instance_count_ = 0;
     base_color_sampler_ = VK_NULL_HANDLE;
     base_color_view_ = VK_NULL_HANDLE;
     base_color_image_ = VK_NULL_HANDLE;
