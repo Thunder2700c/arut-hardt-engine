@@ -2259,7 +2259,7 @@ bool AndroidRenderer::draw_frame() noexcept {
     }
     if (timestamp_queries_available_) {
         vkCmdWriteTimestamp(command_buffers_[image_index], VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                             timestamp_query_pool_, 3);
+                             timestamp_query_pool_, 2);
     }
     std::array<VkClearValue, 2> clears{};
     clears[0].color = {{0.025F, 0.045F, 0.075F, 1.0F}};
@@ -2298,7 +2298,7 @@ bool AndroidRenderer::draw_frame() noexcept {
     vkCmdEndRenderPass(command_buffers_[image_index]);
     if (timestamp_queries_available_) {
         vkCmdWriteTimestamp(command_buffers_[image_index], VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                             timestamp_query_pool_, 2);
+                             timestamp_query_pool_, 3);
     }
     result = vkEndCommandBuffer(command_buffers_[image_index]);
     if (result != VK_SUCCESS) {
