@@ -28,7 +28,7 @@ public:
 
     bool initialize(ANativeWindow* window, AAssetManager* assets,
                     std::span<const arut::core::CubeRenderInstance> ecs_instances,
-                    const arut::core::TerrainMesh& terrain_mesh) noexcept;
+                    std::span<const arut::core::TerrainMesh> terrain_meshes) noexcept;
     void shutdown() noexcept;
     bool set_quality_tier(arut::rendering::RenderQualityTier tier) noexcept;
     bool set_environment_probes(std::span<const arut::rendering::EnvironmentProbeInfluence> probes) noexcept;
@@ -45,6 +45,15 @@ private:
         std::uint32_t height{0};
         const void* pixels{nullptr};
         std::size_t byte_size{0};
+    };
+    struct TerrainGpuMesh final {
+        VkBuffer vertex_buffer{VK_NULL_HANDLE};
+        VkDeviceMemory vertex_memory{VK_NULL_HANDLE};
+        VkBuffer index_buffer{VK_NULL_HANDLE};
+        VkDeviceMemory index_memory{VK_NULL_HANDLE};
+        VkBuffer instance_buffer{VK_NULL_HANDLE};
+        VkDeviceMemory instance_memory{VK_NULL_HANDLE};
+        std::uint32_t index_count{0};
     };
 
     bool create_instance() noexcept;
@@ -139,14 +148,9 @@ private:
             0.65F, 1}
     }};
     std::uint32_t environment_probe_count_{2U};
-    VkBuffer terrain_vertex_buffer_{VK_NULL_HANDLE};
-    VkDeviceMemory terrain_vertex_memory_{VK_NULL_HANDLE};
-    VkBuffer terrain_index_buffer_{VK_NULL_HANDLE};
-    VkDeviceMemory terrain_index_memory_{VK_NULL_HANDLE};
-    VkBuffer terrain_instance_buffer_{VK_NULL_HANDLE};
-    VkDeviceMemory terrain_instance_memory_{VK_NULL_HANDLE};
-    std::uint32_t terrain_index_count_{0};
-    arut::core::TerrainMesh terrain_mesh_{};
+    std::vector<arut::core::TerrainMesh> terrain_meshes_{};
+    std::vector<TerrainGpuMesh> terrain_gpu_meshes_{};
+    std::uint32_t terrain_triangle_count_{0};
     VkBuffer cube_vertex_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory cube_vertex_memory_{VK_NULL_HANDLE};
     VkBuffer cube_index_buffer_{VK_NULL_HANDLE};
