@@ -43,6 +43,7 @@ struct RuntimeState final {
  arut::core::WorldPartition world_partition{128.0F};
  arut::core::WorldCellStreamer world_streamer{};
  bool ecs_scene_ready{false};
+ bool terrain_cells_dirty{false};
  arut::rendering::vulkan::AndroidRenderer renderer{};
  std::uint64_t lifecycle_events{0};
  std::uint64_t input_events{0};
@@ -348,6 +349,33 @@ void run(android_app* app) {
     frame_ms_total += elapsed;
     frame_ms_max = std::max(frame_ms_max, elapsed);
     ++frame_count;
+    const auto camera = state.renderer.camera_position();
+    const auto streaming = state.world_streamer.update(
+     state.world_partition, camera[0], camera[2], 2U,
+     [&state](arut::core::WorldCell cell, arut::core::WorldCellContent& content) {
+      content.cell = cell;
+      content.terrain = arut::core::TerrainSystem::build(state.world_partition.cell_size(), 16U);
+      const float offset_x = static_cast<float>(cell.x) * state.world_partition.cell_size();
+      const float offset_z = static_cast<float>(cell.z) * state.world_partition.cell_size();
+      for (auto& vertex : content.terrain.vertices) {
+       vertex.x += offset_x;
+       vertex.z += offset_z;
+      }
+      return content.terrain.valid();
+     });
+    if (streaming.loaded > 0U || streaming.unloaded > 0U)
+     state.terrain_cells_dirty = true;
+    if (state.terrain_cells_dirty) {
+     auto updated_cells = state.world_streamer.collect_terrain_meshes(state.world_partition);
+     if (state.renderer.set_terrain_cells(updated_cells)) {
+      state.terrain_cells = std::move(updated_cells);
+      state.terrain_cells_dirty = false;
+      log_info("WORLD_STREAMING camera_cell_updated=true loaded=%zu unloaded=%zu resident=%zu gpu_cells=%zu",
+       streaming.loaded, streaming.unloaded, streaming.resident, state.terrain_cells.size());
+     } else {
+      log_warn("WORLD_STREAMING GPU cell mesh refresh failed; retrying on next frame.");
+     }
+    }
    }
   }
   const auto metrics_now = std::chrono::steady_clock::now();
