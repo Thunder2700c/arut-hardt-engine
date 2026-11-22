@@ -83,7 +83,10 @@ private:
     VkDeviceMemory cube_vertex_memory_{VK_NULL_HANDLE};
     VkBuffer cube_index_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory cube_index_memory_{VK_NULL_HANDLE};
+    VkBuffer instance_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory instance_memory_{VK_NULL_HANDLE};
     std::uint32_t cube_index_count_{0};
+    std::uint32_t instance_count_{0};
     VkImage fallback_image_{VK_NULL_HANDLE};
     VkDeviceMemory fallback_memory_{VK_NULL_HANDLE};
     VkImageView fallback_view_{VK_NULL_HANDLE};
