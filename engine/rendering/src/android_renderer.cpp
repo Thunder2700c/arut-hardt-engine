@@ -2140,7 +2140,7 @@ bool AndroidRenderer::create_commands_and_sync() noexcept {
     if (timestamp_queries_available_) {
         VkQueryPoolCreateInfo queries{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
         queries.queryType = VK_QUERY_TYPE_TIMESTAMP;
-        queries.queryCount = 3;
+        queries.queryCount = 4;
         const VkResult query_result = vkCreateQueryPool(device_, &queries, nullptr, &timestamp_query_pool_);
         if (query_result != VK_SUCCESS) {
             timestamp_queries_available_ = false;
@@ -2176,15 +2176,17 @@ bool AndroidRenderer::draw_frame() noexcept {
         last_triangles_ = (cube_index_count_ / 3U) * instance_count_;
     }
     if (timestamp_queries_available_ && timestamp_data_pending_) {
-        std::array<std::uint64_t, 3> timestamps{};
+        std::array<std::uint64_t, 4> timestamps{};
         const VkResult query_result = vkGetQueryPoolResults(
-            device_, timestamp_query_pool_, 0, 3, sizeof(timestamps), timestamps.data(),
+            device_, timestamp_query_pool_, 0, 4, sizeof(timestamps), timestamps.data(),
             sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT);
         if (query_result == VK_SUCCESS) {
             const std::uint64_t mask = timestamp_valid_bits_ >= 64U
                 ? UINT64_MAX : ((std::uint64_t{1} << timestamp_valid_bits_) - 1U);
-            const std::uint64_t shadow_ticks = (timestamps[1] - timestamps[0]) & mask;
-            const std::uint64_t frame_ticks = (timestamps[2] - timestamps[0]) & mask;
+            const std::uint64_t visibility_ticks = (timestamps[1] - timestamps[0]) & mask;
+            const std::uint64_t shadow_ticks = (timestamps[2] - timestamps[1]) & mask;
+            const std::uint64_t frame_ticks = (timestamps[3] - timestamps[0]) & mask;
+            last_visibility_pass_ms_ = static_cast<double>(visibility_ticks) * timestamp_period_ns_ / 1000000.0;
             last_shadow_pass_ms_ = static_cast<double>(shadow_ticks) * timestamp_period_ns_ / 1000000.0;
             last_gpu_frame_ms_ = static_cast<double>(frame_ticks) * timestamp_period_ns_ / 1000000.0;
         }
@@ -2209,11 +2211,17 @@ bool AndroidRenderer::draw_frame() noexcept {
         return false;
     }
     if (timestamp_queries_available_) {
-        vkCmdResetQueryPool(command_buffers_[image_index], timestamp_query_pool_, 0, 3);
+        vkCmdResetQueryPool(command_buffers_[image_index], timestamp_query_pool_, 0, 4);
         vkCmdWriteTimestamp(command_buffers_[image_index], VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                              timestamp_query_pool_, 0);
     }
     if (!record_gpu_visibility(command_buffers_[image_index])) return false;
+    if (timestamp_queries_available_) {
+        const VkPipelineStageFlagBits visibility_timestamp_stage = gpu_visibility_enabled_
+            ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        vkCmdWriteTimestamp(command_buffers_[image_index], visibility_timestamp_stage,
+                             timestamp_query_pool_, 1);
+    }
     if (shadow_enabled_) {
         VkClearValue shadow_clear{};
         shadow_clear.depthStencil = {1.0F, 0};
@@ -2251,7 +2259,7 @@ bool AndroidRenderer::draw_frame() noexcept {
     }
     if (timestamp_queries_available_) {
         vkCmdWriteTimestamp(command_buffers_[image_index], VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                             timestamp_query_pool_, 1);
+                             timestamp_query_pool_, 3);
     }
     std::array<VkClearValue, 2> clears{};
     clears[0].color = {{0.025F, 0.045F, 0.075F, 1.0F}};
