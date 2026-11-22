@@ -17,33 +17,15 @@ layout(set = 0, binding = 0, std140) uniform FrameData {
     vec4 directionalLightRadiance;
     mat4 lightViewProjection[4];
     vec4 cascadeSplits;
-    vec4 environmentProbeBoundsMinBlend[4];
-    vec4 environmentProbeBoundsMax[4];
-    ivec4 environmentProbePriorities;
-    uvec4 environmentProbeMetadata;
 } frameData;
 
 layout(set = 0, binding = 1) uniform sampler2DArrayShadow directionalShadowMap;
 layout(set = 0, binding = 2) uniform samplerCube environmentMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfIntegrationLut;
 layout(set = 0, binding = 4) uniform samplerCube diffuseIrradianceMap;
-layout(set = 0, binding = 5) uniform samplerCube environmentProbe0;
-layout(set = 0, binding = 6) uniform samplerCube environmentProbe1;
-layout(set = 0, binding = 7) uniform samplerCube environmentProbe2;
-layout(set = 0, binding = 8) uniform samplerCube environmentProbe3;
-layout(set = 0, binding = 9) uniform samplerCube diffuseProbe0;
-layout(set = 0, binding = 10) uniform samplerCube diffuseProbe1;
-layout(set = 0, binding = 11) uniform samplerCube diffuseProbe2;
-layout(set = 0, binding = 12) uniform samplerCube diffuseProbe3;
-layout(set = 0, binding = 5) uniform samplerCube environmentProbeSpecular0;
-layout(set = 0, binding = 6) uniform samplerCube environmentProbeSpecular1;
-layout(set = 0, binding = 7) uniform samplerCube environmentProbeSpecular2;
-layout(set = 0, binding = 8) uniform samplerCube environmentProbeSpecular3;
-layout(set = 0, binding = 9) uniform samplerCube environmentProbeDiffuse0;
-layout(set = 0, binding = 10) uniform samplerCube environmentProbeDiffuse1;
-layout(set = 0, binding = 11) uniform samplerCube environmentProbeDiffuse2;
-layout(set = 0, binding = 12) uniform samplerCube environmentProbeDiffuse3;
-layout(set = 0, binding = 13, std140) uniform EnvironmentProbeData {
+layout(set = 0, binding = 5) uniform samplerCube environmentProbeSpecular[4];
+layout(set = 0, binding = 6) uniform samplerCube environmentProbeDiffuse[4];
+layout(set = 0, binding = 7, std140) uniform EnvironmentProbeData {
     vec4 probeMinBlend[4];
     vec4 probeMax[4];
     ivec4 probePriorities;
@@ -164,40 +146,6 @@ vec4 selectEnvironmentProbeWeights(vec3 worldPosition) {
     return total > 0.0 ? weights / total : vec4(0.0);
 }
 
-float environmentProbeInfluence(int index, vec3 worldPosition) {
-    vec3 minimum = frameData.environmentProbeBoundsMinBlend[index].xyz;
-    vec3 maximum = frameData.environmentProbeBoundsMax[index].xyz;
-    vec3 outsideDistance = max(max(minimum - worldPosition, vec3(0.0)),
-                               worldPosition - maximum);
-    float distanceToBounds = length(outsideDistance);
-    if (distanceToBounds <= 0.0) return 1.0;
-    float blendDistance = frameData.environmentProbeBoundsMinBlend[index].w;
-    if (blendDistance <= 0.0 || distanceToBounds >= blendDistance) return 0.0;
-    float t = 1.0 - distanceToBounds / blendDistance;
-    return t * t * (3.0 - 2.0 * t);
-}
-
-vec4 evaluateEnvironmentProbeWeights(vec3 worldPosition) {
-    vec4 weights = vec4(0.0);
-    int activeCount = int(min(frameData.environmentProbeMetadata.x, 4u));
-    int highestPriority = -2147483647;
-    for (int i = 0; i < activeCount; ++i) {
-        float influence = environmentProbeInfluence(i, worldPosition);
-        if (influence > 0.0)
-            highestPriority = max(highestPriority, frameData.environmentProbePriorities[i]);
-    }
-    if (highestPriority == -2147483647) return weights;
-
-    float total = 0.0;
-    for (int i = 0; i < activeCount; ++i) {
-        if (frameData.environmentProbePriorities[i] != highestPriority) continue;
-        weights[i] = environmentProbeInfluence(i, worldPosition);
-        total += weights[i];
-    }
-    if (total > 0.0) weights /= total;
-    return weights;
-}
-
 vec3 acesToneMap(vec3 color) {
     color = max(color, vec3(0.0));
     return clamp((color * (2.51 * color + 0.03)) /
@@ -253,15 +201,15 @@ void main() {
     if (dot(probeWeights, vec4(1.0)) > 0.0) {
         // Fixed sampler indices avoid requiring descriptor-indexing extensions on mobile Vulkan.
         diffuseIrradiance =
-            texture(environmentProbeDiffuse0, n).rgb * probeWeights.x +
-            texture(environmentProbeDiffuse1, n).rgb * probeWeights.y +
-            texture(environmentProbeDiffuse2, n).rgb * probeWeights.z +
-            texture(environmentProbeDiffuse3, n).rgb * probeWeights.w;
+            texture(environmentProbeDiffuse[0], n).rgb * probeWeights.x +
+            texture(environmentProbeDiffuse[1], n).rgb * probeWeights.y +
+            texture(environmentProbeDiffuse[2], n).rgb * probeWeights.z +
+            texture(environmentProbeDiffuse[3], n).rgb * probeWeights.w;
         prefilteredEnvironment =
-            textureLod(environmentProbeSpecular0, reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.x +
-            textureLod(environmentProbeSpecular1, reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.y +
-            textureLod(environmentProbeSpecular2, reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.z +
-            textureLod(environmentProbeSpecular3, reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.w;
+            textureLod(environmentProbeSpecular[0], reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.x +
+            textureLod(environmentProbeSpecular[1], reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.y +
+            textureLod(environmentProbeSpecular[2], reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.z +
+            textureLod(environmentProbeSpecular[3], reflectionDirection, roughness * environmentMaxLod).rgb * probeWeights.w;
     } else {
         diffuseIrradiance = texture(diffuseIrradianceMap, n).rgb;
         prefilteredEnvironment = textureLod(
