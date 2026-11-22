@@ -2102,20 +2102,15 @@ bool AndroidRenderer::create_pbr_pipeline() noexcept {
     result = vkCreateShaderModule(device_, &module_info, nullptr, &fragment_module);
     if (result != VK_SUCCESS) { vkDestroyShaderModule(device_, vertex_module, nullptr); log_error("Create PBR fragment shader module failed", result); return false; }
 
-    const std::array<VkDescriptorSetLayoutBinding, 13> frame_bindings{{
+    const std::array<VkDescriptorSetLayoutBinding, 8> frame_bindings{{
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
-        {5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
-        {6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
-        {7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
-        {8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
-        {9, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
-        {10, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
-        {11, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
-        {12, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}
+        {5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+        {6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+        {7, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}
     }};
     VkDescriptorSetLayoutCreateInfo set_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     set_info.bindingCount = static_cast<std::uint32_t>(frame_bindings.size());
@@ -2204,7 +2199,6 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
         float light_radiance[4];
         float light_view_projection[4][16];
         float cascade_splits[4];
-        arut::rendering::EnvironmentProbeGpuData environment_probes;
     };
     struct alignas(16) MaterialData final {
         float base_color[4];
@@ -2212,7 +2206,7 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
         float roughness_normal_occlusion_alpha[4];
         std::uint32_t flags[4];
     };
-    static_assert(sizeof(FrameData) == 560);
+    static_assert(sizeof(FrameData) == 400);
     static_assert(sizeof(MaterialData) == 64);
     if (!load_texture_asset("textures/demo_base_color.png", VK_FORMAT_R8G8B8A8_SRGB, true,
                             base_color_image_, base_color_memory_, base_color_view_,
@@ -2224,7 +2218,9 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
                             metallic_roughness_image_, metallic_roughness_memory_, metallic_roughness_view_,
                             metallic_roughness_sampler_, metallic_roughness_mip_levels_)) return false;
     if (!create_buffer(sizeof(FrameData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, frame_uniform_buffer_, frame_uniform_memory_) ||
-        !create_buffer(sizeof(MaterialData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, material_uniform_buffer_, material_uniform_memory_)) return false;
+        !create_buffer(sizeof(MaterialData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, material_uniform_buffer_, material_uniform_memory_) ||
+        !create_buffer(sizeof(arut::rendering::EnvironmentProbeGpuData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                       environment_probe_uniform_buffer_, environment_probe_uniform_memory_)) return false;
 
     FrameData frame{};
     // The sample scene starts with one local probe. The remaining three GPU
@@ -2233,8 +2229,9 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     scene_probes[0].bounds = {-4.0F, -4.0F, -4.0F, 4.0F, 4.0F, 4.0F};
     scene_probes[0].blend_distance = 4.0F;
     scene_probes[0].priority = 0;
+    arut::rendering::EnvironmentProbeGpuData environment_probe_data{};
     if (!arut::rendering::build_environment_probe_gpu_data(
-            scene_probes, frame.environment_probes)) {
+            scene_probes, environment_probe_data)) {
         log_error("Build GPU environment-probe data failed");
         return false;
     }
@@ -2323,8 +2320,18 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     if (result != VK_SUCCESS || !mapped) { log_error("Map material uniform buffer failed", result); return false; }
     std::memcpy(mapped, &material, sizeof(MaterialData)); vkUnmapMemory(device_, material_uniform_memory_);
 
+    mapped = nullptr;
+    result = vkMapMemory(device_, environment_probe_uniform_memory_, 0,
+                         sizeof(environment_probe_data), 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map environment-probe uniform buffer failed", result);
+        return false;
+    }
+    std::memcpy(mapped, &environment_probe_data, sizeof(environment_probe_data));
+    vkUnmapMemory(device_, environment_probe_uniform_memory_);
+
     const std::array<VkDescriptorPoolSize, 2> sizes{{
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3},
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 15}
     }};
     VkDescriptorPoolCreateInfo pool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
@@ -2341,6 +2348,8 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
 
     VkDescriptorBufferInfo frame_info{frame_uniform_buffer_, 0, sizeof(FrameData)};
     VkDescriptorBufferInfo material_info{material_uniform_buffer_, 0, sizeof(MaterialData)};
+    VkDescriptorBufferInfo environment_probe_info{
+        environment_probe_uniform_buffer_, 0, sizeof(arut::rendering::EnvironmentProbeGpuData)};
     const VkDescriptorImageInfo shadow_info{shadow_sampler_, shadow_view_, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
     const VkDescriptorImageInfo environment_info{environment_sampler_, environment_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     const VkDescriptorImageInfo brdf_lut_info{brdf_lut_sampler_, brdf_lut_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
@@ -2348,23 +2357,30 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     const VkDescriptorImageInfo base_color_info{base_color_sampler_, base_color_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     const VkDescriptorImageInfo normal_info{normal_sampler_, normal_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     const VkDescriptorImageInfo metallic_roughness_info{metallic_roughness_sampler_, metallic_roughness_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    std::array<VkWriteDescriptorSet, 17> writes{};
+    std::array<VkDescriptorImageInfo, arut::rendering::kMaxEnvironmentProbes> probe_specular_infos{};
+    std::array<VkDescriptorImageInfo, arut::rendering::kMaxEnvironmentProbes> probe_diffuse_infos{};
+    for (std::uint32_t probe = 0; probe < arut::rendering::kMaxEnvironmentProbes; ++probe) {
+        probe_specular_infos[probe] = environment_info;
+        probe_diffuse_infos[probe] = irradiance_info;
+    }
+    std::array<VkWriteDescriptorSet, 12> writes{};
     writes[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &frame_info, nullptr};
     writes[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &shadow_info, nullptr, nullptr};
     writes[2] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 2, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &environment_info, nullptr, nullptr};
     writes[3] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 3, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &brdf_lut_info, nullptr, nullptr};
     writes[4] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 4, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &irradiance_info, nullptr, nullptr};
-    // Fixed per-probe bindings avoid optional descriptor-indexing features on mobile Vulkan drivers.
-    for (std::uint32_t probe = 0; probe < arut::rendering::kMaxEnvironmentProbes; ++probe) {
-        writes[5U + probe] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_,
-            5U + probe, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &environment_info, nullptr, nullptr};
-        writes[9U + probe] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_,
-            9U + probe, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &irradiance_info, nullptr, nullptr};
-    }
-    writes[13] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &material_info, nullptr};
-    writes[14] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &base_color_info, nullptr, nullptr};
-    writes[15] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 2, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normal_info, nullptr, nullptr};
-    writes[16] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 3, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &metallic_roughness_info, nullptr, nullptr};
+    writes[5] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 5, 0,
+        static_cast<std::uint32_t>(probe_specular_infos.size()), VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        probe_specular_infos.data(), nullptr, nullptr};
+    writes[6] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 6, 0,
+        static_cast<std::uint32_t>(probe_diffuse_infos.size()), VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        probe_diffuse_infos.data(), nullptr, nullptr};
+    writes[7] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 7, 0, 1,
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &environment_probe_info, nullptr};
+    writes[8] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &material_info, nullptr};
+    writes[9] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &base_color_info, nullptr, nullptr};
+    writes[10] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 2, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normal_info, nullptr, nullptr};
+    writes[11] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 3, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &metallic_roughness_info, nullptr, nullptr};
     vkUpdateDescriptorSets(device_, static_cast<std::uint32_t>(writes.size()), writes.data(), 0, nullptr);
     arut_android_log(ANDROID_LOG_INFO, "PBR frame/material descriptors and fallback texture bound.");
     return true;
@@ -2639,6 +2655,8 @@ void AndroidRenderer::destroy_swapchain() noexcept {
         if (frame_uniform_memory_) vkFreeMemory(device_, frame_uniform_memory_, nullptr);
         if (material_uniform_buffer_) vkDestroyBuffer(device_, material_uniform_buffer_, nullptr);
         if (material_uniform_memory_) vkFreeMemory(device_, material_uniform_memory_, nullptr);
+        if (environment_probe_uniform_buffer_) vkDestroyBuffer(device_, environment_probe_uniform_buffer_, nullptr);
+        if (environment_probe_uniform_memory_) vkFreeMemory(device_, environment_probe_uniform_memory_, nullptr);
         if (cube_vertex_buffer_) vkDestroyBuffer(device_, cube_vertex_buffer_, nullptr);
         if (cube_vertex_memory_) vkFreeMemory(device_, cube_vertex_memory_, nullptr);
         if (cube_index_buffer_) vkDestroyBuffer(device_, cube_index_buffer_, nullptr);
@@ -2715,6 +2733,8 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     frame_descriptor_set_ = material_descriptor_set_ = VK_NULL_HANDLE;
     frame_uniform_buffer_ = material_uniform_buffer_ = VK_NULL_HANDLE;
     frame_uniform_memory_ = material_uniform_memory_ = VK_NULL_HANDLE;
+    environment_probe_uniform_buffer_ = VK_NULL_HANDLE;
+    environment_probe_uniform_memory_ = VK_NULL_HANDLE;
     cube_vertex_buffer_ = cube_index_buffer_ = VK_NULL_HANDLE;
     cube_vertex_memory_ = cube_index_memory_ = VK_NULL_HANDLE;
     instance_buffer_ = VK_NULL_HANDLE;
