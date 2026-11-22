@@ -1646,6 +1646,7 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     struct alignas(16) FrameData final {
         float view_projection[16];
         float camera_position[4];
+        float camera_forward[4];
         float light_direction[4];
         float light_radiance[4];
         float light_view_projection[4][16];
@@ -1657,7 +1658,7 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
         float roughness_normal_occlusion_alpha[4];
         std::uint32_t flags[4];
     };
-    static_assert(sizeof(FrameData) == 384);
+    static_assert(sizeof(FrameData) == 400);
     static_assert(sizeof(MaterialData) == 64);
     if (!load_texture_asset("textures/demo_base_color.png", VK_FORMAT_R8G8B8A8_SRGB, true,
                             base_color_image_, base_color_memory_, base_color_view_,
@@ -1693,6 +1694,10 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
 
     const std::array<float, 3> forward = arut::rendering::normalize3(
         {-camera[0], -camera[1], -camera[2]});
+    frame.camera_forward[0] = forward[0];
+    frame.camera_forward[1] = forward[1];
+    frame.camera_forward[2] = forward[2];
+    frame.camera_forward[3] = 0.0F;
     const std::array<float, 3> direction_to_light =
         arut::rendering::normalize3({-0.45F, 1.0F, -0.35F});
     const std::array<float, 4> cascade_ends{8.0F, 20.0F, 45.0F, 80.0F};
