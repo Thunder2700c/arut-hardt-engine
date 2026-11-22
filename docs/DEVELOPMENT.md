@@ -1,56 +1,17 @@
 # Development Guide
 
-## Host requirements
+Host prerequisites: CMake 3.25+, Ninja, C++20 compiler, stable Rust/Cargo and rustfmt.
 
-- CMake 3.25 or newer.
-- Ninja.
-- C++20 compiler (Clang, GCC, or MSVC).
-- Stable Rust toolchain with Cargo and rustfmt.
+Host build: cmake --preset dev; cmake --build --preset dev; ctest --preset dev; cargo test --workspace --locked; cargo fmt --all -- --check.
 
-## Android requirements (Phase 1 onward)
+Android prerequisites: SDK, NDK 27.2.12479018, CMake 3.22.1, Java 17, Gradle 8.9, Rust stable and target aarch64-linux-android.
 
-- Android SDK and NDK installed through Android Studio or command-line tools.
-- ANDROID_NDK_HOME pointing to the NDK.
-- Android platform 26 or newer for the initial ARM64 target.
-- Physical-device validation for graphics, thermal, and lifecycle behaviour.
+Android build:
+1. Install Rust target aarch64-linux-android.
+2. Set ANDROID_NDK_HOME and add its LLVM toolchain bin directory to PATH.
+3. Build Rust staticlib: cargo build --workspace --locked --release --target aarch64-linux-android.
+4. Build APK: gradle --no-daemon :app:assembleDebug.
 
-## Build C++
+APK: app/build/outputs/apk/debug/app-debug.apk. Device smoke tests are documented in docs/ANDROID_RUNTIME.md.
 
-\`\`\`sh
-cmake --preset dev
-cmake --build --preset dev
-ctest --preset dev
-\`\`\`
-
-This produces a headless executable and small static core library, not an Android APK.
-
-## Build and test Rust
-
-\`\`\`sh
-cargo test --workspace
-cargo fmt --all -- --check
-\`\`\`
-
-## Configure the Android native core
-
-After installing the NDK and setting ANDROID_NDK_HOME:
-
-\`\`\`sh
-cmake --preset android-arm64
-cmake --build --preset android-arm64
-\`\`\`
-
-The preset currently configures the portable native core for Android ARM64. It does not package an Android application until the runtime/app target is implemented.
-
-## Working rules
-
-1. Read the architecture and roadmap before changing a subsystem.
-2. Keep a clean checkout buildable.
-3. Prefer small, reviewable changes with tests.
-4. Do not add dependencies without license, Android, build-cost, and maintenance review.
-5. Keep C++/Rust calls behind a narrow C ABI.
-6. Do not add game-specific content to the engine repository.
-7. Report exactly what was written, built, tested, and device-verified.
-8. Never commit build output, APKs, AABs, caches, or credentials.
-
-A low-memory Chromebook is not the primary build machine for a large native engine. Keep local builds small and use CI for reproducible host builds; use the NDK/CI for Android and a physical device for runtime validation.
+Keep clean checkouts buildable. Review licenses and Android support before adding dependencies. Keep C++/Rust calls behind the C ABI. Do not commit build output, APKs, caches or credentials. A low-memory Chromebook is not the primary build machine; use CI for reproducible builds and a physical phone for runtime validation.
