@@ -3,6 +3,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
+#include <vector>
+#include "arut/rendering/visibility.hpp"
 
 namespace arut::rendering {
 
@@ -19,6 +22,29 @@ struct alignas(16) GpuVisibilityPushConstants final {
     std::uint32_t instance_count{0};
     std::array<std::uint32_t, 3> padding{};
 };
+
+[[nodiscard]] inline bool compact_visible_instances_cpu(
+    const ViewFrustum& frustum,
+    std::span<const GpuVisibilityInstance> source_instances,
+    std::vector<Mat4>& output_models) noexcept {
+    output_models.clear();
+    try {
+        output_models.reserve(source_instances.size());
+        for (const auto& source : source_instances) {
+            const BoundingSphere bounds{{
+                source.bounds[0], source.bounds[1], source.bounds[2]
+            }, source.bounds[3]};
+            if (!sphere_visible(frustum, bounds)) continue;
+            Mat4 model{};
+            model.value = source.model;
+            output_models.push_back(model);
+        }
+    } catch (...) {
+        output_models.clear();
+        return false;
+    }
+    return true;
+}
 
 struct IndexedIndirectArguments final {
     std::uint32_t index_count{0};
