@@ -88,6 +88,7 @@ private:
     VkDeviceMemory fallback_memory_{VK_NULL_HANDLE};
     VkImageView fallback_view_{VK_NULL_HANDLE};
     VkSampler fallback_sampler_{VK_NULL_HANDLE};
+    std::uint32_t fallback_mip_levels_{0};
     VkImage base_color_image_{VK_NULL_HANDLE};
     VkDeviceMemory base_color_memory_{VK_NULL_HANDLE};
     VkImageView base_color_view_{VK_NULL_HANDLE};
