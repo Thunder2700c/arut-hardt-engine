@@ -2,6 +2,7 @@
 #include "arut/core/version.hpp"
 #include "arut/core/cube_stress_scene.hpp"
 #include "arut/core/asset_manager.hpp"
+#include "arut/core/world_systems.hpp"
 #include "arut/platform/android/asset_source.hpp"
 #include "arut/rendering/vulkan/android_renderer.hpp"
 #include <android/input.h>
@@ -36,6 +37,9 @@ struct RuntimeState final {
  arut::core::World ecs_world{};
  arut::core::CubeSpawnSystem cube_spawn_system{};
  arut::core::CubeRenderExtractionSystem cube_render_extraction_system{};
+ arut::core::TerrainMesh terrain_mesh{};
+ arut::core::LodSystem lod_system{};
+ arut::core::WorldPartition world_partition{128.0F};
  bool ecs_scene_ready{false};
  arut::rendering::vulkan::AndroidRenderer renderer{};
  std::uint64_t lifecycle_events{0};
@@ -263,6 +267,30 @@ void run(android_app* app) {
  log_info("ASSET_MANAGER smoke_test=%s path=environments/default.hdr bytes=%zu cache_entries=%zu",
   default_environment ? "passed" : "failed",
   default_environment ? default_environment.bytes->size() : 0U, asset_stats.entries);
+ try {
+  state.terrain_mesh = arut::core::TerrainSystem::build(512.0F, 128U);
+  const auto activated_cells = state.world_partition.update_streaming(0.0F, 0.0F, 2U);
+  std::size_t lod_high = 0U, lod_medium = 0U, lod_low = 0U, lod_impostor = 0U;
+  for (std::size_t i = 0; i < state.cube_render_extraction_system.instances().size(); ++i) {
+   const auto& instance = state.cube_render_extraction_system.instances()[i];
+   const float x = instance.bounds[0], y = instance.bounds[1], z = instance.bounds[2];
+   const float distance = std::sqrt(x*x + y*y + z*z);
+   switch (state.lod_system.select(static_cast<std::uint64_t>(i), distance)) {
+    case arut::core::TerrainLod::High: ++lod_high; break;
+    case arut::core::TerrainLod::Medium: ++lod_medium; break;
+    case arut::core::TerrainLod::Low: ++lod_low; break;
+    case arut::core::TerrainLod::Impostor: ++lod_impostor; break;
+   }
+  }
+  log_info("TERRAIN generated=true resolution=%u vertices=%zu indices=%zu",
+   state.terrain_mesh.resolution, state.terrain_mesh.vertices.size(), state.terrain_mesh.indices.size());
+  log_info("WORLD_PARTITION active_cells=%zu newly_activated=%zu cell_size=%.1f",
+   state.world_partition.active_count(), activated_cells.size(), state.world_partition.cell_size());
+  log_info("LOD tracked=%zu high=%zu medium=%zu low=%zu impostor=%zu",
+   state.lod_system.tracked_count(), lod_high, lod_medium, lod_low, lod_impostor);
+ } catch (const std::exception& error) {
+  log_warn("Phase 3 world-system initialization failed: %s", error.what());
+ }
  if (g_log_file) log_info("Persistent runtime log: %s", g_log_path);
  else log_warn("Persistent runtime log unavailable; logcat remains active.");
  try {
