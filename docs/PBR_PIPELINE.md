@@ -66,3 +66,10 @@ The runtime profile snapshot includes CPU frame time, separate GPU visibility-co
 3. Add cascade stabilization, split blending and local-light shadows.
 4. Add GPU/indirect visibility, GPU-memory accounting and per-pass profiling.
 5. Compare GPU shader output against the CPU BRDF reference and validate graceful quality fallback on a second Android GPU family.
+
+
+## GPU shader versus CPU BRDF reference test
+
+The direct Cook-Torrance BRDF equations used by the Android forward fragment shader are factored into `shaders/pbr_brdf.glsl`. The deterministic compute test shader includes that same GLSL implementation and writes one linear-light RGB result to a storage buffer. `tests/vulkan_pbr_reference.cpp` dispatches the shader through Vulkan, waits for completion, reads the host-visible result back, and compares it with `pbr::evaluate_direct_brdf` from the C++ reference using the same material, normal, view, light and radiance inputs.
+
+CI runs this test on Mesa lavapipe (software Vulkan). This verifies shader arithmetic and the Vulkan dispatch/readback path on a software implementation; it is not a substitute for comparing a rendered frame on the Galaxy S23 FE or validating a second physical Android GPU family. The Android runtime validation gate remains open until those device checks are completed.
