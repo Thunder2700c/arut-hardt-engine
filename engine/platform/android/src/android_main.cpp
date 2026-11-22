@@ -127,7 +127,7 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
  }
  if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_KEY) {
   log_info("Key action=%d keycode=%d", AKeyEvent_getAction(event), AKeyEvent_getKeyCode(event));
-  return 1;
+  return 0;
  }
  return 0;
 }
@@ -144,7 +144,7 @@ void run(android_app* app) {
  log_info("Rust systems ABI version: 0x%06x", arut_tasks_abi_version());
  while (app->destroyRequested == 0) {
   android_poll_source* source = nullptr;
-  const int timeout = (state.resumed && state.has_window && state.focused) ? 0 : -1;
+  const int timeout = (state.resumed && state.has_window && state.focused) ? 100 : -1;
   const int ident = ALooper_pollOnce(timeout, nullptr, nullptr, reinterpret_cast<void**>(&source));
   if (ident >= 0 && source) source->process(app, source);
   if (ident == ALOOPER_POLL_ERROR) log_warn("Android looper returned an error.");
