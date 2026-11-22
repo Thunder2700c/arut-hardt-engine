@@ -2695,7 +2695,7 @@ bool AndroidRenderer::draw_frame() noexcept {
                         completed.instance_count, submitted_cpu_expected_visible_, visibility_source_instance_count_);
                     arut_android_log(ANDROID_LOG_WARN, parity);
                 }
-            } else if ((culling_parity_checks_ % 120U) == 0U) {
+            } else if (culling_parity_checks_ == 1U || (culling_parity_checks_ % 120U) == 0U) {
                 char parity[192]{};
                 std::snprintf(parity, sizeof(parity), "GPU_CULL_PARITY pass gpu_visible=%u cpu_visible=%u source=%u checks=%llu",
                     completed.instance_count, submitted_cpu_expected_visible_, visibility_source_instance_count_,
