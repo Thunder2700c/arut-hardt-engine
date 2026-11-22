@@ -129,15 +129,15 @@ Status is based on repository inspection, CI evidence and user-provided device l
 |---|---|
 | Phase 0 — Architecture and infrastructure | Foundation established; audit each listed specification and governance item before marking the whole phase complete. |
 | Phase 1 — Native Android runtime | Substantial implementation and S23 FE runtime evidence; lifecycle repetition, surface recreation and full smoke-test gate need explicit verification. |
-| Phase 2 — Vulkan renderer | All six implementation scope items are present. CI passed C++/Rust/Android ARM64 builds, shader compilation and four-case Vulkan GPU-to-CPU PBR readback. S23 FE (Xclipse 920) user logs verify the 5,000-instance renderer, HDR/probe path, GPU culling, camera controls and repeated CPU/GPU visibility parity. Graceful fallback is implemented; cross-GPU-family device validation remains the only external compatibility check before making a multi-vendor support claim. |
+| Phase 2 — Vulkan renderer | **Complete for the canonical Android deliverable on S23 FE/Xclipse 920.** All six scope items are implemented; CI passed C++/Rust/Android ARM64 builds, shader compilation and four-case Vulkan GPU-to-CPU PBR readback. User logs verify the 5,000-instance renderer, HDR/probe path, GPU culling, camera controls and repeated CPU/GPU visibility parity. Graceful CPU fallback is implemented. Second-GPU-family validation remains a non-blocking compatibility check before making a multi-vendor support claim. |
 | Phase 3 — Core world system | Not started as a complete phase. The required ECS, scene graph, asset manager, terrain, LOD and world partitioning deliverable has not been demonstrated. |
 | Phases 4–10 | Not started; remain locked behind their preceding phase exit gates. |
 
 ### Current execution order
 
 1. Keep the canonical Phase 0–10 scope unchanged.
-2. Keep the second-GPU-family compatibility test recorded as an outstanding external validation item; do not misrepresent it as tested.
-3. Start Phase 3 — Core world system after confirming the S23 FE Phase 2 deliverable and preserving the cross-GPU limitation in release notes.
+2. Record second-GPU-family validation as an outstanding compatibility check; do not misrepresent it as tested.
+3. Start Phase 3 — Core world system; preserve the cross-GPU limitation in release notes until another device is tested.
 4. Do not start Phase 4 — Character and animation until Phase 3's navigable streamed environment is implemented and validated.
 
 ### Validation evidence discipline
