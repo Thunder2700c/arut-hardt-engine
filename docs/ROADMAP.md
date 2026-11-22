@@ -78,7 +78,8 @@ Exit gate: Android renders a textured 3D scene with validation and frame/GPU tim
 - [ ] Add scene/runtime probe registration and per-object probe selection; validate distinct probe assets and blended output on device.
 - [x] Connect profile snapshots to CPU frame time, separate GPU visibility/shadow/full-frame timestamp intervals, draw calls, visible objects and triangle counts.
 - [x] Track persistent renderer-owned Vulkan buffer/image allocation sizes in runtime profiling logs.
-- [ ] Add native driver-budget queries and multi-pass/per-material breakdowns.
+- [x] Add optional VK_EXT_memory_budget device-local heap usage/budget queries and separate visibility, shadow and main-scene GPU timestamp intervals.
+- [ ] Add per-material GPU timing and broader renderer pass instrumentation.
 - [ ] Validate graceful quality fallback on two Android GPU families.
 Exit gate: PBR test scene works across two Android GPU families with graceful fallback and measured CPU/GPU costs.
 
