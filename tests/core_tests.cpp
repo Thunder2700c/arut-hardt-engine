@@ -6,6 +6,7 @@
 #include "arut/rendering/brdf_lut.hpp"
 #include "arut/rendering/visibility.hpp"
 #include "arut/rendering/shadow.hpp"
+#include "arut/rendering/gpu_visibility.hpp"
 #include "arut/rendering/render_quality.hpp"
 
 #include <algorithm>
@@ -198,6 +199,15 @@ int main() {
     arut::rendering::Rgba8Image invalid_image{};
     assert(!arut::rendering::decode_image_rgba8({}, invalid_image));
     assert(invalid_image.pixels.empty());
+    static_assert(sizeof(arut::rendering::GpuVisibilityInstance) == 80U);
+    static_assert(sizeof(arut::rendering::GpuVisibilityPushConstants) == 112U);
+    static_assert(sizeof(arut::rendering::IndexedIndirectArguments) == 20U);
+    assert(arut::rendering::visibility_workgroup_count(0U) == 0U);
+    assert(arut::rendering::visibility_workgroup_count(1U) == 1U);
+    assert(arut::rendering::visibility_workgroup_count(64U) == 1U);
+    assert(arut::rendering::visibility_workgroup_count(65U) == 2U);
+    assert(arut::rendering::visibility_workgroup_count(192U) == 3U);
+
     const auto cull_view = arut::rendering::look_at_rh({0.0F, 0.0F, 3.0F},
                                                        {0.0F, 0.0F, 0.0F},
                                                        {0.0F, 1.0F, 0.0F});
