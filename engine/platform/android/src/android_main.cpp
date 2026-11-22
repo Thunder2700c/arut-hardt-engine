@@ -1,5 +1,6 @@
 #include "arut/platform/android/runtime.hpp"
 #include "arut/core/version.hpp"
+#include "arut/core/cube_stress_scene.hpp"
 #include "arut/rendering/vulkan/android_renderer.hpp"
 #include <android/input.h>
 #include <android/log.h>
@@ -18,6 +19,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <chrono>
+#include <exception>
+#include <span>
 #include <jni.h>
 #include <stdarg.h>
 extern "C" std::uint32_t arut_tasks_abi_version() noexcept;
@@ -27,6 +30,10 @@ struct RuntimeState final {
  bool resumed{false};
  bool focused{false};
  bool has_window{false};
+ arut::core::World ecs_world{};
+ arut::core::CubeSpawnSystem cube_spawn_system{};
+ arut::core::CubeRenderExtractionSystem cube_render_extraction_system{};
+ bool ecs_scene_ready{false};
  arut::rendering::vulkan::AndroidRenderer renderer{};
  std::uint64_t lifecycle_events{0};
  std::uint64_t input_events{0};
@@ -169,7 +176,15 @@ void handle_app_command(android_app* app, std::int32_t command) {
    state->has_window = app->window != nullptr;
    if (state->has_window) {
     log_info("Window created: %dx%d", ANativeWindow_getWidth(app->window), ANativeWindow_getHeight(app->window));
-    if (!state->renderer.initialize(app->window, app->activity->assetManager)) log_warn("Vulkan renderer unavailable; activity remains alive.");
+    if (!state->ecs_scene_ready) {
+     log_warn("Renderer startup skipped: ECS 5,000-cube scene did not pass its creation check.");
+    } else if (!state->renderer.initialize(
+      app->window, app->activity->assetManager,
+      std::span<const arut::core::CubeRenderInstance>{
+       state->cube_render_extraction_system.instances().data(),
+       state->cube_render_extraction_system.instances().size()})) {
+     log_warn("Vulkan renderer unavailable; activity remains alive.");
+    }
    }
    break;
   case APP_CMD_TERM_WINDOW:
@@ -239,6 +254,21 @@ void run(android_app* app) {
  log_info("Rust systems ABI version: 0x%06x", arut_tasks_abi_version());
  if (g_log_file) log_info("Persistent runtime log: %s", g_log_path);
  else log_warn("Persistent runtime log unavailable; logcat remains active.");
+ try {
+  state.cube_spawn_system.update(state.ecs_world);
+  state.cube_render_extraction_system.update(state.ecs_world);
+  state.ecs_scene_ready =
+   state.ecs_world.entity_count() == arut::core::CubeSpawnSystem::target_count &&
+   state.cube_spawn_system.spawned_count() == arut::core::CubeSpawnSystem::target_count &&
+   state.cube_render_extraction_system.extracted_count() == arut::core::CubeSpawnSystem::target_count;
+  log_info("ECS_STRESS_SCENE ready=%s entities=%u spawned=%zu render_instances=%zu source=CubeSpawnSystem",
+   state.ecs_scene_ready ? "true" : "false", state.ecs_world.entity_count(),
+   state.cube_spawn_system.spawned_count(),
+   state.cube_render_extraction_system.instances().size());
+ } catch (const std::exception& error) {
+  state.ecs_scene_ready = false;
+  log_warn("ECS 5,000-cube scene creation failed: %s", error.what());
+ }
  auto metrics_start = std::chrono::steady_clock::now();
  std::uint64_t frame_count = 0;
  double frame_ms_total = 0.0;
