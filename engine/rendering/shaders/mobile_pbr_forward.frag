@@ -19,6 +19,7 @@ layout(set = 0, binding = 0, std140) uniform FrameData {
 
 layout(set = 0, binding = 1) uniform sampler2DShadow directionalShadowMap;
 layout(set = 0, binding = 2) uniform samplerCube environmentMap;
+layout(set = 0, binding = 3) uniform sampler2D brdfIntegrationLut;
 
 layout(set = 1, binding = 0, std140) uniform MaterialData {
     vec4 baseColorFactor;
@@ -123,9 +124,8 @@ void main() {
     float shadowVisibility = directionalShadowVisibility(n, l);
     vec3 direct = (diffuse + specular) * frameData.directionalLightRadiance.rgb * nDotL * shadowVisibility;
 
-    // Diffuse irradiance is approximated by the broadest environment mip; specular
-    // reflections use the roughness-selected box-filtered environment mip. This is a
-    // lightweight split-sum foundation; GGX convolution and a BRDF LUT remain future work.
+    // Diffuse irradiance is approximated by the broadest environment mip. Specular IBL
+    // uses GGX-prefiltered environment mips and a split-sum BRDF integration LUT.
     float environmentMaxLod = float(max(textureQueryLevels(environmentMap) - 1, 0));
     vec3 diffuseIrradiance = textureLod(environmentMap, n, environmentMaxLod).rgb;
     vec3 reflectionDirection = reflect(-v, n);
@@ -135,9 +135,8 @@ void main() {
                             pow(1.0 - nDotV, 5.0);
     vec3 diffuseEnvironment = diffuseIrradiance * base.rgb *
                               (1.0 - fresnelRoughness) * (1.0 - metallic);
-    float approximateBrdfScale = 1.0 - 0.45 * roughness;
-    vec3 specularEnvironment = prefilteredEnvironment *
-                               (fresnelRoughness * approximateBrdfScale + vec3(0.025 * roughness));
+    vec2 brdf = texture(brdfIntegrationLut, vec2(nDotV, roughness)).rg;
+    vec3 specularEnvironment = prefilteredEnvironment * (fresnelRoughness * brdf.x + brdf.y);
     vec3 ambient = (diffuseEnvironment + specularEnvironment) * 0.35;
     vec3 displayLinear = acesToneMap(direct + ambient + materialData.emissiveMetallic.rgb);
     // Current Android swapchain selects UNORM formats, so encode for display here.
