@@ -37,7 +37,7 @@
 
 ## Phase 3 — Core world system
 
-- [x] ECS (generational entity handles and packed sparse-set component pools; host C++ tests passing).
+- [ ] ECS (generational handles, packed sparse-set pools, typed component iteration, a `CubeSpawnSystem` that owns 5,000 cubes, and ECS-derived renderer extraction; host stress test and Android ARM64 compile pass, APK/device smoke test pending).
 - [x] Scene graph (hierarchy, cycle rejection, local/world transforms, subtree deletion; host tests passing).
 - [ ] Asset manager.
 - [ ] Terrain.
@@ -137,8 +137,9 @@ Status is based on repository inspection, CI evidence and user-provided device l
 
 1. Keep the canonical Phase 0–10 scope unchanged.
 2. Record second-GPU-family validation as an outstanding compatibility check; do not misrepresent it as tested.
-3. Continue Phase 3 — Core world system in order: ECS, scene graph, asset manager, terrain, LOD and world partitioning; preserve the cross-GPU limitation in release notes until another device is tested.
-4. Do not start Phase 4 — Character and animation until Phase 3's navigable streamed environment is implemented and validated.
+3. Complete the current Phase 3 ECS gate first: create the 5,000-cube grid through `CubeSpawnSystem`, extract render instances from ECS components, pass host C++ stress tests, then build an APK and validate the ECS/runtime logs on the S23 FE.
+4. Only after the 5,000-cube ECS APK test is accepted, continue the remaining Phase 3 work: scene graph integration/review, asset manager, terrain, LOD and world partitioning. Preserve the cross-GPU limitation in release notes until another device is tested.
+5. Do not start Phase 4 — Character and animation until Phase 3's navigable streamed environment is implemented and validated.
 
 ### Validation evidence discipline
 
