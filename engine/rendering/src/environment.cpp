@@ -214,4 +214,72 @@ bool build_procedural_environment_cube(
     return !output.empty();
 }
 
+bool build_diffuse_irradiance_cube(
+    const EnvironmentCubeMip& source_base, std::uint32_t output_size,
+    std::uint32_t sample_count, EnvironmentCubeMip& output) noexcept {
+    output = {};
+    if (source_base.width == 0U || source_base.height != source_base.width ||
+        source_base.width > 256U || output_size == 0U || output_size > 64U ||
+        sample_count < 16U || sample_count > 2048U ||
+        source_base.pixels.size() != static_cast<std::size_t>(source_base.width) *
+                                     source_base.height * 4U * 6U) return false;
+    try {
+        std::array<std::vector<std::uint8_t>, 6> source_faces{};
+        const std::size_t face_bytes = static_cast<std::size_t>(source_base.width) *
+                                       source_base.height * 4U;
+        for (std::uint32_t face = 0; face < 6U; ++face) {
+            const auto begin = source_base.pixels.begin() +
+                static_cast<std::ptrdiff_t>(static_cast<std::size_t>(face) * face_bytes);
+            source_faces[face].assign(begin, begin + static_cast<std::ptrdiff_t>(face_bytes));
+        }
+
+        output.width = output_size;
+        output.height = output_size;
+        output.pixels.resize(static_cast<std::size_t>(output_size) * output_size * 4U * 6U);
+        for (std::uint32_t face = 0; face < 6U; ++face) {
+            for (std::uint32_t y = 0; y < output_size; ++y) {
+                for (std::uint32_t x = 0; x < output_size; ++x) {
+                    const float u = (static_cast<float>(x) + 0.5F) / static_cast<float>(output_size);
+                    const float v = (static_cast<float>(y) + 0.5F) / static_cast<float>(output_size);
+                    const Vec3 normal = face_direction(face, u, v);
+                    const Vec3 up = std::abs(normal.y) < 0.999F
+                        ? Vec3{0.0F, 1.0F, 0.0F} : Vec3{1.0F, 0.0F, 0.0F};
+                    const Vec3 tangent = normalize(cross(up, normal));
+                    const Vec3 bitangent = cross(normal, tangent);
+                    Vec3 irradiance_over_pi{};
+                    for (std::uint32_t sample = 0; sample < sample_count; ++sample) {
+                        // Cosine-weighted disk mapping: PDF = cos(theta) / PI,
+                        // so the arithmetic mean directly estimates irradiance / PI.
+                        const float radial = std::sqrt(
+                            static_cast<float>(sample) / static_cast<float>(sample_count));
+                        const float phi = 6.28318530717958647692F * radical_inverse_vdc(sample);
+                        const float disk_x = radial * std::cos(phi);
+                        const float disk_y = radial * std::sin(phi);
+                        const float disk_z = std::sqrt(std::max(
+                            0.0F, 1.0F - disk_x * disk_x - disk_y * disk_y));
+                        const Vec3 direction = normalize(
+                            tangent * disk_x + bitangent * disk_y + normal * disk_z);
+                        irradiance_over_pi = irradiance_over_pi +
+                            sample_base_cube(source_faces, source_base.width, direction);
+                    }
+                    irradiance_over_pi = irradiance_over_pi * (1.0F / static_cast<float>(sample_count));
+                    const std::size_t offset =
+                        (static_cast<std::size_t>(face) * output_size * output_size +
+                         static_cast<std::size_t>(y) * output_size + x) * 4U;
+                    output.pixels[offset] = to_byte(irradiance_over_pi.x);
+                    output.pixels[offset + 1U] = to_byte(irradiance_over_pi.y);
+                    output.pixels[offset + 2U] = to_byte(irradiance_over_pi.z);
+                    output.pixels[offset + 3U] = 255U;
+                }
+            }
+        }
+    } catch (...) {
+        output = {};
+        return false;
+    }
+    return output.width == output_size && output.height == output_size &&
+           output.pixels.size() == static_cast<std::size_t>(output_size) *
+                                   output_size * 4U * 6U;
+}
+
 } // namespace arut::rendering
