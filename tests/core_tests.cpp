@@ -165,6 +165,28 @@ int main() {
     assert(!arut::rendering::build_environment_cube_from_equirectangular(
         decoded_hdr, 0U, invalid_hdr_cube));
     assert(invalid_hdr_cube.pixels.empty());
+    std::vector<arut::rendering::EnvironmentCubeF32Mip> hdr_specular_mips;
+    assert(arut::rendering::build_ggx_prefiltered_environment_cube(
+        hdr_cube, 32U, hdr_specular_mips));
+    assert(hdr_specular_mips.size() == 2U);
+    assert(hdr_specular_mips[1].width == 1U && hdr_specular_mips[1].height == 1U);
+    for (std::size_t i = 0; i < hdr_specular_mips[1].pixels.size(); i += 4U) {
+        assert(near(hdr_specular_mips[1].pixels[i], decoded_hdr.pixels[0]));
+        assert(near(hdr_specular_mips[1].pixels[i + 1U], decoded_hdr.pixels[1]));
+        assert(near(hdr_specular_mips[1].pixels[i + 2U], decoded_hdr.pixels[2]));
+        assert(near(hdr_specular_mips[1].pixels[i + 3U], 1.0F));
+    }
+    arut::rendering::EnvironmentCubeF32Mip hdr_irradiance{};
+    assert(arut::rendering::build_diffuse_irradiance_cube(
+        hdr_cube, 1U, 32U, hdr_irradiance));
+    assert(hdr_irradiance.width == 1U && hdr_irradiance.height == 1U);
+    assert(near(hdr_irradiance.pixels[0], decoded_hdr.pixels[0]));
+    assert(near(hdr_irradiance.pixels[1], decoded_hdr.pixels[1]));
+    assert(near(hdr_irradiance.pixels[2], decoded_hdr.pixels[2]));
+    std::vector<arut::rendering::EnvironmentCubeF32Mip> invalid_hdr_mips;
+    assert(!arut::rendering::build_ggx_prefiltered_environment_cube(
+        hdr_cube, 8U, invalid_hdr_mips));
+    assert(invalid_hdr_mips.empty());
 
     arut::rendering::Rgba8Image decoded{};
     const auto decode_result = arut::rendering::decode_image_rgba8(png_2x2, decoded);
