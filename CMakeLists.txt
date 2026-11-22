@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.22.1)
 project(ARUT_HARDT_ENGINE VERSION 0.1.0 DESCRIPTION "Independent Android-first open-world game engine" LANGUAGES C CXX)
 option(ARUT_BUILD_TESTS "Build ARUT-HARDT tests" ON)
 option(ARUT_BUILD_RUNTIME "Build the headless bootstrap executable" ON)
