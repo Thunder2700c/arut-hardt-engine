@@ -6,7 +6,9 @@
 #include "arut/rendering/visibility.hpp"
 #include "arut/rendering/render_quality.hpp"
 
+#include <algorithm>
 #include <array>
+#include <initializer_list>
 #include <cassert>
 #include <cmath>
 #include <string_view>
