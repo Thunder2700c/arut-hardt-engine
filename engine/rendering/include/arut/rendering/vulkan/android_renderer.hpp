@@ -38,6 +38,8 @@ private:
     bool create_pbr_pipeline() noexcept;
     bool create_pbr_geometry() noexcept;
     bool create_pbr_descriptors() noexcept;
+    bool create_shadow_resources() noexcept;
+    bool create_shadow_pipeline() noexcept;
     bool create_fallback_texture() noexcept;
     bool load_texture_asset(const char* path, VkFormat format, bool source_is_srgb,
                             VkImage& image, VkDeviceMemory& memory, VkImageView& view,
@@ -103,6 +105,16 @@ private:
     VkDeviceMemory depth_memory_{VK_NULL_HANDLE};
     VkImageView depth_view_{VK_NULL_HANDLE};
     VkFormat depth_format_{VK_FORMAT_UNDEFINED};
+    VkFormat shadow_format_{VK_FORMAT_UNDEFINED};
+    VkExtent2D shadow_extent_{1024U, 1024U};
+    VkImage shadow_image_{VK_NULL_HANDLE};
+    VkDeviceMemory shadow_memory_{VK_NULL_HANDLE};
+    VkImageView shadow_view_{VK_NULL_HANDLE};
+    VkSampler shadow_sampler_{VK_NULL_HANDLE};
+    VkRenderPass shadow_render_pass_{VK_NULL_HANDLE};
+    VkFramebuffer shadow_framebuffer_{VK_NULL_HANDLE};
+    VkPipeline shadow_pipeline_{VK_NULL_HANDLE};
+    bool shadow_enabled_{false};
     std::vector<VkFramebuffer> framebuffers_;
     VkCommandPool command_pool_{VK_NULL_HANDLE};
     std::vector<VkCommandBuffer> command_buffers_;
