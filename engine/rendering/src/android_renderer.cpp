@@ -2354,6 +2354,7 @@ arut::rendering::RenderProfileSnapshot AndroidRenderer::profile_snapshot() const
     arut::rendering::RenderProfileSnapshot snapshot{};
     snapshot.cpu_frame_ms = last_cpu_frame_ms_;
     snapshot.gpu_frame_ms = last_gpu_frame_ms_;
+    snapshot.visibility_pass_ms = last_visibility_pass_ms_;
     snapshot.shadow_pass_ms = last_shadow_pass_ms_;
     snapshot.draw_calls = last_draw_calls_;
     snapshot.visible_objects = last_visible_objects_;
