@@ -3,7 +3,7 @@ project(ARUT_HARDT_ENGINE VERSION 0.1.0 DESCRIPTION "Independent Android-first o
 option(ARUT_BUILD_TESTS "Build ARUT-HARDT tests" ON)
 option(ARUT_BUILD_RUNTIME "Build the headless bootstrap executable" ON)
 add_library(arut_core STATIC engine/core/src/version.cpp)
-add_library(arut_rendering STATIC engine/rendering/src/image_decode.cpp)
+add_library(arut_rendering STATIC engine/rendering/src/image_decode.cpp engine/rendering/src/environment.cpp)
 target_include_directories(arut_rendering PUBLIC engine/rendering/include PRIVATE third_party/stb)
 target_compile_features(arut_rendering PUBLIC cxx_std_20)
 set_target_properties(arut_rendering PROPERTIES CXX_EXTENSIONS OFF POSITION_INDEPENDENT_CODE ON)
