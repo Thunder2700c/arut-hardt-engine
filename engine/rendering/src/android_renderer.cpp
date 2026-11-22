@@ -17,6 +17,7 @@
 #include "arut/rendering/image.hpp"
 #include "arut/rendering/brdf_lut.hpp"
 #include "arut/rendering/visibility.hpp"
+#include "arut/rendering/shadow.hpp"
 
 extern "C" void arut_android_log(int priority, const char* message) noexcept;
 
@@ -1726,7 +1727,8 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
             light_eye, center, {0.0F, 1.0F, 0.0F});
         const auto light_projection = arut::rendering::orthographic_rh_zo(
             -radius, radius, -radius, radius, 0.1F, radius * 8.0F);
-        const auto light_view_projection = arut::rendering::multiply(light_projection, light_view);
+        const auto light_view_projection = arut::rendering::stabilize_shadow_matrix(
+            arut::rendering::multiply(light_projection, light_view), shadow_extent_.width);
         std::copy(light_view_projection.value.begin(), light_view_projection.value.end(),
                   frame.light_view_projection[cascade]);
     }
