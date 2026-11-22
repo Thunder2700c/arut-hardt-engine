@@ -14,10 +14,11 @@ layout(set = 0, binding = 0, std140) uniform FrameData {
     vec4 cameraPosition;
     vec4 directionalLightDirection;
     vec4 directionalLightRadiance;
-    mat4 lightViewProjection;
+    mat4 lightViewProjection[4];
+    vec4 cascadeSplits;
 } frameData;
 
-layout(set = 0, binding = 1) uniform sampler2DShadow directionalShadowMap;
+layout(set = 0, binding = 1) uniform sampler2DArrayShadow directionalShadowMap;
 layout(set = 0, binding = 2) uniform samplerCube environmentMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfIntegrationLut;
 layout(set = 0, binding = 4) uniform samplerCube diffuseIrradianceMap;
@@ -61,20 +62,26 @@ float geometrySmith(float nDotV, float nDotL, float roughness) {
 }
 
 float directionalShadowVisibility(vec3 normal, vec3 lightDirection) {
-    vec4 lightClip = frameData.lightViewProjection * vec4(inWorldPosition, 1.0);
+    float viewDistance = length(frameData.cameraPosition.xyz - inWorldPosition);
+    int cascade = 0;
+    if (viewDistance > frameData.cascadeSplits.x) cascade = 1;
+    if (viewDistance > frameData.cascadeSplits.y) cascade = 2;
+    if (viewDistance > frameData.cascadeSplits.z) cascade = 3;
+
+    vec4 lightClip = frameData.lightViewProjection[cascade] * vec4(inWorldPosition, 1.0);
     if (lightClip.w <= 0.0) return 1.0;
     vec3 projected = lightClip.xyz / lightClip.w;
     vec2 uv = projected.xy * 0.5 + 0.5;
     if (projected.z < 0.0 || projected.z > 1.0 ||
         any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 1.0;
 
-    vec2 texel = 1.0 / vec2(textureSize(directionalShadowMap, 0));
+    vec2 texel = 1.0 / vec2(textureSize(directionalShadowMap, 0).xy);
     float bias = max(0.0007, 0.0025 * (1.0 - max(dot(normal, lightDirection), 0.0)));
     float visibility = 0.0;
     for (int y = -1; y <= 1; ++y) {
         for (int x = -1; x <= 1; ++x) {
             visibility += texture(directionalShadowMap,
-                vec3(uv + vec2(float(x), float(y)) * texel, projected.z - bias));
+                vec4(uv + vec2(float(x), float(y)) * texel, float(cascade), projected.z - bias));
         }
     }
     return visibility / 9.0;
