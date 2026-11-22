@@ -1,6 +1,6 @@
 # Mobile PBR Pipeline
 
-Status: shader and CPU-reference source authored; Vulkan integration is pending Phase 2 completion.
+Status: CPU reference and PBR GLSL source authored and compiled in host CI. The Android renderer now has a separate first-triangle graphics pipeline and depth target; PBR descriptor/pipeline integration remains pending.
 
 ## Rendering model
 The initial Android path is a forward metallic-roughness renderer. It uses linear-light material and light values, tangent-space normal maps, a GGX/Trowbridge-Reitz normal distribution, Schlick Fresnel, Schlick-GGX geometry and Cook-Torrance direct lighting. The fragment shader applies an ACES fitted tone curve and an output transfer suitable for the current UNORM swapchain selection.
@@ -22,14 +22,14 @@ The shader contract is a starting point, not yet a stable public asset format. V
 `engine/rendering/include/arut/rendering/pbr_brdf.hpp` supplies deterministic host-side reference functions for the BRDF and ACES curve. It exists for unit testing and future numerical comparisons; it is not a substitute for GPU shader validation.
 
 ## Known limitations
-- The current Vulkan renderer has no graphics pipeline, shader modules, mesh buffers or depth attachment. The shader files are therefore not active in the Android runtime.
+- The Vulkan renderer now has an asset-backed first-triangle pipeline, one interleaved vertex buffer and a depth attachment. The PBR shader files are not yet connected to that pipeline; the triangle pipeline is an independent bring-up path.
 - Ambient illumination is a temporary constant; image-based lighting, irradiance/prefiltered environment maps and BRDF integration LUT are not implemented.
 - The material contract has an occlusion-strength scalar but no occlusion texture descriptor yet. The shader does not pretend that a scalar alone is an occlusion map.
 - Shadow maps, cascades, point/spot lights, GPU instancing and visibility culling are pending.
 - Shader compilation is not part of CI yet. Do not mark shader code as compiled until a GLSL compiler and validation step are added.
 
 ## Integration order
-1. Complete Phase 2: first triangle, vertex/index buffers, depth attachment and camera.
+1. Complete Phase 2: indexed mesh buffers, camera/view transforms and a stable first-scene contract.
 2. Add reproducible GLSL-to-SPIR-V compilation and validate shader interfaces.
 3. Create descriptor set layouts, pipeline layout, render state and graphics pipeline.
 4. Render a known material test mesh and compare GPU results with CPU reference cases.
