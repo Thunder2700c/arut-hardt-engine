@@ -28,6 +28,8 @@ jobs:
           mkdir -p build/shaders
           glslangValidator -V --target-env vulkan1.0 -o build/shaders/mobile_pbr_forward.vert.spv engine/rendering/shaders/mobile_pbr_forward.vert
           glslangValidator -V --target-env vulkan1.0 -o build/shaders/mobile_pbr_forward.frag.spv engine/rendering/shaders/mobile_pbr_forward.frag
+          glslangValidator -V --target-env vulkan1.0 -o build/shaders/first_triangle.vert.spv engine/rendering/shaders/first_triangle.vert
+          glslangValidator -V --target-env vulkan1.0 -o build/shaders/first_triangle.frag.spv engine/rendering/shaders/first_triangle.frag
 
   rust:
     name: Rust workspace
