@@ -70,7 +70,7 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
   const auto action = AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
   if (action == AMOTION_EVENT_ACTION_DOWN || action == AMOTION_EVENT_ACTION_POINTER_DOWN ||
       action == AMOTION_EVENT_ACTION_UP || action == AMOTION_EVENT_ACTION_POINTER_UP) {
-   const std::size_t p = AMotionEvent_getActionIndex(event);
+   const std::size_t p = static_cast<std::size_t>((AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
    log_info("Touch action=%d pointer=%zu x=%.1f y=%.1f", action, p,
             AMotionEvent_getX(event, p), AMotionEvent_getY(event, p));
   }
@@ -107,6 +107,5 @@ void run(android_app* app) {
 }
 }
 void android_main(android_app* app) {
- app_dummy();
  arut::platform::android::run(app);
 }
