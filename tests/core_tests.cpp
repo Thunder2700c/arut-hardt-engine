@@ -165,6 +165,19 @@ int main() {
     assert(!arut::rendering::build_environment_cube_from_equirectangular(
         decoded_hdr, 0U, invalid_hdr_cube));
     assert(invalid_hdr_cube.pixels.empty());
+    arut::rendering::EnvironmentCubeF16Mip hdr_half_cube{};
+    assert(arut::rendering::convert_environment_cube_to_rgba16f(hdr_cube, hdr_half_cube));
+    assert(hdr_half_cube.width == 2U && hdr_half_cube.height == 2U);
+    assert(hdr_half_cube.pixels[0] == 0x3c04U);
+    assert(hdr_half_cube.pixels[1] == 0x3808U);
+    assert(hdr_half_cube.pixels[2] == 0x3410U);
+    assert(hdr_half_cube.pixels[3] == 0x3c00U);
+    auto out_of_half_range = hdr_cube;
+    out_of_half_range.pixels[0] = 65505.0F;
+    arut::rendering::EnvironmentCubeF16Mip rejected_half_cube{};
+    assert(!arut::rendering::convert_environment_cube_to_rgba16f(
+        out_of_half_range, rejected_half_cube));
+    assert(rejected_half_cube.pixels.empty());
     std::vector<arut::rendering::EnvironmentCubeF32Mip> hdr_specular_mips;
     assert(arut::rendering::build_ggx_prefiltered_environment_cube(
         hdr_cube, 32U, hdr_specular_mips));
