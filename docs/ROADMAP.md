@@ -36,9 +36,18 @@ Exit gate: APK installs and starts on a physical ARM64 device, handles lifecycle
 - [ ] Add vertex/index buffers, depth, camera, textures and first lit 3D scene.
 Exit gate: Android renders a textured 3D scene with validation and frame/GPU timing.
 
-## Phase 3 — Rendering and materials
-PBR, mobile shadows, instancing, visibility, environment lighting, tone mapping, quality tiers and profiling.
-Exit gate: test scene works across two Android GPU families with graceful fallback.
+## Phase 3 — Rendering and materials (foundation started)
+- [x] Define a PBR material data contract (base colour, metallic, roughness, emissive, normal scale, occlusion and alpha cutoff).
+- [x] Add finite-value handling and safe material parameter normalization.
+- [x] Define Low/Medium/High/Ultra mobile quality presets with render scale, shadow budget and light limits.
+- [x] Define a renderer profiling snapshot contract.
+- [ ] Implement the PBR shader pipeline and validate energy-conserving BRDF behaviour.
+- [ ] Add mobile shadow maps and cascade quality tiers.
+- [ ] Add GPU instancing and CPU/GPU visibility culling.
+- [ ] Add environment lighting / image-based lighting and tone mapping.
+- [ ] Connect profile snapshots to actual renderer counters and GPU timestamp queries.
+- [ ] Validate graceful quality fallback on two Android GPU families.
+Exit gate: PBR test scene works across two Android GPU families with graceful fallback and measured CPU/GPU costs.
 
 ## Phase 4 — Resources and world streaming
 Resource handles, asynchronous asset loading, world coordinates/cells, cancellation, prioritization, eviction, budgets, terrain and LOD.
