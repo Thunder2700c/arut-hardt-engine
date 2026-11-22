@@ -1,6 +1,7 @@
 #include "arut/core/version.hpp"
 #include "arut/core/ecs.hpp"
 #include "arut/core/scene_graph.hpp"
+#include "arut/core/scene_graph_ecs.hpp"
 #include "arut/rendering/pbr_brdf.hpp"
 #include "arut/rendering/mesh.hpp"
 #include "arut/rendering/image.hpp"
@@ -82,6 +83,42 @@ int main() {
     const auto recycled_node = scene.create(root_node);
     assert(recycled_node.index == child_node.index);
     assert(recycled_node.generation != child_node.generation);
+    // ECS-to-scene-graph synchronization: entity identity, parent hierarchy and transforms.
+    arut::core::World scene_world;
+    const auto scene_root_entity = scene_world.create();
+    const auto scene_child_entity = scene_world.create();
+    auto ecs_root_transform = arut::core::TransformMatrix::identity();
+    ecs_root_transform.value[12] = 7.0F;
+    auto ecs_child_transform = arut::core::TransformMatrix::identity();
+    ecs_child_transform.value[13] = 4.0F;
+    scene_world.emplace<arut::core::SceneLocalTransformComponent>(
+        scene_root_entity, arut::core::SceneLocalTransformComponent{ecs_root_transform});
+    scene_world.emplace<arut::core::SceneLocalTransformComponent>(
+        scene_child_entity, arut::core::SceneLocalTransformComponent{ecs_child_transform});
+    scene_world.emplace<arut::core::SceneParentComponent>(
+        scene_child_entity, arut::core::SceneParentComponent{scene_root_entity});
+    arut::core::SceneGraphSystem scene_sync;
+    scene_sync.update(scene_world);
+    assert(scene_sync.bound_entity_count() == 2U);
+    assert(scene_world.has<arut::core::SceneGraphBindingComponent>(scene_root_entity));
+    assert(scene_world.has<arut::core::SceneGraphBindingComponent>(scene_child_entity));
+    const auto child_binding =
+        scene_world.get<arut::core::SceneGraphBindingComponent>(scene_child_entity).node;
+    const auto child_world = scene_sync.graph().world_transform(child_binding);
+    assert(child_world);
+    assert(near(child_world->value[12], 7.0F));
+    assert(near(child_world->value[13], 4.0F));
+    ecs_root_transform.value[12] = 11.0F;
+    scene_world.get<arut::core::SceneLocalTransformComponent>(scene_root_entity).value =
+        ecs_root_transform;
+    scene_sync.update(scene_world);
+    const auto moved_child_world = scene_sync.graph().world_transform(child_binding);
+    assert(moved_child_world && near(moved_child_world->value[12], 11.0F));
+    assert(scene_world.destroy(scene_child_entity));
+    scene_sync.update(scene_world);
+    assert(scene_sync.bound_entity_count() == 1U);
+    assert(scene_sync.graph().node_count() == 1U);
+
     constexpr auto current = arut::core::version();
     static_assert(current.major == 0);
     static_assert(current.minor == 1);
