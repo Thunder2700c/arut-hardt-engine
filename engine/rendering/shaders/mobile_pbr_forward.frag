@@ -99,8 +99,10 @@ void main() {
     vec3 direct = (diffuse + specular) * frameData.directionalLightRadiance.rgb * nDotL;
 
     // Ambient term is deliberately a placeholder until the IBL phase is integrated.
-    float occlusion = mix(1.0, 1.0, clamp(materialData.roughnessNormalOcclusionAlpha.z, 0.0, 1.0));
-    vec3 ambient = base.rgb * 0.025 * (1.0 - metallic) * occlusion;
-    vec3 linearColor = direct + ambient + materialData.emissiveMetallic.rgb;
-    outColor = vec4(acesToneMap(linearColor), base.a);
+    // AO texture sampling is intentionally deferred until the material descriptor contract
+    // includes an occlusion image. Do not pretend the strength scalar is an occlusion map.
+    vec3 ambient = base.rgb * 0.025 * (1.0 - metallic);
+    vec3 displayLinear = acesToneMap(direct + ambient + materialData.emissiveMetallic.rgb);
+    // Current Android swapchain selects UNORM formats, so encode for display here.
+    outColor = vec4(pow(displayLinear, vec3(1.0 / 2.2)), base.a);
 }
