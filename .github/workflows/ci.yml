@@ -30,7 +30,15 @@ jobs:
           glslangValidator -V --target-env vulkan1.0 -Iengine/rendering/shaders -o build/shaders/mobile_pbr_forward.frag.spv engine/rendering/shaders/mobile_pbr_forward.frag
           glslangValidator -V --target-env vulkan1.0 -Iengine/rendering/shaders -o build/shaders/pbr_brdf_reference.comp.spv engine/rendering/shaders/pbr_brdf_reference.comp
           c++ -std=c++20 -Wall -Wextra -Wpedantic -Iengine/rendering/include tests/vulkan_pbr_reference.cpp -lvulkan -o build/arut_vulkan_pbr_reference
-          VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json build/arut_vulkan_pbr_reference build/shaders/pbr_brdf_reference.comp.spv
+          ICD_PATH="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -iname '*lvp*.json' -print -quit)"
+          if [ -z "$ICD_PATH" ]; then
+            echo "Lavapipe ICD manifest not found. Installed manifests:"
+            find /usr/share/vulkan/icd.d -maxdepth 1 -type f -print || true
+            exit 1
+          fi
+          echo "Using Lavapipe ICD: $ICD_PATH"
+          cat "$ICD_PATH"
+          VK_DRIVER_FILES="$ICD_PATH" VK_ICD_FILENAMES="$ICD_PATH" build/arut_vulkan_pbr_reference build/shaders/pbr_brdf_reference.comp.spv
           glslangValidator -V --target-env vulkan1.0 -o build/shaders/mobile_shadow_depth.vert.spv engine/rendering/shaders/mobile_shadow_depth.vert
           glslangValidator -V --target-env vulkan1.0 -o build/shaders/visibility_cull.comp.spv engine/rendering/shaders/visibility_cull.comp
           glslangValidator -V --target-env vulkan1.0 -o build/shaders/first_triangle.vert.spv engine/rendering/shaders/first_triangle.vert
