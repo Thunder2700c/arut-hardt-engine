@@ -18,6 +18,7 @@ On Android versions before API 29, the fallback location is the app-specific Doc
 
 The runtime stream includes:
 - engine version and Rust ABI version;
+- `ECS_STRESS_SCENE`: startup readiness, live entity count, spawned handle count, extracted render-instance count and `CubeSpawnSystem` source;
 - Android lifecycle, window and input events;
 - Vulkan GPU vendor/device IDs, API and driver versions;
 - swapchain creation failures and renderer errors;
