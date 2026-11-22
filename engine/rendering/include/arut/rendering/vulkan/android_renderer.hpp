@@ -49,7 +49,7 @@ private:
     VkCommandPool command_pool_{VK_NULL_HANDLE};
     std::vector<VkCommandBuffer> command_buffers_;
     VkSemaphore image_available_{VK_NULL_HANDLE};
-    VkSemaphore render_finished_{VK_NULL_HANDLE};
+    std::vector<VkSemaphore> render_finished_;
     VkFence in_flight_{VK_NULL_HANDLE};
 };
 
