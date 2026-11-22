@@ -144,6 +144,10 @@ bool AndroidRenderer::create_swapchain() noexcept {
     result = vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device_, surface_, &format_count, formats.data());
     if (result != VK_SUCCESS) return false;
     VkSurfaceFormatKHR chosen = formats.front();
+    if (formats.size() == 1 && formats.front().format == VK_FORMAT_UNDEFINED) {
+        chosen.format = VK_FORMAT_B8G8R8A8_UNORM;
+        chosen.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+    }
     for (const auto& format : formats) {
         if (format.format == VK_FORMAT_R8G8B8A8_UNORM &&
             format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) { chosen = format; break; }
@@ -151,6 +155,10 @@ bool AndroidRenderer::create_swapchain() noexcept {
             format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) chosen = format;
     }
     color_format_ = chosen.format;
+    if ((caps.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) == 0) {
+        log_error("Surface images do not support color-attachment usage");
+        return false;
+    }
     if (caps.currentExtent.width != std::numeric_limits<std::uint32_t>::max()) {
         extent_ = caps.currentExtent;
     } else {
