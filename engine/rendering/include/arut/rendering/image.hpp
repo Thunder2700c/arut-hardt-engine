@@ -1,0 +1,49 @@
+#pragma once
+
+#include <cstdint>
+#include <span>
+#include <vector>
+
+namespace arut::rendering {
+
+struct Rgba8Image final {
+    std::uint32_t width{0};
+    std::uint32_t height{0};
+    // Row-major, tightly packed RGBA8 bytes. Row zero is the first decoded row.
+    std::vector<std::uint8_t> pixels;
+
+    [[nodiscard]] bool valid() const noexcept {
+        return width > 0 && height > 0 &&
+               pixels.size() == static_cast<std::size_t>(width) * height * 4U;
+    }
+};
+
+enum class ImageDecodeError : std::uint8_t {
+    None,
+    EmptyInput,
+    InputTooLarge,
+    UnsupportedOrCorrupt,
+    DimensionsOutOfRange,
+    AllocationFailed
+};
+
+struct ImageDecodeResult final {
+    ImageDecodeError error{ImageDecodeError::None};
+    [[nodiscard]] explicit operator bool() const noexcept { return error == ImageDecodeError::None; }
+};
+
+struct Rgba8Mip final {
+    std::uint32_t width{0};
+    std::uint32_t height{0};
+    std::vector<std::uint8_t> pixels;
+};
+
+// Supports PNG, JPEG, BMP and TGA. Decoded images are normalized to four channels.
+[[nodiscard]] ImageDecodeResult decode_image_rgba8(
+    std::span<const std::uint8_t> encoded, Rgba8Image& output) noexcept;
+
+[[nodiscard]] bool build_rgba8_mip_chain(
+    const Rgba8Image& source, bool source_is_srgb,
+    std::vector<Rgba8Mip>& output) noexcept;
+
+} // namespace arut::rendering
