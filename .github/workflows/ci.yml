@@ -22,16 +22,16 @@ jobs:
       - name: Build
         run: cmake --build --preset dev --parallel 2
       - name: Test
-        run: ctest --preset dev --output-on-failure | tee build/ctest.log
+        run: ctest --preset dev --output-on-failure | tee build/dev/ctest.log
       - name: Upload Phase 3 ECS stress-test logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: arut-phase3-ecs-stress-test-logs
           path: |
-            build/phase3-ecs-5000-cubes.log
-            build/ctest.log
-            build/Testing/Temporary/LastTest.log
+            build/dev/phase3-ecs-5000-cubes.log
+            build/dev/ctest.log
+            build/dev/Testing/Temporary/LastTest.log
           if-no-files-found: warn
           retention-days: 30
       - name: Compile and validate Vulkan PBR shaders (no APK)
