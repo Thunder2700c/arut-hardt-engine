@@ -1582,9 +1582,15 @@ bool AndroidRenderer::create_pbr_pipeline() noexcept {
     if (result != VK_SUCCESS) { vkDestroyShaderModule(device_, fragment_module, nullptr); vkDestroyShaderModule(device_, vertex_module, nullptr); log_error("Create material descriptor layout failed", result); return false; }
 
     const std::array<VkDescriptorSetLayout, 2> layouts{frame_set_layout_, material_set_layout_};
+    VkPushConstantRange shadow_cascade_push{};
+    shadow_cascade_push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    shadow_cascade_push.offset = 0;
+    shadow_cascade_push.size = sizeof(std::uint32_t);
     VkPipelineLayoutCreateInfo pipeline_layout{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     pipeline_layout.setLayoutCount = static_cast<std::uint32_t>(layouts.size());
     pipeline_layout.pSetLayouts = layouts.data();
+    pipeline_layout.pushConstantRangeCount = 1;
+    pipeline_layout.pPushConstantRanges = &shadow_cascade_push;
     result = vkCreatePipelineLayout(device_, &pipeline_layout, nullptr, &pbr_pipeline_layout_);
     if (result != VK_SUCCESS) { vkDestroyShaderModule(device_, fragment_module, nullptr); vkDestroyShaderModule(device_, vertex_module, nullptr); log_error("Create PBR pipeline layout failed", result); return false; }
 
