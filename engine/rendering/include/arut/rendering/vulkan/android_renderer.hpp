@@ -11,6 +11,7 @@
 #include <array>
 #include <cstdint>
 #include <cstddef>
+#include <chrono>
 #include <vector>
 
 namespace arut::rendering::vulkan {
@@ -27,6 +28,9 @@ public:
     bool set_quality_tier(arut::rendering::RenderQualityTier tier) noexcept;
     bool set_environment_probes(std::span<const arut::rendering::EnvironmentProbeInfluence> probes) noexcept;
     bool draw_frame() noexcept;
+    // action: 0=down, 1=move, 2=up. Coordinates are in window pixels.
+    void set_touch_input(std::int32_t action, std::int32_t pointer_id,
+                         float x, float y, float width, float height) noexcept;
     [[nodiscard]] arut::rendering::RenderProfileSnapshot profile_snapshot() const noexcept;
     bool ready() const noexcept { return device_ != VK_NULL_HANDLE && swapchain_ != VK_NULL_HANDLE; }
 
@@ -208,6 +212,23 @@ private:
     VkDeviceMemory visibility_input_memory_{VK_NULL_HANDLE};
     VkDescriptorBufferInfo visibility_input_info_{};
     std::uint32_t visibility_source_instance_count_{0};
+    std::vector<arut::rendering::GpuVisibilityInstance> visibility_instances_{};
+    std::array<float, 3> camera_position_{0.0F, 0.0F, 18.0F};
+    float camera_yaw_{-1.570796327F};
+    float camera_pitch_{0.0F};
+    float joystick_x_{0.0F};
+    float joystick_y_{0.0F};
+    float joystick_origin_x_{0.0F};
+    float joystick_origin_y_{0.0F};
+    float joystick_radius_{72.0F};
+    std::int32_t joystick_pointer_{-1};
+    std::int32_t look_pointer_{-1};
+    float look_last_x_{0.0F};
+    float look_last_y_{0.0F};
+    std::uint32_t cpu_expected_visible_{0};
+    std::uint64_t culling_parity_checks_{0};
+    std::uint64_t culling_parity_mismatches_{0};
+    std::chrono::steady_clock::time_point last_camera_update_{};
     std::array<float, 24> visibility_frustum_planes_{};
     bool compute_queue_supported_{false};
     bool properties2_extension_enabled_{false};

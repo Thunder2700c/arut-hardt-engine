@@ -1834,7 +1834,7 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
     vkUnmapMemory(device_, cube_index_memory_);
     cube_index_count_ = static_cast<std::uint32_t>(mesh.indices.size());
 
-    const auto make_instance = [](float x, float scale, float yaw) {
+    const auto make_instance = [](float x, float y, float z, float scale, float yaw) {
         arut::rendering::Mat4 model = arut::rendering::Mat4::identity();
         const float cosine = std::cos(yaw);
         const float sine = std::sin(yaw);
@@ -1844,45 +1844,56 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         model.value[8] = sine * scale;
         model.value[10] = cosine * scale;
         model.value[12] = x;
+        model.value[13] = y;
+        model.value[14] = z;
         return model;
     };
-    struct InstanceSpec final { float x; float scale; float yaw; };
-    // Three visible objects plus two deliberately off-frustum sentinels.
-    // GPU indirect drawing must compact five inputs to the same three objects
-    // selected by the CPU reference on the physical validation device.
-    constexpr std::array<InstanceSpec, 5> specs{{
-        {-1.05F, 0.68F, -0.45F}, {0.0F, 0.82F, 0.15F}, {1.05F, 0.68F, 0.55F},
-        {-12.0F, 0.68F, -0.20F}, {12.0F, 0.68F, 0.30F}
-    }};
-    const std::array<float, 3> camera{2.2F, 1.8F, 2.8F};
-    const auto view = arut::rendering::look_at_rh(camera, {0.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F});
+    // Dedicated mobile stress scene: 20 x 10 x 25 = 5,000 instanced cubes.
+    // The same immutable source list feeds the CPU reference and GPU compute path.
+    constexpr std::uint32_t grid_x = 20U, grid_y = 10U, grid_z = 25U;
+    constexpr float spacing = 2.0F;
+    visibility_instances_.clear();
+    visibility_instances_.reserve(static_cast<std::size_t>(grid_x) * grid_y * grid_z);
+    for (std::uint32_t iy = 0; iy < grid_y; ++iy) {
+        for (std::uint32_t iz = 0; iz < grid_z; ++iz) {
+            for (std::uint32_t ix = 0; ix < grid_x; ++ix) {
+                const float x = (static_cast<float>(ix) - (grid_x - 1U) * 0.5F) * spacing;
+                const float y = (static_cast<float>(iy) - (grid_y - 1U) * 0.5F) * spacing;
+                const float z = (static_cast<float>(iz) - (grid_z - 1U) * 0.5F) * spacing;
+                const float variation = static_cast<float>((ix * 17U + iy * 31U + iz * 13U) % 7U);
+                const float scale = 0.34F + variation * 0.025F;
+                const float yaw = static_cast<float>((ix + iz * 3U) % 16U) * 0.196349541F;
+                arut::rendering::GpuVisibilityInstance instance{};
+                instance.bounds = {x, y, z, scale * 0.866025404F};
+                instance.model = make_instance(x, y, z, scale, yaw).value;
+                visibility_instances_.push_back(instance);
+            }
+        }
+    }
+    visibility_source_instance_count_ = static_cast<std::uint32_t>(visibility_instances_.size());
+    if (visibility_source_instance_count_ != 5000U) {
+        log_error("Stress scene generation failed: expected 5000 cubes");
+        return false;
+    }
+    const std::array<float, 3> camera{0.0F, 0.0F, 18.0F};
+    camera_position_ = camera;
+    camera_yaw_ = -1.570796327F;
+    camera_pitch_ = 0.0F;
+    const auto view = arut::rendering::look_at_rh(camera, {0.0F, 0.0F, 17.0F}, {0.0F, 1.0F, 0.0F});
     const auto projection = arut::rendering::perspective_rh_zo(0.785398163F,
-        static_cast<float>(extent_.width) / static_cast<float>(std::max(1U, extent_.height)), 0.1F, 100.0F);
+        static_cast<float>(extent_.width) / static_cast<float>(std::max(1U, extent_.height)), 0.1F, 180.0F);
     const auto view_projection = arut::rendering::multiply(projection, view);
     const auto frustum = arut::rendering::extract_vulkan_frustum(view_projection);
-
-    std::vector<arut::rendering::GpuVisibilityInstance> source_instances;
     std::vector<arut::rendering::Mat4> cpu_visible_instances;
-    source_instances.reserve(specs.size());
-    cpu_visible_instances.reserve(specs.size());
-    for (const auto& spec : specs) {
-        const float radius = spec.scale * 0.866025404F;
-        const auto model = make_instance(spec.x, spec.scale, spec.yaw);
-        arut::rendering::GpuVisibilityInstance source{};
-        source.bounds = {spec.x, 0.0F, 0.0F, radius};
-        source.model = model.value;
-        source_instances.push_back(source);
-    }
-    if (!arut::rendering::compact_visible_instances_cpu(
-            frustum, source_instances, cpu_visible_instances)) {
+    cpu_visible_instances.reserve(visibility_instances_.size());
+    if (!arut::rendering::compact_visible_instances_cpu(frustum, visibility_instances_, cpu_visible_instances)) {
         log_error("CPU visibility reference compaction failed");
         return false;
     }
-    if (source_instances.empty() || cpu_visible_instances.empty()) {
-        log_error("CPU visibility fallback removed every PBR test instance");
+    if (cpu_visible_instances.empty()) {
+        log_error("CPU visibility reference removed every stress-scene instance");
         return false;
     }
-
     for (std::size_t plane_index = 0; plane_index < frustum.planes.size(); ++plane_index) {
         const auto& plane = frustum.planes[plane_index];
         visibility_frustum_planes_[plane_index * 4U + 0U] = plane.normal[0];
@@ -1890,9 +1901,7 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         visibility_frustum_planes_[plane_index * 4U + 2U] = plane.normal[2];
         visibility_frustum_planes_[plane_index * 4U + 3U] = plane.distance;
     }
-    visibility_source_instance_count_ = static_cast<std::uint32_t>(source_instances.size());
-
-    const VkDeviceSize input_bytes = source_instances.size() * sizeof(arut::rendering::GpuVisibilityInstance);
+    const VkDeviceSize input_bytes = visibility_instances_.size() * sizeof(arut::rendering::GpuVisibilityInstance);
     if (compute_queue_supported_) {
         if (!create_buffer(input_bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                            visibility_input_buffer_, visibility_input_memory_)) {
@@ -1909,14 +1918,14 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
                 visibility_input_memory_ = VK_NULL_HANDLE;
                 compute_queue_supported_ = false;
             } else {
-                std::memcpy(mapped, source_instances.data(), static_cast<std::size_t>(input_bytes));
+                std::memcpy(mapped, visibility_instances_.data(), static_cast<std::size_t>(input_bytes));
                 vkUnmapMemory(device_, visibility_input_memory_);
             }
         }
     }
 
     const VkDeviceSize instance_capacity_bytes =
-        source_instances.size() * sizeof(arut::rendering::Mat4);
+        visibility_instances_.size() * sizeof(arut::rendering::Mat4);
     const VkBufferUsageFlags instance_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
         (compute_queue_supported_ ? VK_BUFFER_USAGE_STORAGE_BUFFER_BIT : 0U);
     if (!create_buffer(instance_capacity_bytes, instance_usage,
@@ -1951,7 +1960,7 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
 
     char message[192]{};
     std::snprintf(message, sizeof(message),
-                  "PBR mesh: vertices=%zu indices=%u source_instances=%u CPU_visible=%u culled=%u",
+                  "STRESS SCENE: vertices=%zu indices=%u source_instances=%u CPU_visible=%u culled=%u grid=20x10x25",
                   mesh.vertices.size(), cube_index_count_, visibility_source_instance_count_,
                   instance_count_, visibility_source_instance_count_ - instance_count_);
     arut_android_log(ANDROID_LOG_INFO, message);
@@ -2565,11 +2574,108 @@ bool AndroidRenderer::create_commands_and_sync() noexcept {
     return true;
 }
 
+void AndroidRenderer::set_touch_input(std::int32_t action, std::int32_t pointer_id,
+                                     float x, float y, float width, float height) noexcept {
+    if (action == 0) {
+        if (x < width * 0.48F && joystick_pointer_ < 0) {
+            joystick_pointer_ = pointer_id;
+            joystick_origin_x_ = x;
+            joystick_origin_y_ = y;
+            joystick_x_ = 0.0F;
+            joystick_y_ = 0.0F;
+        } else if (x >= width * 0.48F && look_pointer_ < 0) {
+            look_pointer_ = pointer_id;
+            look_last_x_ = x;
+            look_last_y_ = y;
+        }
+        return;
+    }
+    if (action == 2) {
+        if (pointer_id == joystick_pointer_) {
+            joystick_pointer_ = -1;
+            joystick_x_ = joystick_y_ = 0.0F;
+        }
+        if (pointer_id == look_pointer_) look_pointer_ = -1;
+        return;
+    }
+    if (action != 1) return;
+    if (pointer_id == joystick_pointer_) {
+        const float dx = x - joystick_origin_x_;
+        const float dy = y - joystick_origin_y_;
+        const float distance = std::max(1.0F, std::sqrt(dx * dx + dy * dy));
+        const float magnitude = std::min(1.0F, distance / joystick_radius_);
+        joystick_x_ = (dx / distance) * magnitude;
+        joystick_y_ = (-dy / distance) * magnitude;
+    } else if (pointer_id == look_pointer_) {
+        camera_yaw_ += (x - look_last_x_) * 0.0045F;
+        camera_pitch_ = std::clamp(camera_pitch_ - (y - look_last_y_) * 0.0045F, -1.45F, 1.45F);
+        look_last_x_ = x;
+        look_last_y_ = y;
+    }
+}
+
+void AndroidRenderer::update_stress_camera(float delta_seconds) noexcept {
+    const float dt = std::clamp(delta_seconds, 0.0F, 0.05F);
+    const float cosine_pitch = std::cos(camera_pitch_);
+    const std::array<float, 3> forward{
+        std::cos(camera_yaw_) * cosine_pitch,
+        std::sin(camera_pitch_),
+        std::sin(camera_yaw_) * cosine_pitch
+    };
+    const std::array<float, 3> right{-std::sin(camera_yaw_), 0.0F, std::cos(camera_yaw_)};
+    constexpr float speed = 9.0F;
+    for (std::size_t i = 0; i < 3U; ++i) {
+        camera_position_[i] += (forward[i] * joystick_y_ + right[i] * joystick_x_) * speed * dt;
+    }
+    const std::array<float, 3> target{
+        camera_position_[0] + forward[0],
+        camera_position_[1] + forward[1],
+        camera_position_[2] + forward[2]
+    };
+    const auto view = arut::rendering::look_at_rh(camera_position_, target, {0.0F, 1.0F, 0.0F});
+    const auto projection = arut::rendering::perspective_rh_zo(0.785398163F,
+        static_cast<float>(extent_.width) / static_cast<float>(std::max(1U, extent_.height)), 0.1F, 180.0F);
+    const auto view_projection = arut::rendering::multiply(projection, view);
+    const auto frustum = arut::rendering::extract_vulkan_frustum(view_projection);
+    std::vector<arut::rendering::Mat4> cpu_visible;
+    cpu_visible.reserve(visibility_instances_.size());
+    if (!arut::rendering::compact_visible_instances_cpu(frustum, visibility_instances_, cpu_visible)) {
+        log_error("Stress camera CPU visibility reference failed");
+        return;
+    }
+    cpu_expected_visible_ = static_cast<std::uint32_t>(cpu_visible.size());
+    for (std::size_t plane = 0; plane < frustum.planes.size(); ++plane) {
+        const auto& p = frustum.planes[plane];
+        visibility_frustum_planes_[plane * 4U + 0U] = p.normal[0];
+        visibility_frustum_planes_[plane * 4U + 1U] = p.normal[1];
+        visibility_frustum_planes_[plane * 4U + 2U] = p.normal[2];
+        visibility_frustum_planes_[plane * 4U + 3U] = p.distance;
+    }
+    // FrameData layout: viewProjection[0..63], cameraPosition[64..79], cameraForward[80..95].
+    void* mapped = nullptr;
+    const VkResult map_result = vkMapMemory(device_, frame_uniform_memory_, 0, 96U, 0, &mapped);
+    if (map_result != VK_SUCCESS || !mapped) {
+        log_error("Map camera frame data failed", map_result);
+        return;
+    }
+    std::memcpy(mapped, view_projection.value.data(), sizeof(float) * 16U);
+    std::memcpy(static_cast<std::byte*>(mapped) + 64U, camera_position_.data(), sizeof(float) * 3U);
+    static_cast<float*>(mapped)[19] = 1.0F;
+    std::memcpy(static_cast<std::byte*>(mapped) + 80U, forward.data(), sizeof(float) * 3U);
+    static_cast<float*>(mapped)[23] = 0.0F;
+    vkUnmapMemory(device_, frame_uniform_memory_);
+}
+
 bool AndroidRenderer::draw_frame() noexcept {
     if (!ready()) return false;
     const auto cpu_frame_start = std::chrono::steady_clock::now();
+    const auto now = std::chrono::steady_clock::now();
+    const float delta_seconds = last_camera_update_.time_since_epoch().count() == 0
+        ? 0.016F : std::chrono::duration<float>(now - last_camera_update_).count();
+    last_camera_update_ = now;
     VkResult result = vkWaitForFences(device_, 1, &in_flight_, VK_TRUE, UINT64_MAX);
     if (result != VK_SUCCESS) return false;
+    update_stress_camera(delta_seconds);
     if (gpu_visibility_enabled_) {
         void* mapped = nullptr;
         const VkResult map_result = vkMapMemory(device_, indirect_draw_memory_, 0,
@@ -2579,6 +2685,22 @@ bool AndroidRenderer::draw_frame() noexcept {
             std::memcpy(&completed, mapped, sizeof(completed));
             vkUnmapMemory(device_, indirect_draw_memory_);
             last_visible_objects_ = completed.instance_count;
+            ++culling_parity_checks_;
+            if (completed.instance_count != cpu_expected_visible_) {
+                ++culling_parity_mismatches_;
+                if (culling_parity_mismatches_ < 5U || (culling_parity_mismatches_ % 120U) == 0U) {
+                    char parity[192]{};
+                    std::snprintf(parity, sizeof(parity), "GPU_CULL_PARITY mismatch gpu_visible=%u cpu_visible=%u source=%u",
+                        completed.instance_count, cpu_expected_visible_, visibility_source_instance_count_);
+                    arut_android_log(ANDROID_LOG_WARN, parity);
+                }
+            } else if ((culling_parity_checks_ % 120U) == 0U) {
+                char parity[192]{};
+                std::snprintf(parity, sizeof(parity), "GPU_CULL_PARITY pass gpu_visible=%u cpu_visible=%u source=%u checks=%llu",
+                    completed.instance_count, cpu_expected_visible_, visibility_source_instance_count_,
+                    static_cast<unsigned long long>(culling_parity_checks_));
+                arut_android_log(ANDROID_LOG_INFO, parity);
+            }
             last_triangles_ = (cube_index_count_ / 3U) * completed.instance_count;
         } else {
             log_error("Read completed GPU visibility count failed; retaining last profile counters", map_result);

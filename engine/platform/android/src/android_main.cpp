@@ -192,12 +192,26 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
  if (!state || !event) return 0;
  ++state->input_events;
  if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_MOTION) {
-  const auto action = AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
-  if (action == AMOTION_EVENT_ACTION_DOWN || action == AMOTION_EVENT_ACTION_POINTER_DOWN ||
-      action == AMOTION_EVENT_ACTION_UP || action == AMOTION_EVENT_ACTION_POINTER_UP) {
-   const std::size_t p = static_cast<std::size_t>((AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
-   log_info("Touch action=%d pointer=%zu x=%.1f y=%.1f", action, p,
-            AMotionEvent_getX(event, p), AMotionEvent_getY(event, p));
+  const auto raw_action = AMotionEvent_getAction(event);
+  const auto action = raw_action & AMOTION_EVENT_ACTION_MASK;
+  const auto pointer_index = static_cast<std::size_t>((raw_action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
+  const auto pointer_count = AMotionEvent_getPointerCount(event);
+  const float width = static_cast<float>(ANativeWindow_getWidth(app->window));
+  const float height = static_cast<float>(ANativeWindow_getHeight(app->window));
+  if (action == AMOTION_EVENT_ACTION_DOWN || action == AMOTION_EVENT_ACTION_POINTER_DOWN) {
+   const auto id = AMotionEvent_getPointerId(event, pointer_index);
+   state->renderer.set_touch_input(0, id, AMotionEvent_getX(event, pointer_index),
+                                   AMotionEvent_getY(event, pointer_index), width, height);
+  } else if (action == AMOTION_EVENT_ACTION_MOVE) {
+   for (std::size_t p = 0; p < pointer_count; ++p) {
+    state->renderer.set_touch_input(1, AMotionEvent_getPointerId(event, p),
+                                    AMotionEvent_getX(event, p), AMotionEvent_getY(event, p), width, height);
+   }
+  } else if (action == AMOTION_EVENT_ACTION_UP || action == AMOTION_EVENT_ACTION_POINTER_UP ||
+             action == AMOTION_EVENT_ACTION_CANCEL) {
+   const auto id = AMotionEvent_getPointerId(event, pointer_index);
+   state->renderer.set_touch_input(2, id, AMotionEvent_getX(event, pointer_index),
+                                   AMotionEvent_getY(event, pointer_index), width, height);
   }
   return 1;
  }
