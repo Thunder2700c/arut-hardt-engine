@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstddef>
 #include <span>
 #include <vector>
 
@@ -29,6 +30,11 @@ struct alignas(16) EnvironmentProbeGpuData final {
     std::array<std::int32_t, 4> priorities{};
     std::array<std::uint32_t, 4> metadata{}; // x = active probe count
 };
+static_assert(alignof(EnvironmentProbeGpuData) == 16U);
+static_assert(offsetof(EnvironmentProbeGpuData, bounds_min_blend) == 0U);
+static_assert(offsetof(EnvironmentProbeGpuData, bounds_max) == 64U);
+static_assert(offsetof(EnvironmentProbeGpuData, priorities) == 128U);
+static_assert(offsetof(EnvironmentProbeGpuData, metadata) == 144U);
 static_assert(sizeof(EnvironmentProbeGpuData) == 160U);
 
 [[nodiscard]] inline bool build_environment_probe_gpu_data(
@@ -75,7 +81,7 @@ static_assert(sizeof(EnvironmentProbeGpuData) == 160U);
                 !std::isfinite(b.min_z) || !std::isfinite(b.max_x) ||
                 !std::isfinite(b.max_y) || !std::isfinite(b.max_z) ||
                 b.min_x > b.max_x || b.min_y > b.max_y || b.min_z > b.max_z ||
-                !std::isfinite(probe.blend_distance)) continue;
+                !std::isfinite(probe.blend_distance) || probe.blend_distance < 0.0F) continue;
 
             const float dx = std::max({b.min_x - x, 0.0F, x - b.max_x});
             const float dy = std::max({b.min_y - y, 0.0F, y - b.max_y});
