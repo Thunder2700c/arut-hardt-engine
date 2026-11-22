@@ -1,5 +1,6 @@
 #include "arut/core/version.hpp"
 #include "arut/core/ecs.hpp"
+#include "arut/core/scene_graph.hpp"
 #include "arut/rendering/pbr_brdf.hpp"
 #include "arut/rendering/mesh.hpp"
 #include "arut/rendering/image.hpp"
@@ -55,6 +56,32 @@ int main() {
     assert(stale_handle_rejected);
     assert(world.entity_count() == 2U);
 
+    arut::core::SceneGraph scene;
+    const auto root_node = scene.create();
+    const auto child_node = scene.create(root_node);
+    const auto leaf_node = scene.create(child_node);
+    auto root_transform = arut::core::TransformMatrix::identity();
+    root_transform.value[12] = 10.0F;
+    auto child_transform = arut::core::TransformMatrix::identity();
+    child_transform.value[13] = 3.0F;
+    auto leaf_transform = arut::core::TransformMatrix::identity();
+    leaf_transform.value[14] = -2.0F;
+    assert(scene.set_local_transform(root_node, root_transform));
+    assert(scene.set_local_transform(child_node, child_transform));
+    assert(scene.set_local_transform(leaf_node, leaf_transform));
+    const auto leaf_world = scene.world_transform(leaf_node);
+    assert(leaf_world);
+    assert(near(leaf_world->value[12], 10.0F));
+    assert(near(leaf_world->value[13], 3.0F));
+    assert(near(leaf_world->value[14], -2.0F));
+    assert(!scene.set_parent(root_node, leaf_node)); // Reject hierarchy cycles.
+    assert(scene.parent(child_node) == root_node);
+    assert(scene.destroy_subtree(child_node));
+    assert(!scene.alive(child_node) && !scene.alive(leaf_node));
+    assert(scene.alive(root_node) && scene.node_count() == 1U);
+    const auto recycled_node = scene.create(root_node);
+    assert(recycled_node.index == child_node.index);
+    assert(recycled_node.generation != child_node.generation);
     constexpr auto current = arut::core::version();
     static_assert(current.major == 0);
     static_assert(current.minor == 1);
