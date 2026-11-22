@@ -9,6 +9,7 @@
 #include "arut/rendering/gpu_visibility.hpp"
 #include <array>
 #include <cstdint>
+#include <cstddef>
 #include <vector>
 
 namespace arut::rendering::vulkan {
@@ -28,6 +29,13 @@ public:
     bool ready() const noexcept { return device_ != VK_NULL_HANDLE && swapchain_ != VK_NULL_HANDLE; }
 
 private:
+    struct CubeUploadMip final {
+        std::uint32_t width{0};
+        std::uint32_t height{0};
+        const void* pixels{nullptr};
+        std::size_t byte_size{0};
+    };
+
     bool create_instance() noexcept;
     bool create_surface(ANativeWindow* window) noexcept;
     bool select_device() noexcept;
@@ -49,6 +57,10 @@ private:
     bool create_shadow_pipeline() noexcept;
     bool create_environment_cubemap() noexcept;
     bool upload_environment_cube(const std::vector<arut::rendering::EnvironmentCubeMip>& mips, VkImage& image, VkDeviceMemory& memory, VkImageView& view, VkSampler& sampler, std::uint32_t& mip_levels) noexcept;
+    bool upload_environment_cube_rgba16f(const std::vector<arut::rendering::EnvironmentCubeF16Mip>& mips, VkImage& image, VkDeviceMemory& memory, VkImageView& view, VkSampler& sampler, std::uint32_t& mip_levels) noexcept;
+    bool upload_environment_cube_raw(const std::vector<CubeUploadMip>& mips, VkFormat format, VkDeviceSize bytes_per_pixel,
+                                     VkImage& image, VkDeviceMemory& memory, VkImageView& view,
+                                     VkSampler& sampler, std::uint32_t& mip_levels) noexcept;
     bool create_brdf_lut() noexcept;
     bool create_fallback_texture() noexcept;
     bool load_texture_asset(const char* path, VkFormat format, bool source_is_srgb,
