@@ -46,7 +46,7 @@ Texture cache/handles, async decode/upload queues, KTX2, more production-resolut
 Quality presets select 1/2/4 active cascades and 512/512/1024/1536 map resolutions for Low/Medium/High/Ultra. Light-space projection translation is texel-snapped and adjacent cascades cross-fade over the final 10% of each split. Spot/point-light shadows remain pending.
 
 ## Profiling
-The runtime profile snapshot now includes CPU frame time, separate GPU visibility-compute and cascaded-shadow durations, total GPU frame time when supported, draw calls, visible instances and triangle count. The GPU timestamp query pool is optional and disabled when the selected queue does not expose valid timestamp bits. GPU memory totals and detailed per-pass/per-material counters are not yet implemented.
+The runtime profile snapshot includes CPU frame time, separate GPU visibility-compute, cascaded-shadow and main-scene durations, total GPU frame time when supported, draw calls, visible instances and triangle count. The GPU timestamp query pool is optional and disabled when the selected queue does not expose valid timestamp bits. Engine-owned Vulkan allocations are tracked separately from optional driver-reported device-local heap usage/budget through VK_EXT_memory_budget; unsupported devices report that budget data is unavailable. Per-material timing remains pending.
 
 ## Validation status and limits
 - Host CI compiles PBR, shadow and compute-culling GLSL and runs C++/Rust checks.
