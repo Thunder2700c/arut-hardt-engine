@@ -1,4 +1,5 @@
 #include "arut/core/version.hpp"
+#include "arut/core/ecs.hpp"
 #include "arut/rendering/pbr_brdf.hpp"
 #include "arut/rendering/mesh.hpp"
 #include "arut/rendering/image.hpp"
@@ -26,6 +27,34 @@ bool near(float a, float b, float epsilon = 1.0e-4F) {
 }
 
 int main() {
+    struct Position final { float x{}, y{}, z{}; };
+    struct Velocity final { float x{}, y{}, z{}; };
+    arut::core::World world;
+    const auto first_entity = world.create();
+    const auto second_entity = world.create();
+    assert(world.alive(first_entity) && world.alive(second_entity));
+    world.emplace<Position>(first_entity, Position{1.0F, 2.0F, 3.0F});
+    world.emplace<Velocity>(first_entity, Velocity{0.5F, 0.0F, -0.5F});
+    world.emplace<Position>(second_entity, Position{4.0F, 5.0F, 6.0F});
+    assert(world.entity_count() == 2U);
+    assert(world.has<Position>(first_entity) && world.has<Velocity>(first_entity));
+    assert(!world.has<Velocity>(second_entity));
+    world.get<Position>(first_entity).x += world.get<Velocity>(first_entity).x;
+    assert(near(world.get<Position>(first_entity).x, 1.5F));
+    assert(world.remove<Velocity>(first_entity));
+    assert(!world.has<Velocity>(first_entity));
+    assert(world.destroy(first_entity));
+    assert(!world.alive(first_entity));
+    const auto recycled_entity = world.create();
+    assert(recycled_entity.index == first_entity.index);
+    assert(recycled_entity.generation != first_entity.generation);
+    assert(!world.has<Position>(recycled_entity));
+    bool stale_handle_rejected = false;
+    try { (void)world.get<Position>(first_entity); }
+    catch (const std::invalid_argument&) { stale_handle_rejected = true; }
+    assert(stale_handle_rejected);
+    assert(world.entity_count() == 2U);
+
     constexpr auto current = arut::core::version();
     static_assert(current.major == 0);
     static_assert(current.minor == 1);
