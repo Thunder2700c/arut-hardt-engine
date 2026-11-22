@@ -253,6 +253,12 @@ void run(android_app* app) {
     metrics_seconds, static_cast<double>(frame_count) / metrics_seconds,
     frame_ms_total / static_cast<double>(frame_count), frame_ms_max, frame_count);
    else log_info("PERF window=%.2fs renderer_idle=true", metrics_seconds);
+   if (state.renderer.ready()) {
+    const auto render = state.renderer.profile_snapshot();
+    log_info("RENDER_PROFILE cpu_frame_ms=%.3f gpu_frame_ms=%.3f gpu_timestamps=%s draw_calls=%u visible_objects=%u triangles=%u",
+     render.cpu_frame_ms, render.gpu_frame_ms, render.gpu_timing_available ? "available" : "unavailable",
+     render.draw_calls, render.visible_objects, render.triangles);
+   }
    metrics_start = metrics_now; frame_count = 0; frame_ms_total = 0.0; frame_ms_max = 0.0;
   }
  }
