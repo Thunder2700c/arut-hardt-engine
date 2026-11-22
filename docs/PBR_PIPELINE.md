@@ -1,37 +1,49 @@
 # Mobile PBR Pipeline
 
-Status: mobile PBR GLSL is compiled in host CI and packaged by the explicitly triggered Android workflow. Android renderer source now creates the PBR pipeline, descriptors, frame/material uniforms, real decoded sRGB base-colour PNG, CPU-generated mip chains, Vulkan texture upload, indexed cube geometry and instanced draw path. Physical-device validation remains deferred.
+Status: implementation in progress. The Android Vulkan source now includes a forward metallic-roughness PBR pipeline, a bundled sRGB base-colour texture with CPU-generated mip levels and Vulkan upload, instanced geometry, CPU frustum culling, a single directional shadow map and optional GPU timestamp profiling. Host and Android ARM64 native compilation are checked by CI without building an APK. Physical-device rendering remains deferred.
 
-## Rendering model
-The initial Android path is a forward metallic-roughness renderer. It uses linear-light material and light values, tangent-space normal maps, a GGX/Trowbridge-Reitz normal distribution, Schlick Fresnel, Schlick-GGX geometry and Cook-Torrance direct lighting. The fragment shader applies an ACES fitted tone curve and an output transfer suitable for the current UNORM swapchain selection.
+## Shading model
+The forward shader uses linear-light material and lighting inputs, tangent-space normal mapping, GGX/Trowbridge-Reitz normal distribution, Schlick Fresnel, Schlick-GGX/Smith geometry, Cook-Torrance direct lighting and ACES tone mapping. Base-colour uses an sRGB image format; metallic/roughness and normal maps remain fallback-bound until those assets are added. The output applies a transfer function for the current UNORM swapchain path.
 
-## Shader files
-- `engine/rendering/shaders/mobile_pbr_forward.vert`: transforms position, normal and tangent into world space and projects vertices.
-- `engine/rendering/shaders/mobile_pbr_forward.frag`: material factors/maps, alpha mask, normal mapping, direct directional lighting, emissive and tone mapping.
+## Shader and descriptor contract
+- `mobile_pbr_forward.vert`: mesh attributes at locations 0–3 (position, normal, tangent, UV) and per-instance model matrix columns at locations 4–7.
+- `mobile_pbr_forward.frag`: frame set 0 binding 0 uniform block, directional shadow comparison sampler at set 0 binding 1, material set 1 binding 0 uniform and sampled textures at bindings 1–3.
+- Frame uniform contains view-projection, camera position, directional-light direction/radiance and light view-projection matrices.
+- The shadow depth vertex shader uses the same frame uniform and instance transform stream.
+- The material uses a model-matrix instance stream rather than a per-object push constant.
 
-## Descriptor contract (shader source)
-- Set 0, binding 0: frame uniform block (`viewProjection`, camera position, directional light direction and radiance).
-- Set 1, binding 0: material uniform block (base colour, emissive/metallic, roughness/normal-scale/occlusion-strength/alpha-cutoff, flags).
-- Set 1, bindings 1–3: base-colour, tangent-space normal and metallic-roughness textures.
-- Push constants: per-object model matrix.
-- Vertex locations: position 0, normal 1, tangent 2, UV 3.
+The shader interface is currently an engine-internal prototype, not a stable external material asset format.
 
-The shader contract is a starting point, not yet a stable public asset format. Vulkan descriptor layouts, pipeline layouts, shader compilation and actual vertex buffer formats must be implemented and validated before runtime use.
+## Texture pipeline
+- stb_image v2.34 is pinned under third_party/stb; the decoder enables PNG, JPEG, BMP and TGA input and normalizes to RGBA8.
+- Decode is bounded to 8192 pixels per side and 16 million total pixels; a texture asset larger than 64 MiB is rejected before decoding.
+- CPU mip generation filters sRGB colour channels in linear light and treats alpha as linear.
+- Vulkan uploads mip levels through a staging buffer, transitions to shader-read layout, creates a view and a sampler.
+- A bundled sRGB base-colour PNG exercises this path. Normal and metallic-roughness bindings still use a white fallback texture.
 
-## CPU reference
-`engine/rendering/include/arut/rendering/pbr_brdf.hpp` supplies deterministic host-side reference functions for the BRDF and ACES curve. It exists for unit testing and future numerical comparisons; it is not a substitute for GPU shader validation.
+Texture cache/handles, async decode/upload queues, more texture maps, KTX2 and texture streaming are pending.
 
-## Known limitations
-- The Vulkan renderer now has an asset-backed first-triangle pipeline, one interleaved vertex buffer and a depth attachment. The PBR shaders are now connected to the active indexed-cube draw path. The original triangle pipeline remains only as a bootstrap/reference path.
-- Ambient illumination is a temporary constant; image-based lighting, irradiance/prefiltered environment maps and BRDF integration LUT are not implemented.
-- The material contract has an occlusion-strength scalar but no occlusion texture descriptor yet. The shader does not pretend that a scalar alone is an occlusion map.
-- Per-instance model-matrix vertex input and indexed instanced drawing are implemented. Shadow maps, cascades, IBL environment maps, CPU/GPU visibility culling and local lights remain pending.
-- Shader compilation is not part of CI yet. Do not mark shader code as compiled until a GLSL compiler and validation step are added.
+## Shadows and visibility
+- One directional depth map is created when a depth format supports both depth attachment and sampled-image use.
+- The shadow pass draws the same indexed instanced mesh using an orthographic light camera.
+- The PBR fragment shader uses a depth-comparison sampler with 3x3 PCF and a slope-dependent bias.
+- When the selected depth format cannot be used as a depth attachment but is sampleable, a 1x1 fully-lit shadow fallback is uploaded instead.
+- CPU view-frustum extraction uses Vulkan zero-to-one clip depth; bounding-sphere tests cull instances before the instance buffer upload.
 
-## Integration order
-1. Complete Phase 2: verify the active indexed PBR cube scene on a physical Android device during the agreed testing phase.
-2. Add reproducible GLSL-to-SPIR-V compilation and validate shader interfaces.
-3. Create descriptor set layouts, pipeline layout, render state and graphics pipeline.
-4. Render a known material test mesh and compare GPU results with CPU reference cases.
-5. Add texture color-space handling, AO, IBL, shadows, instancing and profiling incrementally.
-6. Measure and tune quality presets on more than one Android GPU family.
+Cascaded shadows, resolution selection from quality tiers, cascade stabilization, spot/point-light shadows and GPU/indirect visibility are pending.
+
+## Profiling
+The runtime profile snapshot now includes CPU frame time, GPU timestamp duration when supported, shadow-pass GPU duration, draw calls, visible instances and triangle count. The GPU timestamp query pool is optional and disabled when the selected queue does not expose valid timestamp bits. GPU memory totals and detailed per-pass/per-material counters are not yet implemented.
+
+## Validation status and limits
+- Host CI compiles PBR and shadow GLSL and runs C++/Rust checks.
+- CI also compiles the Android ARM64 native library without running Gradle or building an APK.
+- No physical Android device has yet validated shadow-map sampling, visual energy behaviour, image uploads or performance.
+- IBL (irradiance, prefiltered environment maps and BRDF LUT), ambient occlusion texture, local lights, cascades and multi-GPU tuning remain future work.
+
+## Remaining integration work
+1. Add normal and metallic-roughness sample assets and real per-material descriptor binding.
+2. Implement IBL using a defined environment-map and prefiltered mip contract.
+3. Add cascade shadow quality tiers and light-space stabilization.
+4. Add GPU/indirect visibility, GPU-memory accounting and per-pass profiling.
+5. During the separately agreed testing stage, compare GPU output with the CPU BRDF reference on two Android GPU families.
