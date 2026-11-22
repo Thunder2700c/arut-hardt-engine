@@ -32,15 +32,19 @@ Texture cache/handles, async decode/upload queues, KTX2, more production-resolut
 - Cascade selection uses camera-forward view depth and split distances; the shader samples the selected depth-array layer with 3x3 PCF and slope-dependent bias.
 - The PBR fragment shader uses a depth-array comparison sampler with 3x3 PCF and a slope-dependent bias.
 - When the selected depth format cannot be used as a depth attachment but is sampleable, a 1x1 fully-lit shadow fallback is uploaded instead.
-- CPU view-frustum extraction uses Vulkan zero-to-one clip depth; bounding-sphere tests cull instances before the instance buffer upload.
+- CPU view-frustum extraction uses Vulkan zero-to-one clip depth; bounding-sphere tests provide the fallback path.
+- When the selected graphics queue supports compute and the shader/pipeline/limits are available, a compute dispatch tests source spheres, compacts visible model matrices into the vertex-rate storage buffer, and atomically updates the indexed indirect command's instance count.
+- Explicit host-to-compute, compute-to-vertex/indirect and compute-to-host barriers protect the shared buffers. The previous frame fence is waited before host readback of the completed visible count.
+- Devices without compute support or a valid compute pipeline keep the CPU-generated instance buffer and indirect command.
+- The current scene contains only three sample instances, so the compute path validates the architecture but does not establish a performance win.
 
-Quality presets select 1/2/4 active cascades and 512/512/1024/1536 map resolutions for Low/Medium/High/Ultra. Light-space projection translation is texel-snapped and adjacent cascades cross-fade over the final 10% of each split. Spot/point-light shadows and GPU/indirect visibility remain pending.
+Quality presets select 1/2/4 active cascades and 512/512/1024/1536 map resolutions for Low/Medium/High/Ultra. Light-space projection translation is texel-snapped and adjacent cascades cross-fade over the final 10% of each split. Spot/point-light shadows remain pending.
 
 ## Profiling
-The runtime profile snapshot now includes CPU frame time, GPU timestamp duration when supported, shadow-pass GPU duration, draw calls, visible instances and triangle count. The GPU timestamp query pool is optional and disabled when the selected queue does not expose valid timestamp bits. GPU memory totals and detailed per-pass/per-material counters are not yet implemented.
+The runtime profile snapshot now includes CPU frame time, separate GPU visibility-compute and cascaded-shadow durations, total GPU frame time when supported, draw calls, visible instances and triangle count. The GPU timestamp query pool is optional and disabled when the selected queue does not expose valid timestamp bits. GPU memory totals and detailed per-pass/per-material counters are not yet implemented.
 
 ## Validation status and limits
-- Host CI compiles PBR and shadow GLSL and runs C++/Rust checks.
+- Host CI compiles PBR, shadow and compute-culling GLSL and runs C++/Rust checks.
 - The CPU BRDF reference has a hemispherical energy-budget regression across metallic values 0, 0.5 and 1.0 and roughness values 0.1, 0.5 and 0.9.
 - The split-sum LUT is generated on CPU with Hammersley/GGX sampling (64x64, 128 samples per texel), uploaded through Vulkan and sampled by the PBR fragment shader.
 
