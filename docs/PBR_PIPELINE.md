@@ -22,7 +22,7 @@ The shader interface is currently an engine-internal prototype, not a stable ext
 - HDR decode is bounded to the same 8192-pixel side and 16-million-pixel limits; malformed, non-finite and negative decoded values are rejected.
 - Linear equirectangular HDR images can be converted on CPU into six RGBA32F cubemap faces. Longitude sampling wraps across the seam, latitude sampling clamps at the poles, and radiance above 1.0 remains unclamped.
 - Float HDR cubemaps retain radiance through CPU GGX specular roughness prefiltering and cosine-convolved diffuse irradiance. The results can be converted to validated IEEE-754 binary16 RGBA16F data; values outside the finite half-float range are rejected rather than clamped.
-- Android optionally loads `app/src/main/assets/environments/default.hdr`, uploads the specular and diffuse cubemaps as `VK_FORMAT_R16G16B16A16_SFLOAT`, and binds them through the existing PBR cubemap descriptors. If that asset is absent or the GPU lacks sampled/transfer support for RGBA16F, the renderer falls back to the procedural RGBA8 environment. No sample HDR file is currently bundled.
+- Android optionally loads `app/src/main/assets/environments/default.hdr`, uploads the specular and diffuse cubemaps as `VK_FORMAT_R16G16B16A16_SFLOAT`, and binds them through the existing PBR cubemap descriptors. If that asset is absent or the GPU lacks sampled/transfer support for RGBA16F, the renderer falls back to the procedural RGBA8 environment. The repository packages `environments/default.hdr` and two local probe HDR assets.
 - GPU environment-probe arrays/storage, per-object probe selection and runtime multi-probe blending remain pending.
 - Decode is bounded to 8192 pixels per side and 16 million total pixels; a texture asset larger than 64 MiB is rejected before decoding.
 - CPU mip generation filters sRGB colour channels in linear light and treats alpha as linear.
@@ -54,7 +54,7 @@ The runtime profile snapshot includes CPU frame time, separate GPU visibility-co
 - The split-sum LUT is generated on CPU with Hammersley/GGX sampling (64x64, 128 samples per texel), uploaded through Vulkan and sampled by the PBR fragment shader.
 
 - CI also compiles the Android ARM64 native library without running Gradle or building an APK.
-- No physical Android device has yet validated shadow-map sampling, visual energy behaviour, image uploads or performance.
+- The Galaxy S23 FE (Exynos 2200 / Xclipse 920) has been used for runtime stress testing. User-provided logs report GPU compute culling, HDR/probe loading, profile timings and GPU/CPU visible-count parity checks. A visual GPU-shader-versus-CPU-BRDF reference comparison and a second Android GPU family are still required for the broader validation gate.
 - The procedural environment cube has GGX importance-sampled specular roughness mips. Diffuse irradiance uses a separate cosine-convolved cubemap.
 - A CPU environment-probe influence contract computes smooth AABB edge fades, normalizes overlapping probe weights and resolves overlaps by priority.
 - Android uploads a separate four-slot std140 probe uniform buffer. The PBR fragment shader selects the highest-priority probes with non-zero AABB influence, normalizes their smooth edge weights, and blends their specular and diffuse cubemaps using fixed-index accesses into four-element descriptor arrays; no optional descriptor-indexing feature is required.
@@ -65,4 +65,4 @@ The runtime profile snapshot includes CPU frame time, separate GPU visibility-co
 2. Add scene/runtime probe registration and per-object probe selection, provide representative independent probe assets, and validate multi-probe blending and RGBA16F rendering on device.
 3. Add cascade stabilization, split blending and local-light shadows.
 4. Add GPU/indirect visibility, GPU-memory accounting and per-pass profiling.
-5. During the separately agreed testing stage, compare GPU output with the CPU BRDF reference on two Android GPU families.
+5. Compare GPU shader output against the CPU BRDF reference and validate graceful quality fallback on a second Android GPU family.
