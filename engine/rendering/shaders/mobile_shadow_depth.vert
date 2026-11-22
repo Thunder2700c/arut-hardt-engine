@@ -12,10 +12,16 @@ layout(set = 0, binding = 0, std140) uniform FrameData {
     vec4 cameraPosition;
     vec4 directionalLightDirection;
     vec4 directionalLightRadiance;
-    mat4 lightViewProjection;
+    mat4 lightViewProjection[4];
+    vec4 cascadeSplits;
 } frameData;
+
+layout(push_constant) uniform ShadowCascadeData {
+    uint cascadeIndex;
+} shadowCascade;
 
 void main() {
     mat4 model = mat4(inModelColumn0, inModelColumn1, inModelColumn2, inModelColumn3);
-    gl_Position = frameData.lightViewProjection * model * vec4(inPosition, 1.0);
+    gl_Position = frameData.lightViewProjection[shadowCascade.cascadeIndex] *
+                  model * vec4(inPosition, 1.0);
 }
