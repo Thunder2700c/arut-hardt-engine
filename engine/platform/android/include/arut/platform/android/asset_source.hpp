@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
+#include <string>
 #include <utility>
 
 namespace arut::platform::android {
