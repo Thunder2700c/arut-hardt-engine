@@ -134,6 +134,57 @@ struct Vec3 final { float x, y, z; };
     return normalize(tangent * half_tangent.x + bitangent * half_tangent.y + normal * half_tangent.z);
 }
 
+
+[[nodiscard]] std::array<float, 4> sample_cube_f32(
+    const EnvironmentCubeF32Mip& cube, Vec3 direction) noexcept {
+    const Vec3 d = normalize(direction);
+    const float ax = std::abs(d.x), ay = std::abs(d.y), az = std::abs(d.z);
+    std::uint32_t face = 0U;
+    float s = 0.0F, t = 0.0F, major = 1.0F;
+    if (ax >= ay && ax >= az) {
+        major = ax;
+        if (d.x >= 0.0F) { face = 0U; s = -d.z / major; t = -d.y / major; }
+        else { face = 1U; s = d.z / major; t = -d.y / major; }
+    } else if (ay >= az) {
+        major = ay;
+        if (d.y >= 0.0F) { face = 2U; s = d.x / major; t = d.z / major; }
+        else { face = 3U; s = d.x / major; t = -d.z / major; }
+    } else {
+        major = az;
+        if (d.z >= 0.0F) { face = 4U; s = d.x / major; t = -d.y / major; }
+        else { face = 5U; s = -d.x / major; t = -d.y / major; }
+    }
+    const float size = static_cast<float>(cube.width);
+    const float px = std::clamp((s * 0.5F + 0.5F) * size - 0.5F, 0.0F, size - 1.0F);
+    const float py = std::clamp((t * 0.5F + 0.5F) * size - 0.5F, 0.0F, size - 1.0F);
+    const std::uint32_t x0 = static_cast<std::uint32_t>(std::floor(px));
+    const std::uint32_t y0 = static_cast<std::uint32_t>(std::floor(py));
+    const std::uint32_t x1 = std::min(cube.width - 1U, x0 + 1U);
+    const std::uint32_t y1 = std::min(cube.height - 1U, y0 + 1U);
+    const float tx = px - static_cast<float>(x0);
+    const float ty = py - static_cast<float>(y0);
+    const auto read = [&](std::uint32_t x, std::uint32_t y) {
+        const std::size_t offset =
+            (static_cast<std::size_t>(face) * cube.width * cube.height +
+             static_cast<std::size_t>(y) * cube.width + x) * 4U;
+        return std::array<float, 4>{
+            cube.pixels[offset], cube.pixels[offset + 1U],
+            cube.pixels[offset + 2U], cube.pixels[offset + 3U]
+        };
+    };
+    const auto a = read(x0, y0);
+    const auto b = read(x1, y0);
+    const auto c = read(x0, y1);
+    const auto d2 = read(x1, y1);
+    std::array<float, 4> result{};
+    for (std::size_t channel = 0; channel < 4U; ++channel) {
+        const float top = a[channel] * (1.0F - tx) + b[channel] * tx;
+        const float bottom = c[channel] * (1.0F - tx) + d2[channel] * tx;
+        result[channel] = top * (1.0F - ty) + bottom * ty;
+    }
+    return result;
+}
+
 [[nodiscard]] std::array<float, 4> sample_equirectangular(
     const Rgba32fImage& image, Vec3 direction) noexcept {
     constexpr float inverse_two_pi = 0.15915494309189533577F;
@@ -219,6 +270,140 @@ bool build_environment_cube_from_equirectangular(
     return output.width == cube_size && output.height == cube_size &&
            output.pixels.size() == static_cast<std::size_t>(cube_size) * cube_size * 6U * 4U;
 }
+
+
+bool build_ggx_prefiltered_environment_cube(
+    const EnvironmentCubeF32Mip& source_base, std::uint32_t sample_count,
+    std::vector<EnvironmentCubeF32Mip>& output) noexcept {
+    output.clear();
+    if (source_base.width == 0U || source_base.height != source_base.width ||
+        source_base.width > 512U ||
+        source_base.pixels.size() != static_cast<std::size_t>(source_base.width) *
+                                     source_base.height * 6U * 4U ||
+        sample_count < 16U || sample_count > 2048U) return false;
+    try {
+        std::uint32_t mip_count = 1U;
+        for (std::uint32_t dimension = source_base.width; dimension > 1U; dimension /= 2U)
+            ++mip_count;
+        output.reserve(mip_count);
+        output.push_back(source_base);
+        if (mip_count == 1U) return true;
+
+        for (std::uint32_t level = 1U; level < mip_count; ++level) {
+            const std::uint32_t dimension = std::max(1U, source_base.width >> level);
+            const float roughness = static_cast<float>(level) /
+                                    static_cast<float>(mip_count - 1U);
+            EnvironmentCubeF32Mip mip{};
+            mip.width = dimension;
+            mip.height = dimension;
+            mip.pixels.resize(static_cast<std::size_t>(dimension) * dimension * 6U * 4U);
+            for (std::uint32_t face = 0; face < 6U; ++face) {
+                for (std::uint32_t y = 0; y < dimension; ++y) {
+                    for (std::uint32_t x = 0; x < dimension; ++x) {
+                        const float u = (static_cast<float>(x) + 0.5F) / static_cast<float>(dimension);
+                        const float v = (static_cast<float>(y) + 0.5F) / static_cast<float>(dimension);
+                        const Vec3 normal = face_direction(face, u, v);
+                        const Vec3 view = normal;
+                        Vec3 accumulated{};
+                        float total_weight = 0.0F;
+                        for (std::uint32_t sample = 0U; sample < sample_count; ++sample) {
+                            const float xi_x = static_cast<float>(sample) / static_cast<float>(sample_count);
+                            const float xi_y = radical_inverse_vdc(sample);
+                            const Vec3 half_vector = importance_sample_ggx(
+                                xi_x, xi_y, roughness, normal);
+                            const Vec3 light = normalize(
+                                half_vector * (2.0F * dot(view, half_vector)) - view);
+                            const float n_dot_l = std::max(dot(normal, light), 0.0F);
+                            if (n_dot_l > 0.0F) {
+                                const auto radiance = sample_cube_f32(source_base, light);
+                                accumulated = accumulated + Vec3{
+                                    radiance[0], radiance[1], radiance[2]} * n_dot_l;
+                                total_weight += n_dot_l;
+                            }
+                        }
+                        const auto fallback = sample_cube_f32(source_base, normal);
+                        const Vec3 filtered = total_weight > 1.0e-6F
+                            ? accumulated * (1.0F / total_weight)
+                            : Vec3{fallback[0], fallback[1], fallback[2]};
+                        const std::size_t offset =
+                            (static_cast<std::size_t>(face) * dimension * dimension +
+                             static_cast<std::size_t>(y) * dimension + x) * 4U;
+                        mip.pixels[offset] = filtered.x;
+                        mip.pixels[offset + 1U] = filtered.y;
+                        mip.pixels[offset + 2U] = filtered.z;
+                        mip.pixels[offset + 3U] = 1.0F;
+                    }
+                }
+            }
+            output.push_back(std::move(mip));
+        }
+    } catch (...) {
+        output.clear();
+        return false;
+    }
+    return !output.empty();
+}
+
+bool build_diffuse_irradiance_cube(
+    const EnvironmentCubeF32Mip& source_base, std::uint32_t output_size,
+    std::uint32_t sample_count, EnvironmentCubeF32Mip& output) noexcept {
+    output = {};
+    if (source_base.width == 0U || source_base.height != source_base.width ||
+        source_base.width > 512U ||
+        source_base.pixels.size() != static_cast<std::size_t>(source_base.width) *
+                                     source_base.height * 6U * 4U ||
+        output_size == 0U || output_size > 128U ||
+        sample_count < 16U || sample_count > 4096U) return false;
+    try {
+        output.width = output_size;
+        output.height = output_size;
+        output.pixels.resize(static_cast<std::size_t>(output_size) * output_size * 6U * 4U);
+        for (std::uint32_t face = 0U; face < 6U; ++face) {
+            for (std::uint32_t y = 0U; y < output_size; ++y) {
+                for (std::uint32_t x = 0U; x < output_size; ++x) {
+                    const float u = (static_cast<float>(x) + 0.5F) / static_cast<float>(output_size);
+                    const float v = (static_cast<float>(y) + 0.5F) / static_cast<float>(output_size);
+                    const Vec3 normal = face_direction(face, u, v);
+                    const Vec3 up = std::abs(normal.y) < 0.999F
+                        ? Vec3{0.0F, 1.0F, 0.0F} : Vec3{1.0F, 0.0F, 0.0F};
+                    const Vec3 tangent = normalize(cross(up, normal));
+                    const Vec3 bitangent = cross(normal, tangent);
+                    Vec3 irradiance_over_pi{};
+                    for (std::uint32_t sample = 0U; sample < sample_count; ++sample) {
+                        const float radial = std::sqrt(
+                            static_cast<float>(sample) / static_cast<float>(sample_count));
+                        const float phi = 6.28318530717958647692F * radical_inverse_vdc(sample);
+                        const float disk_x = radial * std::cos(phi);
+                        const float disk_y = radial * std::sin(phi);
+                        const float disk_z = std::sqrt(std::max(
+                            0.0F, 1.0F - disk_x * disk_x - disk_y * disk_y));
+                        const Vec3 direction = normalize(
+                            tangent * disk_x + bitangent * disk_y + normal * disk_z);
+                        const auto radiance = sample_cube_f32(source_base, direction);
+                        irradiance_over_pi = irradiance_over_pi +
+                            Vec3{radiance[0], radiance[1], radiance[2]};
+                    }
+                    irradiance_over_pi = irradiance_over_pi *
+                        (1.0F / static_cast<float>(sample_count));
+                    const std::size_t offset =
+                        (static_cast<std::size_t>(face) * output_size * output_size +
+                         static_cast<std::size_t>(y) * output_size + x) * 4U;
+                    output.pixels[offset] = irradiance_over_pi.x;
+                    output.pixels[offset + 1U] = irradiance_over_pi.y;
+                    output.pixels[offset + 2U] = irradiance_over_pi.z;
+                    output.pixels[offset + 3U] = 1.0F;
+                }
+            }
+        }
+    } catch (...) {
+        output = {};
+        return false;
+    }
+    return output.width == output_size && output.height == output_size &&
+           output.pixels.size() == static_cast<std::size_t>(output_size) *
+                                   output_size * 6U * 4U;
+}
+
 
 bool build_procedural_environment_cube(
     std::uint32_t base_size, std::vector<EnvironmentCubeMip>& output) noexcept {
