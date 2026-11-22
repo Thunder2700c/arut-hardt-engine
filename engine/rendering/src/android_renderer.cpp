@@ -2129,6 +2129,23 @@ bool AndroidRenderer::draw_frame() noexcept {
     const auto cpu_frame_start = std::chrono::steady_clock::now();
     VkResult result = vkWaitForFences(device_, 1, &in_flight_, VK_TRUE, UINT64_MAX);
     if (result != VK_SUCCESS) return false;
+    if (gpu_visibility_enabled_) {
+        void* mapped = nullptr;
+        const VkResult map_result = vkMapMemory(device_, indirect_draw_memory_, 0,
+            sizeof(arut::rendering::IndexedIndirectArguments), 0, &mapped);
+        if (map_result == VK_SUCCESS && mapped) {
+            arut::rendering::IndexedIndirectArguments completed{};
+            std::memcpy(&completed, mapped, sizeof(completed));
+            vkUnmapMemory(device_, indirect_draw_memory_);
+            last_visible_objects_ = completed.instance_count;
+            last_triangles_ = (cube_index_count_ / 3U) * completed.instance_count;
+        } else {
+            log_error("Read completed GPU visibility count failed; retaining last profile counters", map_result);
+        }
+    } else {
+        last_visible_objects_ = instance_count_;
+        last_triangles_ = (cube_index_count_ / 3U) * instance_count_;
+    }
     if (timestamp_queries_available_ && timestamp_data_pending_) {
         std::array<std::uint64_t, 3> timestamps{};
         const VkResult query_result = vkGetQueryPoolResults(
@@ -2167,6 +2184,7 @@ bool AndroidRenderer::draw_frame() noexcept {
         vkCmdWriteTimestamp(command_buffers_[image_index], VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                              timestamp_query_pool_, 0);
     }
+    if (!record_gpu_visibility(command_buffers_[image_index])) return false;
     if (shadow_enabled_) {
         VkClearValue shadow_clear{};
         shadow_clear.depthStencil = {1.0F, 0};
@@ -2280,9 +2298,7 @@ bool AndroidRenderer::draw_frame() noexcept {
         return false;
     }
     timestamp_data_pending_ = timestamp_queries_available_;
-    last_draw_calls_ = 1U;
-    last_visible_objects_ = instance_count_;
-    last_triangles_ = (cube_index_count_ / 3U) * instance_count_;
+    last_draw_calls_ = (shadow_enabled_ ? shadow_cascade_count_ : 0U) + 1U;
     VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     present.waitSemaphoreCount = 1;
     present.pWaitSemaphores = &render_finished_[image_index];
