@@ -22,9 +22,9 @@ The shader interface is currently an engine-internal prototype, not a stable ext
 - Decode is bounded to 8192 pixels per side and 16 million total pixels; a texture asset larger than 64 MiB is rejected before decoding.
 - CPU mip generation filters sRGB colour channels in linear light and treats alpha as linear.
 - Vulkan uploads mip levels through a staging buffer, transitions to shader-read layout, creates a view and a sampler.
-- A bundled sRGB base-colour PNG exercises this path. Normal and metallic-roughness bindings still use a white fallback texture.
+- A bundled sRGB base-colour PNG, a tangent-space normal TGA and a linear metallic-roughness TGA exercise all three material map bindings. The test material sets the base-colour, normal and metallic-roughness texture flags.
 
-Texture cache/handles, async decode/upload queues, more texture maps, KTX2 and texture streaming are pending.
+Texture cache/handles, async decode/upload queues, KTX2, more production-resolution textures and texture streaming are pending.
 
 ## Shadows and visibility
 - One directional depth map is created when a depth format supports both depth attachment and sampled-image use.
