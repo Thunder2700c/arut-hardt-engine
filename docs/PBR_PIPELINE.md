@@ -58,11 +58,11 @@ The runtime profile snapshot now includes CPU frame time, separate GPU visibilit
 - The procedural environment cube has GGX importance-sampled specular roughness mips. Diffuse irradiance uses a separate cosine-convolved cubemap.
 - A CPU environment-probe influence contract computes smooth AABB edge fades, normalizes overlapping probe weights and resolves overlaps by priority.
 - Android uploads a separate four-slot std140 probe uniform buffer. The PBR fragment shader selects the highest-priority probes with non-zero AABB influence, normalizes their smooth edge weights, and blends their specular and diffuse cubemaps using fixed-index accesses into four-element descriptor arrays; no optional descriptor-indexing feature is required.
-- The sample scene currently activates one local probe. All four cubemap descriptors intentionally alias the global environment/irradiance maps until independent probe assets and runtime resource registration are added. GPU-side selection and weighted blend execution are integrated, but distinct local probe content is not yet demonstrated.
+- The sample scene currently activates one local probe. Optional independent HDR assets can be placed at `environments/probes/probe_0.hdr` through `probe_3.hdr`; each is decoded, converted to a cubemap, GGX-prefiltered, diffuse-convolved and uploaded as RGBA16F. Missing or unsupported assets fall back per slot to the global environment/irradiance maps.
 
 ## Remaining integration work
 1. Add a material asset/cache/handle layer and asynchronous decode/upload queues.
-2. Add independent HDR cubemap storage/loading and runtime probe registration, per-object probe selection, and distinct-probe assets; validate multi-probe blending and RGBA16F rendering on device.
+2. Add scene/runtime probe registration and per-object probe selection, provide representative independent probe assets, and validate multi-probe blending and RGBA16F rendering on device.
 3. Add cascade stabilization, split blending and local-light shadows.
 4. Add GPU/indirect visibility, GPU-memory accounting and per-pass profiling.
 5. During the separately agreed testing stage, compare GPU output with the CPU BRDF reference on two Android GPU families.
