@@ -96,6 +96,8 @@ private:
     VkDeviceMemory cube_index_memory_{VK_NULL_HANDLE};
     VkBuffer instance_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory instance_memory_{VK_NULL_HANDLE};
+    VkBuffer indirect_draw_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory indirect_draw_memory_{VK_NULL_HANDLE};
     std::uint32_t cube_index_count_{0};
     std::uint32_t instance_count_{0};
     VkImage fallback_image_{VK_NULL_HANDLE};
