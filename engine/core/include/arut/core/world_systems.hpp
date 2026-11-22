@@ -194,11 +194,80 @@ public:
 
     [[nodiscard]] bool active(WorldCell cell) const noexcept { return active_.contains(cell); }
     [[nodiscard]] std::size_t active_count() const noexcept { return active_.size(); }
+    [[nodiscard]] std::vector<WorldCell> active_cells() const {
+        std::vector<WorldCell> cells;
+        cells.reserve(active_.size());
+        for (const auto cell : active_) cells.push_back(cell);
+        std::sort(cells.begin(), cells.end(), [](WorldCell a, WorldCell b) {
+            return a.z == b.z ? a.x < b.x : a.z < b.z;
+        });
+        return cells;
+    }
     [[nodiscard]] float cell_size() const noexcept { return cell_size_; }
 
 private:
     float cell_size_;
     std::unordered_set<WorldCell, WorldCellHash> active_;
+};
+
+struct WorldCellContent final {
+    WorldCell cell{};
+    TerrainMesh terrain{};
+};
+
+struct WorldStreamingReport final {
+    std::size_t loaded{0};
+    std::size_t unloaded{0};
+    std::size_t failed{0};
+    std::size_t resident{0};
+};
+
+// Owns actual cell payloads, not just the partition's active-cell keys.
+// The loader/unloader callbacks keep storage policy outside the partition.
+class WorldCellStreamer final {
+public:
+    using Loader = std::function<bool(WorldCell, WorldCellContent&)>;
+    using Unloader = std::function<void(WorldCell, WorldCellContent&)>;
+
+    [[nodiscard]] WorldStreamingReport update(
+        WorldPartition& partition, float center_x, float center_z,
+        std::uint32_t radius, const Loader& loader, const Unloader& unloader = {}) {
+        if (!loader) throw std::invalid_argument("world cell loader is required");
+        (void)partition.update_streaming(center_x, center_z, radius);
+        const auto active = partition.active_cells();
+        WorldStreamingReport report{};
+        for (const auto cell : active) {
+            if (resident_.contains(cell)) continue;
+            WorldCellContent content{};
+            content.cell = cell;
+            bool loaded = false;
+            try { loaded = loader(cell, content) && content.cell == cell && content.terrain.valid(); }
+            catch (...) { loaded = false; }
+            if (!loaded) { ++report.failed; continue; }
+            resident_.emplace(cell, std::move(content));
+            ++report.loaded;
+        }
+        for (auto it = resident_.begin(); it != resident_.end();) {
+            if (partition.active(it->first)) { ++it; continue; }
+            if (unloader) {
+                try { unloader(it->first, it->second); }
+                catch (...) { /* residency cleanup must continue */ }
+            }
+            it = resident_.erase(it);
+            ++report.unloaded;
+        }
+        report.resident = resident_.size();
+        return report;
+    }
+
+    [[nodiscard]] const WorldCellContent* find(WorldCell cell) const noexcept {
+        const auto found = resident_.find(cell);
+        return found == resident_.end() ? nullptr : &found->second;
+    }
+    [[nodiscard]] std::size_t resident_count() const noexcept { return resident_.size(); }
+
+private:
+    std::unordered_map<WorldCell, WorldCellContent, WorldCellHash> resident_;
 };
 
 } // namespace arut::core
