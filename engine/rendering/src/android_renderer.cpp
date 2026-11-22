@@ -2063,7 +2063,10 @@ void AndroidRenderer::destroy_swapchain() noexcept {
         if (depth_view_) vkDestroyImageView(device_, depth_view_, nullptr);
         if (depth_image_) vkDestroyImage(device_, depth_image_, nullptr);
         if (depth_memory_) vkFreeMemory(device_, depth_memory_, nullptr);
-        if (shadow_framebuffer_) vkDestroyFramebuffer(device_, shadow_framebuffer_, nullptr);
+        for (auto framebuffer : shadow_framebuffers_)
+            if (framebuffer) vkDestroyFramebuffer(device_, framebuffer, nullptr);
+        for (auto layer_view : shadow_layer_views_)
+            if (layer_view) vkDestroyImageView(device_, layer_view, nullptr);
         if (shadow_render_pass_) vkDestroyRenderPass(device_, shadow_render_pass_, nullptr);
         if (shadow_sampler_) vkDestroySampler(device_, shadow_sampler_, nullptr);
         if (shadow_view_) vkDestroyImageView(device_, shadow_view_, nullptr);
@@ -2140,7 +2143,8 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     shadow_view_ = VK_NULL_HANDLE;
     shadow_sampler_ = VK_NULL_HANDLE;
     shadow_render_pass_ = VK_NULL_HANDLE;
-    shadow_framebuffer_ = VK_NULL_HANDLE;
+    shadow_framebuffers_.fill(VK_NULL_HANDLE);
+    shadow_layer_views_.fill(VK_NULL_HANDLE);
     shadow_pipeline_ = VK_NULL_HANDLE;
     shadow_enabled_ = false;
     swapchain_ = VK_NULL_HANDLE;
