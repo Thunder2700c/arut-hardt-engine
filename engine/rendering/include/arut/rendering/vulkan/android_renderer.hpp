@@ -56,6 +56,7 @@ private:
     bool create_shadow_resources() noexcept;
     bool create_shadow_pipeline() noexcept;
     bool create_environment_cubemap() noexcept;
+    bool load_environment_hdr_asset(const char* path, arut::rendering::Rgba32fImage& decoded) noexcept;
     bool upload_environment_cube(const std::vector<arut::rendering::EnvironmentCubeMip>& mips, VkImage& image, VkDeviceMemory& memory, VkImageView& view, VkSampler& sampler, std::uint32_t& mip_levels) noexcept;
     bool upload_environment_cube_rgba16f(const std::vector<arut::rendering::EnvironmentCubeF16Mip>& mips, VkImage& image, VkDeviceMemory& memory, VkImageView& view, VkSampler& sampler, std::uint32_t& mip_levels) noexcept;
     bool upload_environment_cube_raw(const std::vector<CubeUploadMip>& mips, VkFormat format, VkDeviceSize bytes_per_pixel,
