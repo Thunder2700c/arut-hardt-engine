@@ -277,10 +277,11 @@ bool AndroidRenderer::record_gpu_visibility(VkCommandBuffer command_buffer) noex
         VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
         instance_buffer_, 0, VK_WHOLE_SIZE};
     after_compute[1] = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-        VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+        VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
         VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
         indirect_draw_buffer_, 0, sizeof(arut::rendering::IndexedIndirectArguments)};
-    vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+    vkCmdPipelineBarrier(command_buffer,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_HOST_BIT,
         VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0,
         0, nullptr, static_cast<std::uint32_t>(after_compute.size()),
         after_compute.data(), 0, nullptr);
@@ -332,13 +333,18 @@ bool AndroidRenderer::select_device() noexcept {
         std::vector<VkQueueFamilyProperties> families(family_count);
         vkGetPhysicalDeviceQueueFamilyProperties(candidate, &family_count, families.data());
         std::uint32_t graphics = UINT32_MAX;
+        std::uint32_t graphics_compute = UINT32_MAX;
         std::uint32_t present = UINT32_MAX;
         for (std::uint32_t i = 0; i < family_count; ++i) {
             if ((families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && graphics == UINT32_MAX) graphics = i;
+            if ((families[i].queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) ==
+                    (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT) &&
+                graphics_compute == UINT32_MAX) graphics_compute = i;
             VkBool32 supported = VK_FALSE;
             if (vkGetPhysicalDeviceSurfaceSupportKHR(candidate, i, surface_, &supported) == VK_SUCCESS &&
                 supported && present == UINT32_MAX) present = i;
         }
+        if (graphics_compute != UINT32_MAX) graphics = graphics_compute;
         if (graphics != UINT32_MAX && present != UINT32_MAX) {
             physical_device_ = candidate;
             graphics_family_ = graphics;
