@@ -3,6 +3,7 @@
 #include "arut/rendering/mesh.hpp"
 #include "arut/rendering/image.hpp"
 #include "arut/rendering/environment.hpp"
+#include "arut/rendering/brdf_lut.hpp"
 #include "arut/rendering/visibility.hpp"
 #include "arut/rendering/render_quality.hpp"
 
@@ -138,6 +139,18 @@ int main() {
     std::vector<arut::rendering::Rgba8Mip> linear_mips;
     assert(arut::rendering::build_rgba8_mip_chain(decoded, false, linear_mips));
     assert(linear_mips[1].pixels[0] >= 127 && linear_mips[1].pixels[0] <= 128);
+    arut::rendering::Rgba8Image brdf_lut{};
+    assert(arut::rendering::build_brdf_integration_lut(16, 32, brdf_lut));
+    assert(brdf_lut.width == 16 && brdf_lut.height == 16 && brdf_lut.valid());
+    for (std::size_t i = 0; i < brdf_lut.pixels.size(); i += 4U) {
+        assert(brdf_lut.pixels[i] <= 255U);
+        assert(brdf_lut.pixels[i + 1U] <= 255U);
+        assert(brdf_lut.pixels[i + 3U] == 255U);
+    }
+    arut::rendering::Rgba8Image invalid_brdf_lut{};
+    assert(!arut::rendering::build_brdf_integration_lut(0, 32, invalid_brdf_lut));
+    assert(invalid_brdf_lut.pixels.empty());
+
     std::vector<arut::rendering::EnvironmentCubeMip> environment_mips;
     assert(arut::rendering::build_procedural_environment_cube(8, environment_mips));
     assert(environment_mips.size() == 4);
