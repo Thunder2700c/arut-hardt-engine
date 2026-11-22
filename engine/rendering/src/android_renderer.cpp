@@ -1051,11 +1051,46 @@ bool AndroidRenderer::upload_environment_cube(
     const std::vector<arut::rendering::EnvironmentCubeMip>& mips,
     VkImage& out_image, VkDeviceMemory& out_memory, VkImageView& out_view,
     VkSampler& out_sampler, std::uint32_t& out_mip_levels) noexcept {
-    if (mips.empty()) return false;
+    std::vector<CubeUploadMip> raw_mips;
+    try {
+        raw_mips.reserve(mips.size());
+        for (const auto& mip : mips)
+            raw_mips.push_back({mip.width, mip.height, mip.pixels.data(), mip.pixels.size()});
+    } catch (...) {
+        return false;
+    }
+    return upload_environment_cube_raw(raw_mips, VK_FORMAT_R8G8B8A8_UNORM, 4U,
+        out_image, out_memory, out_view, out_sampler, out_mip_levels);
+}
+
+bool AndroidRenderer::upload_environment_cube_rgba16f(
+    const std::vector<arut::rendering::EnvironmentCubeF16Mip>& mips,
+    VkImage& out_image, VkDeviceMemory& out_memory, VkImageView& out_view,
+    VkSampler& out_sampler, std::uint32_t& out_mip_levels) noexcept {
+    std::vector<CubeUploadMip> raw_mips;
+    try {
+        raw_mips.reserve(mips.size());
+        for (const auto& mip : mips)
+            raw_mips.push_back({mip.width, mip.height, mip.pixels.data(),
+                                mip.pixels.size() * sizeof(std::uint16_t)});
+    } catch (...) {
+        return false;
+    }
+    return upload_environment_cube_raw(raw_mips, VK_FORMAT_R16G16B16A16_SFLOAT, 8U,
+        out_image, out_memory, out_view, out_sampler, out_mip_levels);
+}
+
+bool AndroidRenderer::upload_environment_cube_raw(
+    const std::vector<CubeUploadMip>& mips, VkFormat format, VkDeviceSize bytes_per_pixel,
+    VkImage& out_image, VkDeviceMemory& out_memory, VkImageView& out_view,
+    VkSampler& out_sampler, std::uint32_t& out_mip_levels) noexcept {
+    if (mips.empty() || bytes_per_pixel == 0U) return false;
     VkFormatProperties format_properties{};
-    vkGetPhysicalDeviceFormatProperties(physical_device_, VK_FORMAT_R8G8B8A8_UNORM, &format_properties);
-    if ((format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) == 0U) {
-        log_error("RGBA8 optimal images are not sampleable; environment IBL unavailable");
+    vkGetPhysicalDeviceFormatProperties(physical_device_, format, &format_properties);
+    const VkFormatFeatureFlags required_features =
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+    if ((format_properties.optimalTilingFeatures & required_features) != required_features) {
+        log_error("Requested cubemap format lacks optimal sampled/transfer-destination support");
         return false;
     }
     const bool linear_filter =
@@ -1063,8 +1098,9 @@ bool AndroidRenderer::upload_environment_cube(
 
     VkDeviceSize staging_size = 0;
     for (const auto& mip : mips) {
-        if (mip.pixels.size() > std::numeric_limits<VkDeviceSize>::max() - staging_size) return false;
-        staging_size += static_cast<VkDeviceSize>(mip.pixels.size());
+        if (!mip.pixels || mip.byte_size == 0U ||
+            mip.byte_size > std::numeric_limits<VkDeviceSize>::max() - staging_size) return false;
+        staging_size += static_cast<VkDeviceSize>(mip.byte_size);
     }
     VkBuffer staging = VK_NULL_HANDLE;
     VkDeviceMemory staging_memory = VK_NULL_HANDLE;
@@ -1083,18 +1119,40 @@ bool AndroidRenderer::upload_environment_cube(
         return false;
     }
     std::vector<VkBufferImageCopy> copies;
-    copies.reserve(mips.size() * 6U);
+    try {
+        copies.reserve(mips.size() * 6U);
+    } catch (...) {
+        vkUnmapMemory(device_, staging_memory);
+        release_staging();
+        return false;
+    }
     VkDeviceSize offset = 0;
     for (std::uint32_t level = 0; level < mips.size(); ++level) {
         const auto& mip = mips[level];
-        const VkDeviceSize face_bytes = static_cast<VkDeviceSize>(mip.width) * mip.height * 4U;
-        if (mip.pixels.size() != static_cast<std::size_t>(face_bytes * 6U)) {
+        if (mip.width == 0U || mip.height != mip.width ||
+            static_cast<VkDeviceSize>(mip.width) >
+                std::numeric_limits<VkDeviceSize>::max() / mip.height) {
+            vkUnmapMemory(device_, staging_memory);
+            release_staging();
+            log_error("Invalid environment cubemap dimensions");
+            return false;
+        }
+        const VkDeviceSize face_pixels = static_cast<VkDeviceSize>(mip.width) * mip.height;
+        if (face_pixels > std::numeric_limits<VkDeviceSize>::max() / bytes_per_pixel) {
+            vkUnmapMemory(device_, staging_memory);
+            release_staging();
+            return false;
+        }
+        const VkDeviceSize face_bytes = face_pixels * bytes_per_pixel;
+        if (face_bytes > std::numeric_limits<VkDeviceSize>::max() / 6U ||
+            mip.byte_size != static_cast<std::size_t>(face_bytes * 6U) ||
+            offset > staging_size || static_cast<VkDeviceSize>(mip.byte_size) > staging_size - offset) {
             vkUnmapMemory(device_, staging_memory);
             release_staging();
             log_error("Environment cubemap face/mip byte count mismatch");
             return false;
         }
-        std::memcpy(static_cast<std::uint8_t*>(mapped) + offset, mip.pixels.data(), mip.pixels.size());
+        std::memcpy(static_cast<std::uint8_t*>(mapped) + offset, mip.pixels, mip.byte_size);
         for (std::uint32_t face = 0; face < 6U; ++face) {
             VkBufferImageCopy copy{};
             copy.bufferOffset = offset + face_bytes * face;
@@ -1112,7 +1170,7 @@ bool AndroidRenderer::upload_environment_cube(
     VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     image.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
     image.imageType = VK_IMAGE_TYPE_2D;
-    image.format = VK_FORMAT_R8G8B8A8_UNORM;
+    image.format = format;
     image.extent = {mips[0].width, mips[0].height, 1};
     image.mipLevels = static_cast<std::uint32_t>(mips.size());
     image.arrayLayers = 6;
@@ -1213,7 +1271,7 @@ bool AndroidRenderer::upload_environment_cube(
     VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
     view.image = out_image;
     view.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-    view.format = VK_FORMAT_R8G8B8A8_UNORM;
+    view.format = format;
     view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     view.subresourceRange.levelCount = static_cast<std::uint32_t>(mips.size());
     view.subresourceRange.layerCount = 6;
@@ -1238,7 +1296,6 @@ bool AndroidRenderer::upload_environment_cube(
     out_mip_levels = static_cast<std::uint32_t>(mips.size());
     arut_android_log(ANDROID_LOG_INFO, "Environment cubemap uploaded with all face/mip levels.");
     return true;
-
 }
 
 bool AndroidRenderer::create_brdf_lut() noexcept {
