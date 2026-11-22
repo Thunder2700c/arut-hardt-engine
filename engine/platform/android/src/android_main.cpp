@@ -272,24 +272,10 @@ void run(android_app* app) {
  try {
   state.terrain_mesh = arut::core::TerrainSystem::build(512.0F, 128U);
   const auto activated_cells = state.world_partition.update_streaming(0.0F, 0.0F, 2U);
-  std::size_t lod_high = 0U, lod_medium = 0U, lod_low = 0U, lod_impostor = 0U;
-  for (std::size_t i = 0; i < state.cube_render_extraction_system.instances().size(); ++i) {
-   const auto& instance = state.cube_render_extraction_system.instances()[i];
-   const float x = instance.bounds[0], y = instance.bounds[1], z = instance.bounds[2];
-   const float distance = std::sqrt(x*x + y*y + z*z);
-   switch (state.lod_system.select(static_cast<std::uint64_t>(i), distance)) {
-    case arut::core::TerrainLod::High: ++lod_high; break;
-    case arut::core::TerrainLod::Medium: ++lod_medium; break;
-    case arut::core::TerrainLod::Low: ++lod_low; break;
-    case arut::core::TerrainLod::Impostor: ++lod_impostor; break;
-   }
-  }
   log_info("TERRAIN generated=true resolution=%u vertices=%zu indices=%zu",
    state.terrain_mesh.resolution, state.terrain_mesh.vertices.size(), state.terrain_mesh.indices.size());
   log_info("WORLD_PARTITION active_cells=%zu newly_activated=%zu cell_size=%.1f",
    state.world_partition.active_count(), activated_cells.size(), state.world_partition.cell_size());
-  log_info("LOD tracked=%zu high=%zu medium=%zu low=%zu impostor=%zu",
-   state.lod_system.tracked_count(), lod_high, lod_medium, lod_low, lod_impostor);
  } catch (const std::exception& error) {
   log_warn("Phase 3 world-system initialization failed: %s", error.what());
  }
@@ -310,6 +296,20 @@ void run(android_app* app) {
   state.ecs_scene_ready = false;
   log_warn("ECS 5,000-cube scene creation failed: %s", error.what());
  }
+ std::size_t lod_high = 0U, lod_medium = 0U, lod_low = 0U, lod_impostor = 0U;
+ for (std::size_t i = 0; i < state.cube_render_extraction_system.instances().size(); ++i) {
+  const auto& instance = state.cube_render_extraction_system.instances()[i];
+  const float x = instance.bounds[0], y = instance.bounds[1], z = instance.bounds[2];
+  const float distance = std::sqrt(x*x + y*y + z*z);
+  switch (state.lod_system.select(static_cast<std::uint64_t>(i), distance)) {
+   case arut::core::TerrainLod::High: ++lod_high; break;
+   case arut::core::TerrainLod::Medium: ++lod_medium; break;
+   case arut::core::TerrainLod::Low: ++lod_low; break;
+   case arut::core::TerrainLod::Impostor: ++lod_impostor; break;
+  }
+ }
+ log_info("LOD tracked=%zu high=%zu medium=%zu low=%zu impostor=%zu",
+  state.lod_system.tracked_count(), lod_high, lod_medium, lod_low, lod_impostor);
  auto metrics_start = std::chrono::steady_clock::now();
  std::uint64_t frame_count = 0;
  double frame_ms_total = 0.0;
