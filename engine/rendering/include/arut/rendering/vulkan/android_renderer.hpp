@@ -5,6 +5,7 @@
 #include <vulkan/vulkan.h>
 #include "arut/rendering/image.hpp"
 #include "arut/rendering/render_quality.hpp"
+#include "arut/rendering/environment.hpp"
 #include <cstdint>
 #include <vector>
 
@@ -40,6 +41,7 @@ private:
     bool create_pbr_descriptors() noexcept;
     bool create_shadow_resources() noexcept;
     bool create_shadow_pipeline() noexcept;
+    bool create_environment_cubemap() noexcept;
     bool create_fallback_texture() noexcept;
     bool load_texture_asset(const char* path, VkFormat format, bool source_is_srgb,
                             VkImage& image, VkDeviceMemory& memory, VkImageView& view,
@@ -99,6 +101,11 @@ private:
     VkDeviceMemory base_color_memory_{VK_NULL_HANDLE};
     VkImageView base_color_view_{VK_NULL_HANDLE};
     VkSampler base_color_sampler_{VK_NULL_HANDLE};
+    VkImage environment_image_{VK_NULL_HANDLE};
+    VkDeviceMemory environment_memory_{VK_NULL_HANDLE};
+    VkImageView environment_view_{VK_NULL_HANDLE};
+    VkSampler environment_sampler_{VK_NULL_HANDLE};
+    std::uint32_t environment_mip_levels_{0};
     std::uint32_t base_color_mip_levels_{0};
     VkImage depth_image_{VK_NULL_HANDLE};
     VkDeviceMemory depth_memory_{VK_NULL_HANDLE};
