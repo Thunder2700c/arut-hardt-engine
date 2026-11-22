@@ -50,11 +50,12 @@ The runtime profile snapshot now includes CPU frame time, separate GPU visibilit
 
 - CI also compiles the Android ARM64 native library without running Gradle or building an APK.
 - No physical Android device has yet validated shadow-map sampling, visual energy behaviour, image uploads or performance.
-- The procedural environment cube has GGX importance-sampled specular roughness mips. Diffuse irradiance uses a separate cosine-convolved cubemap. HDR environment import and probe blending remain future refinements.
+- The procedural environment cube has GGX importance-sampled specular roughness mips. Diffuse irradiance uses a separate cosine-convolved cubemap.
+- A CPU environment-probe influence contract computes smooth AABB edge fades, normalizes overlapping probe weights and resolves overlaps by priority. It is a tested selection/blending foundation; GPU cubemap arrays, HDR import and runtime probe sampling are not yet integrated.
 
 ## Remaining integration work
 1. Add a material asset/cache/handle layer and asynchronous decode/upload queues.
-2. Improve IBL with HDR environment import and environment probe blending.
+2. Add HDR environment import, GPU probe storage/sampling and runtime probe blending.
 3. Add cascade stabilization, split blending and local-light shadows.
 4. Add GPU/indirect visibility, GPU-memory accounting and per-pass profiling.
 5. During the separately agreed testing stage, compare GPU output with the CPU BRDF reference on two Android GPU families.
