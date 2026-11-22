@@ -56,6 +56,7 @@ private:
         VkBuffer instance_buffer{VK_NULL_HANDLE};
         VkDeviceMemory instance_memory{VK_NULL_HANDLE};
         std::uint32_t index_count{0};
+        VkDeviceSize allocation_bytes{0};
     };
 
     bool create_instance() noexcept;
