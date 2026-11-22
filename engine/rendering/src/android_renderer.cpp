@@ -946,7 +946,14 @@ bool AndroidRenderer::draw_frame() noexcept {
     pass.clearValueCount = static_cast<std::uint32_t>(clears.size());
     pass.pClearValues = clears.data();
     vkCmdBeginRenderPass(command_buffers_[image_index], &pass, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(command_buffers_[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_pipeline_);
+    vkCmdBindPipeline(command_buffers_[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS, pbr_pipeline_);
+    const std::array<VkDescriptorSet, 2> pbr_sets{frame_descriptor_set_, material_descriptor_set_};
+    vkCmdBindDescriptorSets(command_buffers_[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            pbr_pipeline_layout_, 0, static_cast<std::uint32_t>(pbr_sets.size()),
+                            pbr_sets.data(), 0, nullptr);
+    const auto model = arut::rendering::Mat4::identity();
+    vkCmdPushConstants(command_buffers_[image_index], pbr_pipeline_layout_, VK_SHADER_STAGE_VERTEX_BIT,
+                       0, sizeof(model), model.value.data());
     VkViewport viewport{};
     viewport.x = 0.0F;
     viewport.y = 0.0F;
@@ -958,8 +965,9 @@ bool AndroidRenderer::draw_frame() noexcept {
     vkCmdSetViewport(command_buffers_[image_index], 0, 1, &viewport);
     vkCmdSetScissor(command_buffers_[image_index], 0, 1, &scissor);
     constexpr VkDeviceSize vertex_offset = 0;
-    vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 1, &triangle_vertex_buffer_, &vertex_offset);
-    vkCmdDraw(command_buffers_[image_index], 3, 1, 0, 0);
+    vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 1, &cube_vertex_buffer_, &vertex_offset);
+    vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_, 0, VK_INDEX_TYPE_UINT32);
+    vkCmdDrawIndexed(command_buffers_[image_index], cube_index_count_, 1, 0, 0, 0);
     vkCmdEndRenderPass(command_buffers_[image_index]);
     result = vkEndCommandBuffer(command_buffers_[image_index]);
     if (result != VK_SUCCESS) {
@@ -1011,6 +1019,23 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     if (device_ != VK_NULL_HANDLE) vkDeviceWaitIdle(device_);
     if (device_ != VK_NULL_HANDLE) {
         if (in_flight_) vkDestroyFence(device_, in_flight_, nullptr);
+        if (pbr_pipeline_) vkDestroyPipeline(device_, pbr_pipeline_, nullptr);
+        if (pbr_pipeline_layout_) vkDestroyPipelineLayout(device_, pbr_pipeline_layout_, nullptr);
+        if (pbr_descriptor_pool_) vkDestroyDescriptorPool(device_, pbr_descriptor_pool_, nullptr);
+        if (frame_set_layout_) vkDestroyDescriptorSetLayout(device_, frame_set_layout_, nullptr);
+        if (material_set_layout_) vkDestroyDescriptorSetLayout(device_, material_set_layout_, nullptr);
+        if (frame_uniform_buffer_) vkDestroyBuffer(device_, frame_uniform_buffer_, nullptr);
+        if (frame_uniform_memory_) vkFreeMemory(device_, frame_uniform_memory_, nullptr);
+        if (material_uniform_buffer_) vkDestroyBuffer(device_, material_uniform_buffer_, nullptr);
+        if (material_uniform_memory_) vkFreeMemory(device_, material_uniform_memory_, nullptr);
+        if (cube_vertex_buffer_) vkDestroyBuffer(device_, cube_vertex_buffer_, nullptr);
+        if (cube_vertex_memory_) vkFreeMemory(device_, cube_vertex_memory_, nullptr);
+        if (cube_index_buffer_) vkDestroyBuffer(device_, cube_index_buffer_, nullptr);
+        if (cube_index_memory_) vkFreeMemory(device_, cube_index_memory_, nullptr);
+        if (fallback_sampler_) vkDestroySampler(device_, fallback_sampler_, nullptr);
+        if (fallback_view_) vkDestroyImageView(device_, fallback_view_, nullptr);
+        if (fallback_image_) vkDestroyImage(device_, fallback_image_, nullptr);
+        if (fallback_memory_) vkFreeMemory(device_, fallback_memory_, nullptr);
         if (graphics_pipeline_) vkDestroyPipeline(device_, graphics_pipeline_, nullptr);
         if (pipeline_layout_) vkDestroyPipelineLayout(device_, pipeline_layout_, nullptr);
         if (triangle_vertex_buffer_) vkDestroyBuffer(device_, triangle_vertex_buffer_, nullptr);
@@ -1033,6 +1058,20 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     render_pass_ = VK_NULL_HANDLE;
     graphics_pipeline_ = VK_NULL_HANDLE;
     pipeline_layout_ = VK_NULL_HANDLE;
+    pbr_pipeline_ = VK_NULL_HANDLE;
+    pbr_pipeline_layout_ = VK_NULL_HANDLE;
+    pbr_descriptor_pool_ = VK_NULL_HANDLE;
+    frame_set_layout_ = material_set_layout_ = VK_NULL_HANDLE;
+    frame_descriptor_set_ = material_descriptor_set_ = VK_NULL_HANDLE;
+    frame_uniform_buffer_ = material_uniform_buffer_ = VK_NULL_HANDLE;
+    frame_uniform_memory_ = material_uniform_memory_ = VK_NULL_HANDLE;
+    cube_vertex_buffer_ = cube_index_buffer_ = VK_NULL_HANDLE;
+    cube_vertex_memory_ = cube_index_memory_ = VK_NULL_HANDLE;
+    cube_index_count_ = 0;
+    fallback_sampler_ = VK_NULL_HANDLE;
+    fallback_view_ = VK_NULL_HANDLE;
+    fallback_image_ = VK_NULL_HANDLE;
+    fallback_memory_ = VK_NULL_HANDLE;
     triangle_vertex_buffer_ = VK_NULL_HANDLE;
     triangle_vertex_memory_ = VK_NULL_HANDLE;
     depth_view_ = VK_NULL_HANDLE;
@@ -1050,7 +1089,8 @@ bool AndroidRenderer::recreate_swapchain() noexcept {
     if (!device_) return false;
     destroy_swapchain();
     return create_swapchain() && create_render_targets() && create_triangle_geometry() &&
-           create_triangle_pipeline() && create_commands_and_sync();
+           create_triangle_pipeline() && create_pbr_geometry() && create_fallback_texture() &&
+           create_pbr_pipeline() && create_pbr_descriptors() && create_commands_and_sync();
 }
 
 void AndroidRenderer::shutdown() noexcept {
