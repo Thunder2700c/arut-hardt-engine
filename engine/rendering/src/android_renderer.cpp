@@ -374,6 +374,335 @@ bool AndroidRenderer::create_render_targets() noexcept {
     return true;
 }
 
+bool AndroidRenderer::create_shadow_resources() noexcept {
+    constexpr std::array<VkFormat, 3> candidates{
+        VK_FORMAT_D32_SFLOAT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D16_UNORM
+    };
+    for (const VkFormat candidate : candidates) {
+        VkFormatProperties properties{};
+        vkGetPhysicalDeviceFormatProperties(physical_device_, candidate, &properties);
+        const VkFormatFeatureFlags required =
+            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+        if ((properties.optimalTilingFeatures & required) == required) {
+            shadow_format_ = candidate;
+            shadow_enabled_ = true;
+            break;
+        }
+    }
+    if (shadow_format_ == VK_FORMAT_UNDEFINED) {
+        for (const VkFormat candidate : candidates) {
+            VkFormatProperties properties{};
+            vkGetPhysicalDeviceFormatProperties(physical_device_, candidate, &properties);
+            if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0U) {
+                shadow_format_ = candidate;
+                break;
+            }
+        }
+        if (shadow_format_ == VK_FORMAT_UNDEFINED) {
+            log_error("No sampled depth format; shadow fallback unavailable");
+            return false;
+        }
+        shadow_extent_ = {1U, 1U};
+        arut_android_log(ANDROID_LOG_WARN, "Sampled depth attachment unsupported; using fully-lit shadow fallback.");
+    }
+
+    VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    image.imageType = VK_IMAGE_TYPE_2D;
+    image.format = shadow_format_;
+    image.extent = {shadow_extent_.width, shadow_extent_.height, 1};
+    image.mipLevels = 1;
+    image.arrayLayers = 1;
+    image.samples = VK_SAMPLE_COUNT_1_BIT;
+    image.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image.usage = shadow_enabled_
+        ? (VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+        : (VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+    image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkResult result = vkCreateImage(device_, &image, nullptr, &shadow_image_);
+    if (result != VK_SUCCESS) {
+        log_error("Create directional shadow image failed", result);
+        return false;
+    }
+    VkMemoryRequirements requirements{};
+    vkGetImageMemoryRequirements(device_, shadow_image_, &requirements);
+    const std::uint32_t memory_type = find_memory_type(
+        requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (memory_type == UINT32_MAX) {
+        log_error("No device-local memory for directional shadow image");
+        return false;
+    }
+    VkMemoryAllocateInfo allocation{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    allocation.allocationSize = requirements.size;
+    allocation.memoryTypeIndex = memory_type;
+    result = vkAllocateMemory(device_, &allocation, nullptr, &shadow_memory_);
+    if (result == VK_SUCCESS) result = vkBindImageMemory(device_, shadow_image_, shadow_memory_, 0);
+    if (result != VK_SUCCESS) {
+        log_error("Allocate/bind directional shadow image memory failed", result);
+        return false;
+    }
+
+    if (!shadow_enabled_) {
+        VkBuffer staging = VK_NULL_HANDLE;
+        VkDeviceMemory staging_memory = VK_NULL_HANDLE;
+        if (!create_buffer(sizeof(std::uint16_t), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, staging, staging_memory))
+            return false;
+        const std::uint16_t fully_lit_depth = 0xffffU;
+        void* mapped = nullptr;
+        result = vkMapMemory(device_, staging_memory, 0, sizeof(fully_lit_depth), 0, &mapped);
+        if (result == VK_SUCCESS && mapped) {
+            std::memcpy(mapped, &fully_lit_depth, sizeof(fully_lit_depth));
+            vkUnmapMemory(device_, staging_memory);
+        } else {
+            vkDestroyBuffer(device_, staging, nullptr);
+            vkFreeMemory(device_, staging_memory, nullptr);
+            log_error("Map fallback shadow staging buffer failed", result);
+            return false;
+        }
+        VkCommandPool pool = VK_NULL_HANDLE;
+        VkCommandPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+        pool_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+        pool_info.queueFamilyIndex = graphics_family_;
+        result = vkCreateCommandPool(device_, &pool_info, nullptr, &pool);
+        VkCommandBuffer command = VK_NULL_HANDLE;
+        if (result == VK_SUCCESS) {
+            VkCommandBufferAllocateInfo command_info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+            command_info.commandPool = pool;
+            command_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            command_info.commandBufferCount = 1;
+            result = vkAllocateCommandBuffers(device_, &command_info, &command);
+        }
+        if (result == VK_SUCCESS) {
+            VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+            begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            result = vkBeginCommandBuffer(command, &begin);
+        }
+        if (result == VK_SUCCESS) {
+            VkImageMemoryBarrier to_transfer{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+            to_transfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            to_transfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            to_transfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            to_transfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            to_transfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            to_transfer.image = shadow_image_;
+            to_transfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            to_transfer.subresourceRange.levelCount = 1;
+            to_transfer.subresourceRange.layerCount = 1;
+            vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 0, 0, nullptr, 0, nullptr, 1, &to_transfer);
+            VkBufferImageCopy copy{};
+            copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            copy.imageSubresource.layerCount = 1;
+            copy.imageExtent = {1, 1, 1};
+            vkCmdCopyBufferToImage(command, staging, shadow_image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+            VkImageMemoryBarrier to_shader{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+            to_shader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            to_shader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            to_shader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            to_shader.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+            to_shader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            to_shader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            to_shader.image = shadow_image_;
+            to_shader.subresourceRange = to_transfer.subresourceRange;
+            vkCmdPipelineBarrier(command, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                                 0, nullptr, 0, nullptr, 1, &to_shader);
+            result = vkEndCommandBuffer(command);
+        }
+        if (result == VK_SUCCESS) {
+            VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+            submit.commandBufferCount = 1;
+            submit.pCommandBuffers = &command;
+            result = vkQueueSubmit(graphics_queue_, 1, &submit, VK_NULL_HANDLE);
+            if (result == VK_SUCCESS) result = vkQueueWaitIdle(graphics_queue_);
+        }
+        if (pool) vkDestroyCommandPool(device_, pool, nullptr);
+        vkDestroyBuffer(device_, staging, nullptr);
+        vkFreeMemory(device_, staging_memory, nullptr);
+        if (result != VK_SUCCESS) {
+            log_error("Upload fully-lit fallback shadow depth failed", result);
+            return false;
+        }
+    } else {
+        VkAttachmentDescription attachment{};
+        attachment.format = shadow_format_;
+        attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        VkAttachmentReference depth_ref{0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+        VkSubpassDescription subpass{};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.pDepthStencilAttachment = &depth_ref;
+        const std::array<VkSubpassDependency, 2> dependencies{{
+            {VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+             VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, 0},
+            {0, VK_SUBPASS_EXTERNAL, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, 0}
+        }};
+        VkRenderPassCreateInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+        pass.attachmentCount = 1;
+        pass.pAttachments = &attachment;
+        pass.subpassCount = 1;
+        pass.pSubpasses = &subpass;
+        pass.dependencyCount = static_cast<std::uint32_t>(dependencies.size());
+        pass.pDependencies = dependencies.data();
+        result = vkCreateRenderPass(device_, &pass, nullptr, &shadow_render_pass_);
+        if (result != VK_SUCCESS) {
+            log_error("Create directional shadow render pass failed", result);
+            return false;
+        }
+    }
+
+    VkImageViewCreateInfo view_info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    view_info.image = shadow_image_;
+    view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view_info.format = shadow_format_;
+    view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    view_info.subresourceRange.levelCount = 1;
+    view_info.subresourceRange.layerCount = 1;
+    result = vkCreateImageView(device_, &view_info, nullptr, &shadow_view_);
+    if (result != VK_SUCCESS) {
+        log_error("Create directional shadow depth view failed", result);
+        return false;
+    }
+    VkSamplerCreateInfo sampler{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    sampler.magFilter = VK_FILTER_NEAREST;
+    sampler.minFilter = VK_FILTER_NEAREST;
+    sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    sampler.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    sampler.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    sampler.compareEnable = VK_TRUE;
+    sampler.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    sampler.maxLod = 0.0F;
+    result = vkCreateSampler(device_, &sampler, nullptr, &shadow_sampler_);
+    if (result != VK_SUCCESS) {
+        log_error("Create directional shadow compare sampler failed", result);
+        return false;
+    }
+
+    if (shadow_enabled_) {
+        VkFramebufferCreateInfo framebuffer{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+        framebuffer.renderPass = shadow_render_pass_;
+        framebuffer.attachmentCount = 1;
+        framebuffer.pAttachments = &shadow_view_;
+        framebuffer.width = shadow_extent_.width;
+        framebuffer.height = shadow_extent_.height;
+        framebuffer.layers = 1;
+        result = vkCreateFramebuffer(device_, &framebuffer, nullptr, &shadow_framebuffer_);
+        if (result != VK_SUCCESS) {
+            log_error("Create directional shadow framebuffer failed", result);
+            return false;
+        }
+        arut_android_log(ANDROID_LOG_INFO, "Single-map directional shadow resources enabled.");
+    }
+    return true;
+}
+
+bool AndroidRenderer::create_shadow_pipeline() noexcept {
+    if (!shadow_enabled_) return true;
+    AAsset* asset = AAssetManager_open(assets_, "shaders/mobile_shadow_depth.vert.spv", AASSET_MODE_BUFFER);
+    if (!asset) {
+        log_error("Missing packaged directional shadow vertex shader");
+        return false;
+    }
+    const off_t length = AAsset_getLength(asset);
+    if (length <= 0 || (length % 4) != 0) {
+        AAsset_close(asset);
+        log_error("Invalid directional shadow SPIR-V size");
+        return false;
+    }
+    std::vector<std::uint32_t> code(static_cast<std::size_t>(length) / sizeof(std::uint32_t));
+    const int read = AAsset_read(asset, code.data(), static_cast<std::size_t>(length));
+    AAsset_close(asset);
+    if (read != length || code.empty() || code.front() != 0x07230203U) {
+        log_error("Directional shadow SPIR-V read/magic validation failed");
+        return false;
+    }
+    VkShaderModuleCreateInfo module_info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    module_info.codeSize = code.size() * sizeof(std::uint32_t);
+    module_info.pCode = code.data();
+    VkShaderModule module = VK_NULL_HANDLE;
+    VkResult result = vkCreateShaderModule(device_, &module_info, nullptr, &module);
+    if (result != VK_SUCCESS) {
+        log_error("Create directional shadow shader module failed", result);
+        return false;
+    }
+    VkPipelineShaderStageCreateInfo stage{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
+    stage.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stage.module = module;
+    stage.pName = "main";
+
+    const std::array<VkVertexInputBindingDescription, 2> bindings{{
+        {0, sizeof(arut::rendering::MeshVertex), VK_VERTEX_INPUT_RATE_VERTEX},
+        {1, sizeof(arut::rendering::Mat4), VK_VERTEX_INPUT_RATE_INSTANCE}
+    }};
+    const std::array<VkVertexInputAttributeDescription, 5> attributes{{
+        {0, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, position))},
+        {4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0},
+        {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16},
+        {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32},
+        {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48}
+    }};
+    VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    vertex_input.vertexBindingDescriptionCount = static_cast<std::uint32_t>(bindings.size());
+    vertex_input.pVertexBindingDescriptions = bindings.data();
+    vertex_input.vertexAttributeDescriptionCount = static_cast<std::uint32_t>(attributes.size());
+    vertex_input.pVertexAttributeDescriptions = attributes.data();
+    VkPipelineInputAssemblyStateCreateInfo assembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+    assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    VkPipelineViewportStateCreateInfo viewport{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+    viewport.viewportCount = 1;
+    viewport.scissorCount = 1;
+    constexpr std::array<VkDynamicState, 2> dynamics{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dynamic{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+    dynamic.dynamicStateCount = static_cast<std::uint32_t>(dynamics.size());
+    dynamic.pDynamicStates = dynamics.data();
+    VkPipelineRasterizationStateCreateInfo raster{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+    raster.polygonMode = VK_POLYGON_MODE_FILL;
+    raster.cullMode = VK_CULL_MODE_BACK_BIT;
+    raster.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    raster.depthBiasEnable = VK_TRUE;
+    raster.depthBiasConstantFactor = 1.25F;
+    raster.depthBiasSlopeFactor = 1.75F;
+    raster.lineWidth = 1.0F;
+    VkPipelineMultisampleStateCreateInfo multisample{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+    multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    VkPipelineDepthStencilStateCreateInfo depth{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
+    depth.depthTestEnable = VK_TRUE;
+    depth.depthWriteEnable = VK_TRUE;
+    depth.depthCompareOp = VK_COMPARE_OP_LESS;
+    VkPipelineColorBlendStateCreateInfo blend{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+    VkGraphicsPipelineCreateInfo pipeline{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+    pipeline.stageCount = 1;
+    pipeline.pStages = &stage;
+    pipeline.pVertexInputState = &vertex_input;
+    pipeline.pInputAssemblyState = &assembly;
+    pipeline.pViewportState = &viewport;
+    pipeline.pRasterizationState = &raster;
+    pipeline.pMultisampleState = &multisample;
+    pipeline.pDepthStencilState = &depth;
+    pipeline.pColorBlendState = &blend;
+    pipeline.pDynamicState = &dynamic;
+    pipeline.layout = pbr_pipeline_layout_;
+    pipeline.renderPass = shadow_render_pass_;
+    pipeline.subpass = 0;
+    result = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr, &shadow_pipeline_);
+    vkDestroyShaderModule(device_, module, nullptr);
+    if (result != VK_SUCCESS) {
+        log_error("Create directional shadow graphics pipeline failed", result);
+        return false;
+    }
+    return true;
+}
+
 bool AndroidRenderer::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
                                     VkBuffer& buffer, VkDeviceMemory& memory) noexcept {
     if (size == 0 || device_ == VK_NULL_HANDLE) return false;
