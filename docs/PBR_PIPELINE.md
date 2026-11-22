@@ -7,11 +7,12 @@ The forward shader uses linear-light material and lighting inputs, tangent-space
 
 ## Shader and descriptor contract
 - `mobile_pbr_forward.vert`: mesh attributes at locations 0–3 (position, normal, tangent, UV) and per-instance model matrix columns at locations 4–7.
-- `mobile_pbr_forward.frag`: frame set 0 binding 0 uniform block, directional shadow comparison sampler at set 0 binding 1, material set 1 binding 0 uniform and sampled textures at bindings 1–3.
+- `mobile_pbr_forward.frag`: frame set 0 binding 0 uniform block, directional shadow comparison sampler at binding 1, environment cubemap at binding 2, split-sum BRDF integration LUT at binding 3, material set 1 binding 0 uniform and sampled textures at bindings 1–3.
 - Frame uniform contains view-projection, camera position, directional-light direction/radiance and light view-projection matrices.
 - The shadow depth vertex shader uses the same frame uniform and instance transform stream.
 - The material uses a model-matrix instance stream rather than a per-object push constant.
 - Set 0 binding 2: procedural linear-light environment cubemap with six faces and GGX-prefiltered roughness mips.
+- Set 0 binding 3: 64x64 RGBA8 split-sum GGX BRDF integration LUT; R and G channels store the scale and bias coefficients.
 
 The shader interface is currently an engine-internal prototype, not a stable external material asset format.
 
@@ -38,13 +39,15 @@ The runtime profile snapshot now includes CPU frame time, GPU timestamp duration
 
 ## Validation status and limits
 - Host CI compiles PBR and shadow GLSL and runs C++/Rust checks.
+- The CPU reference has a numerical hemispherical integration regression over metallic values 0, 0.5 and 1.0 and roughness values 0.1, 0.5 and 0.9.
+- The 64x64 split-sum BRDF LUT is generated on the CPU with 128 Hammersley/GGX samples per texel, uploaded to Vulkan and sampled at frame set 0 binding 3.
 - CI also compiles the Android ARM64 native library without running Gradle or building an APK.
 - No physical Android device has yet validated shadow-map sampling, visual energy behaviour, image uploads or performance.
-- The procedural environment cube now has GGX importance-sampled specular roughness mips. Diffuse irradiance is approximated from its broadest mip, and the split-sum BRDF response uses a small analytic approximation. Cosine-convolved irradiance, a BRDF integration LUT, HDR environment import and probe blending remain future refinements.
+- The procedural environment cube has GGX importance-sampled specular roughness mips. Diffuse irradiance is still approximated from its broadest mip; cosine-convolved diffuse irradiance, HDR environment import and probe blending remain future refinements. The specular response now uses the generated split-sum BRDF LUT.
 
 ## Remaining integration work
 1. Add normal and metallic-roughness sample assets and real per-material descriptor binding.
-2. Improve IBL with cosine-convolved irradiance, a split-sum BRDF integration LUT, HDR environment import and environment probe blending.
+2. Improve IBL with cosine-convolved diffuse irradiance, HDR environment import and environment probe blending.
 3. Add cascade shadow quality tiers and light-space stabilization.
 4. Add GPU/indirect visibility, GPU-memory accounting and per-pass profiling.
 5. During the separately agreed testing stage, compare GPU output with the CPU BRDF reference on two Android GPU families.
