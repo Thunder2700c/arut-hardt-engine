@@ -244,6 +244,14 @@ bool AndroidRenderer::create_swapchain() noexcept {
     return result == VK_SUCCESS;
 }
 
+void AndroidRenderer::account_gpu_allocation(VkDeviceSize bytes) noexcept {
+    const std::uint64_t amount = static_cast<std::uint64_t>(bytes);
+    if (amount > std::numeric_limits<std::uint64_t>::max() - tracked_gpu_memory_bytes_)
+        tracked_gpu_memory_bytes_ = std::numeric_limits<std::uint64_t>::max();
+    else
+        tracked_gpu_memory_bytes_ += amount;
+}
+
 std::uint32_t AndroidRenderer::find_memory_type(std::uint32_t type_bits, VkMemoryPropertyFlags properties) const noexcept {
     VkPhysicalDeviceMemoryProperties memory{};
     vkGetPhysicalDeviceMemoryProperties(physical_device_, &memory);
@@ -308,6 +316,7 @@ bool AndroidRenderer::create_depth_resources() noexcept {
         log_error("vkBindImageMemory for depth attachment failed", result);
         return false;
     }
+    account_gpu_allocation(requirements.size);
 
     VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
     view.image = depth_image_;
@@ -457,6 +466,7 @@ bool AndroidRenderer::create_shadow_resources() noexcept {
         log_error("Allocate/bind directional shadow image memory failed", result);
         return false;
     }
+    account_gpu_allocation(requirements.size);
 
     if (!shadow_enabled_) {
         VkBuffer staging = VK_NULL_HANDLE;
@@ -878,6 +888,7 @@ bool AndroidRenderer::upload_environment_cube(
         release_staging();
         return false;
     }
+    account_gpu_allocation(requirements.size);
 
     VkCommandPool pool = VK_NULL_HANDLE;
     VkCommandPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
@@ -1051,6 +1062,8 @@ bool AndroidRenderer::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage,
         log_error("vkBindBufferMemory failed", result);
         return false;
     }
+    if ((usage & VK_BUFFER_USAGE_TRANSFER_SRC_BIT) == 0U)
+        account_gpu_allocation(requirements.size);
     return true;
 }
 
@@ -1389,6 +1402,7 @@ bool AndroidRenderer::upload_texture_rgba8(
         release_staging();
         return false;
     }
+    account_gpu_allocation(requirements.size);
 
     VkCommandPool pool = VK_NULL_HANDLE;
     VkCommandPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
@@ -2005,6 +2019,7 @@ arut::rendering::RenderProfileSnapshot AndroidRenderer::profile_snapshot() const
     snapshot.visible_objects = last_visible_objects_;
     snapshot.triangles = last_triangles_;
     snapshot.gpu_timing_available = timestamp_queries_available_;
+    snapshot.gpu_memory_bytes = tracked_gpu_memory_bytes_;
     return snapshot;
 }
 
@@ -2159,6 +2174,7 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     image_views_.clear();
     command_buffers_.clear();
     images_.clear();
+    tracked_gpu_memory_bytes_ = 0;
 }
 
 bool AndroidRenderer::recreate_swapchain() noexcept {
