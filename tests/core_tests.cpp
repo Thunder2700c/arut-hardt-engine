@@ -29,10 +29,15 @@ int main() {
     assert(arut::core::name() == std::string_view{"ARUT-HARDT Engine"});
 
     constexpr auto low = arut::rendering::quality_config(arut::rendering::RenderQualityTier::Low);
+    constexpr auto medium = arut::rendering::quality_config(arut::rendering::RenderQualityTier::Medium);
     constexpr auto high = arut::rendering::quality_config(arut::rendering::RenderQualityTier::High);
+    constexpr auto ultra = arut::rendering::quality_config(arut::rendering::RenderQualityTier::Ultra);
     static_assert(low.render_scale < high.render_scale);
     static_assert(low.shadows == false);
-    static_assert(high.shadow_map_resolution > low.shadow_map_resolution);
+    static_assert(medium.shadow_map_resolution == 512);
+    static_assert(medium.shadow_cascades == 1);
+    static_assert(high.shadow_map_resolution == 1024 && high.shadow_cascades == 2);
+    static_assert(ultra.shadow_map_resolution == 1536 && ultra.shadow_cascades == 4);
 
     arut::rendering::PbrMaterial material{};
     material.metallic = 2.0F;
