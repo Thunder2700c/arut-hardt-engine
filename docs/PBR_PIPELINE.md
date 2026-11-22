@@ -20,6 +20,8 @@ The shader interface is currently an engine-internal prototype, not a stable ext
 ## Texture pipeline
 - stb_image v2.34 is pinned under third_party/stb; LDR PNG, JPEG, BMP and TGA decode to RGBA8, while Radiance RGBE HDR decodes to linear RGBA32F and preserves values above 1.0.
 - HDR decode is bounded to the same 8192-pixel side and 16-million-pixel limits; malformed, non-finite and negative decoded values are rejected.
+- Linear equirectangular HDR images can be converted on CPU into six RGBA32F cubemap faces. Longitude sampling wraps across the seam, latitude sampling clamps at the poles, and radiance above 1.0 remains unclamped.
+- The float cubemap conversion is a CPU import stage only; the active Vulkan renderer still uses the procedural RGBA8 environment until RGBA16F upload, float GGX prefiltering and runtime probe integration are completed.
 - Decode is bounded to 8192 pixels per side and 16 million total pixels; a texture asset larger than 64 MiB is rejected before decoding.
 - CPU mip generation filters sRGB colour channels in linear light and treats alpha as linear.
 - Vulkan uploads mip levels through a staging buffer, transitions to shader-read layout, creates a view and a sampler.
