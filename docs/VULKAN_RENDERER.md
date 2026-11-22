@@ -1,6 +1,6 @@
 # Vulkan Renderer Bring-up
 
-Status: the source contains a mobile forward PBR path, real material texture uploads, GGX-prefiltered specular and cosine-convolved diffuse environment lighting, instanced geometry, quality-selected directional cascades, optional GPU compute visibility with CPU fallback, indexed indirect draws and per-pass GPU timestamps. CI compiles host targets and the Android ARM64 native library without packaging an APK.
+Status: the source contains a mobile forward PBR path, real material texture uploads, GGX-prefiltered specular and cosine-convolved diffuse environment lighting, instanced geometry, quality-selected directional cascades, optional GPU compute visibility with CPU fallback, indexed indirect draws and per-pass GPU timestamps. Host CI compiles shaders and runs native tests; the explicit Android ARM64 APK workflow packages the current runtime for device testing.
 
 ## Frame setup
 1. Create Android Vulkan instance/surface, choose graphics/presentation queues and create the FIFO swapchain.
@@ -40,9 +40,9 @@ GPU culling uses a Vulkan compute shader to test source bounding spheres, compac
 Runtime profile logs include CPU frame duration, separate GPU visibility-compute and cascaded-shadow durations, total GPU frame duration when available, engine-owned persistent Vulkan allocation bytes, draw calls, visible instances and triangle count. Unsupported timestamp queries are gracefully disabled. Driver-reported heap budgets and detailed per-material breakdowns remain pending.
 
 ## Limits
-- The scene is a small renderer test fixture, not a game world.
+- The current renderer fixture is a dedicated 5,000-cube (20 × 10 × 25) instancing and visibility stress scene, not a game world.
 - The base-colour PNG, tangent-normal TGA and metallic-roughness TGA are decoded and uploaded into their matching material descriptors. The split-sum BRDF integration LUT is procedurally generated on CPU and uploaded as an RGBA8 lookup texture.
-- The procedural cubemap remains the fallback bootstrap environment. When `environments/default.hdr` is packaged, the renderer decodes it as linear RGBA32F, converts it to a cube, prefilters float GGX mips, convolves diffuse irradiance and uploads both maps as RGBA16F when the format is supported. GPU environment-probe arrays and runtime multi-probe blending remain pending; no sample HDR asset is bundled yet.
+- The procedural cubemap remains the fallback bootstrap environment. When `environments/default.hdr` is packaged, the renderer decodes it as linear RGBA32F, converts it to a cube, prefilters float GGX mips, convolves diffuse irradiance and uploads both maps as RGBA16F when the format is supported. The repository packages `environments/default.hdr` plus `environments/probes/probe_0.hdr` and `probe_1.hdr`; the runtime has four probe slots and per-slot global-environment fallback.
 - Directional shadows support a quality-selected 1/2/4-cascade path with texel-snapped projections and cross-fade between cascades; local-light shadows remain pending.
 - No APK, emulator or physical-device testing is performed by normal CI. The manual Android APK workflow remains separately gated.
-- Android GPU visual correctness and measured costs remain unverified until the user authorizes testing.
+- S23 FE runtime testing has been authorized and performed. The supplied runtime evidence reports the 5,000-instance GPU-culling path and parity checks on Xclipse 920. Cross-GPU validation and GPU-shader-versus-CPU-reference image comparison remain outstanding.
