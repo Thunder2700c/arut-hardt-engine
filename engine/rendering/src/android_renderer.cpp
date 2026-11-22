@@ -6,6 +6,7 @@
 #include <array>
 #include <cstring>
 #include <limits>
+#include <cmath>
 #include <cstdio>
 #include <vector>
 #include <cstddef>
