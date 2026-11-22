@@ -56,6 +56,7 @@ jobs:
           glslangValidator -V --target-env vulkan1.0 -o app/src/main/assets/shaders/first_triangle.frag.spv engine/rendering/shaders/first_triangle.frag
           glslangValidator -V --target-env vulkan1.0 -o app/src/main/assets/shaders/mobile_pbr_forward.vert.spv engine/rendering/shaders/mobile_pbr_forward.vert
           glslangValidator -V --target-env vulkan1.0 -o app/src/main/assets/shaders/mobile_pbr_forward.frag.spv engine/rendering/shaders/mobile_pbr_forward.frag
+          glslangValidator -V --target-env vulkan1.0 -o app/src/main/assets/shaders/mobile_shadow_depth.vert.spv engine/rendering/shaders/mobile_shadow_depth.vert
       - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug > build-logs/android-build.log 2>&1
       - uses: actions/upload-artifact@v4
