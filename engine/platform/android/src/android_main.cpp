@@ -38,7 +38,7 @@ struct RuntimeState final {
  arut::core::World ecs_world{};
  arut::core::CubeSpawnSystem cube_spawn_system{};
  arut::core::CubeRenderExtractionSystem cube_render_extraction_system{};
- arut::core::TerrainMesh terrain_mesh{};
+ std::vector<arut::core::TerrainMesh> terrain_cells{};
  arut::core::LodSystem lod_system{};
  arut::core::WorldPartition world_partition{128.0F};
  arut::core::WorldCellStreamer world_streamer{};
@@ -192,7 +192,7 @@ void handle_app_command(android_app* app, std::int32_t command) {
       std::span<const arut::core::CubeRenderInstance>{
        state->cube_render_extraction_system.instances().data(),
        state->cube_render_extraction_system.instances().size()},
-      state->terrain_mesh)) {
+      std::span<const arut::core::TerrainMesh>{state->terrain_cells.data(), state->terrain_cells.size()})) {
      log_warn("Vulkan renderer unavailable; activity remains alive.");
     }
    }
@@ -271,7 +271,6 @@ void run(android_app* app) {
   default_environment ? "passed" : "failed",
   default_environment ? default_environment.bytes->size() : 0U, asset_stats.entries);
  try {
-  state.terrain_mesh = arut::core::TerrainSystem::build(512.0F, 128U);
   const auto streaming = state.world_streamer.update(
    state.world_partition, 0.0F, 0.0F, 2U,
    [&state](arut::core::WorldCell cell, arut::core::WorldCellContent& content) {
@@ -285,8 +284,14 @@ void run(android_app* app) {
     }
     return content.terrain.valid();
    });
-  log_info("TERRAIN generated=true resolution=%u vertices=%zu indices=%zu",
-   state.terrain_mesh.resolution, state.terrain_mesh.vertices.size(), state.terrain_mesh.indices.size());
+  state.terrain_cells = state.world_streamer.collect_terrain_meshes(state.world_partition);
+  std::size_t terrain_vertices = 0U, terrain_indices = 0U;
+  for (const auto& cell_mesh : state.terrain_cells) {
+   terrain_vertices += cell_mesh.vertices.size();
+   terrain_indices += cell_mesh.indices.size();
+  }
+  log_info("TERRAIN_CELLS generated=true cells=%zu vertices=%zu indices=%zu",
+   state.terrain_cells.size(), terrain_vertices, terrain_indices);
   log_info("WORLD_STREAMING active_cells=%zu resident_cells=%zu loaded=%zu unloaded=%zu failed=%zu cell_size=%.1f",
    state.world_partition.active_count(), streaming.resident, streaming.loaded,
    streaming.unloaded, streaming.failed, state.world_partition.cell_size());
