@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
