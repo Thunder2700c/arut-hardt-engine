@@ -16,6 +16,11 @@ int main() {
     assert(std::abs(rest.lower_leg_pitch) < 1.0e-4F);
     assert(std::abs(rest.foot_pitch) < 1.0e-4F);
     assert(std::abs(rest.foot_roll) < 1.0e-4F);
+    const auto mirrored_rest = solve_two_bone_leg_ik(
+        0.85F, 0.10F, 0.43F, 0.42F, 0.10F, flat_normal);
+    assert(mirrored_rest.valid);
+    assert(std::abs(mirrored_rest.upper_leg_pitch) < 1.0e-4F);
+    assert(std::abs(mirrored_rest.lower_leg_pitch) < 1.0e-4F);
 
     const auto adjusted = solve_two_bone_leg_ik(
         0.77F, -0.18F, 0.43F, 0.42F, -0.10F, flat_normal);
