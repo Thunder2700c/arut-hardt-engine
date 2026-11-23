@@ -69,3 +69,18 @@ The forgotten adjacent feature is the reusable vehicle/car system already listed
 - Verification status: changes are committed to `main`. The CI workflow is configured to run on every push to `main`, but this session has not obtained a workflow run/job result. The commit-status endpoint returned no status entries. Therefore compile/test success is **not verified yet**.
 - Limitations: Android currently records procedural animation plus IK into pose history and predicts trajectory. It does not yet run motion matching in-game because no imported/retargeted animation clip library or built pose-search database is wired into the app. No GASP parity claim is made.
 - Follow-up correctness fix: corrected the world-to-character-local rotation convention in trajectory prediction and added a 90-degree-facing regression check (`bf5149a`, `f31b16e`).
+
+## GLB skeletal asset import milestone — 2026-11-23
+
+- Vendored upstream cgltf 1.15 at `third_party/cgltf/cgltf.h` with its MIT license at `third_party/cgltf/LICENSE`; upstream source: https://github.com/jkuhlmann/cgltf.
+- Added `engine/animation/include/arut/animation/gltf_importer.hpp` and `engine/animation/src/gltf_importer.cpp`.
+- Import API accepts an in-memory, self-contained GLB 2.0 byte buffer; external .gltf URI resolution is deliberately not part of this API.
+- Imports one skin with up to the current 20-joint pose capacity, joint names/hierarchy, rest TRS, inverse-bind matrices, skinned triangle primitives, positions, optional normals/UVs, JOINTS_0/WEIGHTS_0 and indices.
+- Imports animation channels targeting skin joints for translation, rotation and scale; supports LINEAR, STEP and CUBICSPLINE sampling, including quaternion interpolation/normalization.
+- Added local scale to animation transforms and included it in pose validation, sampling and blending.
+- Added generated GLB fixture test covering parsing, skin, mesh, weights, indices, clip sampling and invalid-input rejection. CMake builds importer and registers `arut_gltf_importer_tests`; Android native target links the same animation library.
+- Hardened imported-asset validation for parent cycles, finite transforms, normalized weights and index bounds.
+- Dependency record updated: `docs/DEPENDENCIES.md`; implementation scope updated: `docs/GASP_STYLE_ANIMATION_PLAN.md`.
+- Key commits: cgltf vendor `1841189`; importer contract `82311cc`; importer implementation `8bc2e36`; validation fix `04ab9d3`; CMake integration `44d90de`; generated GLB test `809a1b1`; validation hardening `f3e9e7e`; roadmap `487b12b`.
+- Known limitations: importer currently supports only one skin, at most 20 joints, triangle primitives, four influences, TRS-authored joints, and embedded GLB buffers. It does not yet import PBR materials/textures, external .gltf files, meshopt/Draco-compressed geometry, morph targets, or non-skin scene content. Imported mesh data is not yet uploaded through the Android renderer; the next step is retargeting and renderer asset integration.
+- Verification: the CI workflow is configured for push to main and now includes the new importer test through CMake. No completed workflow job result was available in this session, so compilation and test pass remain unverified.
