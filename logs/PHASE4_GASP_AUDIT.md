@@ -35,3 +35,22 @@ The forgotten adjacent feature is the reusable vehicle/car system already listed
 - Commits: `b077670` API; `33e2b58` implementation; `3bbdc1b` tests; `f9c701e` CMake integration.
 - Verification status at log update: source committed to main; CI result not yet observed. Android device behavior not tested.
 - Remaining 4A work: bridge existing Android character animator to this runtime, move pose ownership out of renderer-specific code, add deterministic transition graph/state-machine and root-motion contracts. This is a first implementation slice, not 4A completion.
+
+## Motion matching foundation implementation
+
+- Added renderer-independent pose-search schema with selected-joint feature weights and three trajectory horizons.
+- Added offline database builder that samples source animation clips and stores pose + future root-displacement features.
+- Added weighted nearest-pose search with required/forbidden tag filters and continuity cost.
+- Added fixed-capacity 32-frame pose-history ring buffer.
+- Added three-point trajectory prediction from world velocity, acceleration, facing and angular velocity.
+- Added independent host tests for database generation/search/tag filtering, pose-history retention and trajectory prediction.
+- CMake now compiles both new modules and registers their tests.
+- Commits: `c3584f4` motion matching API; `2a90eda` database/search; `3076afc` tests; `db76ea2` CMake; `e00dec1` allocation exception correctness; `6acf905` source correction; `1557320` pose history API; `7631d33` history/trajectory implementation; `37b8c1c` tests; `67a5884` CMake integration.
+- Verification: source committed. CI/test result not yet observed. Android runtime is not yet wired to motion matching. Do not call GASP parity complete.
+
+## Licensing decision
+
+- Recreate techniques from public documentation using original C++ implementations.
+- Do not copy Unreal Engine source code, Blueprint graphs as serialized assets, or sample content into ARUT-HARDT.
+- Only use sample assets/Examples under the exact license that applies to those specific files. Fab-distributed Content may have separate restrictions. Prefer independently licensed mocap/GLB assets and preserve attribution/license files.
+- An Unreal-only distribution restriction does not automatically grant rights to bundle Epic-owned assets in an independent engine. A UE-only plugin can be a separate product, but its code/content still needs a compatible license and cannot be assumed reusable by ARUT-HARDT.
