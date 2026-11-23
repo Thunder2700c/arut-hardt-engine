@@ -77,11 +77,21 @@ bool build_cell_content(RuntimeState& state, arut::core::WorldCell cell,
  content.lod = select_cell_lod(state, cell, camera_x, camera_z);
  const float size = state.world_partition.cell_size();
  content.terrain = arut::core::TerrainSystem::build(size, cell_lod_resolution(content.lod));
- const float offset_x = static_cast<float>(cell.x) * size;
- const float offset_z = static_cast<float>(cell.z) * size;
+ const float offset_x = (static_cast<float>(cell.x) + 0.5F) * size;
+ const float offset_z = (static_cast<float>(cell.z) + 0.5F) * size;
+ constexpr float epsilon = 0.1F;
  for (auto& vertex : content.terrain.vertices) {
   vertex.x += offset_x;
   vertex.z += offset_z;
+  vertex.y = arut::core::TerrainSystem::height(vertex.x, vertex.z);
+  const float dx = (arut::core::TerrainSystem::height(vertex.x + epsilon, vertex.z) -
+                    arut::core::TerrainSystem::height(vertex.x - epsilon, vertex.z)) / (2.0F * epsilon);
+  const float dz = (arut::core::TerrainSystem::height(vertex.x, vertex.z + epsilon) -
+                    arut::core::TerrainSystem::height(vertex.x, vertex.z - epsilon)) / (2.0F * epsilon);
+  const float inverse = 1.0F / std::sqrt(dx * dx + 1.0F + dz * dz);
+  vertex.nx = -dx * inverse;
+  vertex.ny = inverse;
+  vertex.nz = -dz * inverse;
  }
  return content.terrain.valid();
 }
