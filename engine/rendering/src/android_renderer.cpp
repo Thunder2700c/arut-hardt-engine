@@ -1937,11 +1937,11 @@ bool AndroidRenderer::create_mannequin_geometry() noexcept {
     model.value[0] = scale;
     model.value[5] = scale;
     model.value[10] = scale;
-    // Keep the mannequin near the camera in humanoid-only mode. In combined
-    // mode move it clear of the stress grid's centre without changing rig scale.
-    model.value[12] = visibility_source_instance_count_ == 0U ? 0.0F : 5.0F;
+    // In the combined profile, place the mannequin between the stress grid's
+    // regular two-metre X/Z rows so it remains visible without hiding cube rows.
+    model.value[12] = 0.0F;
     model.value[13] = 0.0F;
-    model.value[14] = visibility_source_instance_count_ == 0U ? 0.0F : -4.0F;
+    model.value[14] = visibility_source_instance_count_ == 0U ? 0.0F : -5.0F;
     if (!create_buffer(sizeof(model), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                        mannequin_instance_buffer_, mannequin_instance_memory_)) return false;
     mapped = nullptr;
