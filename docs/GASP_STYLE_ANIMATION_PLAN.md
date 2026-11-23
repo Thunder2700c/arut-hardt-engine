@@ -118,3 +118,16 @@ The GLB must be packaged at `app/src/main/assets/Characters/hero.glb` for the An
 - IK, traversal and physical animation are modular and can be enabled/disabled independently.
 - Ragdoll uses physics bodies and constraints, and can recover to animation.
 - Host tests and Android ARM64 CI pass; S23 FE runtime evidence confirms visual behavior and acceptable performance.
+
+
+## Built-in procedural mannequin visual target (default character)
+
+The built-in character is the default experience. A user-supplied GLB is an optional replacement and is never required to make the engine show a presentable humanoid.
+
+The default mannequin is engine-owned procedural geometry and uses:
+- a relaxed A-pose reference rig (not a horizontal T-pose);
+- smooth, higher-resolution anatomical volumes for pelvis, abdomen, ribcage, shoulders, head, upper/lower arms, hands, thighs, calves and feet;
+- rig-aware four-influence limb weights so the procedural body follows the built-in skeleton;
+- a neutral metallic blue-grey PBR material with the demo UV-checker texture disabled.
+
+The previous implementation used low-resolution bone-following tubes and spheres and inherited the demo checker material. That was not an acceptable default character. The current replacement improves silhouette and material presentation while retaining the built-in rig and renderer. It is still a stylized engine mannequin, not a photoreal human scan or a finished licensed game character. Further work remains for a fully unified surface, detailed hands/face, per-part material variation, and device visual review.
