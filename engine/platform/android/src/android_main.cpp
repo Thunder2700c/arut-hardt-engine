@@ -558,7 +558,7 @@ void run(android_app* app) {
       continue;
      }
      const float side = foot == 0U ? -1.0F : 1.0F;
-     constexpr float ankle_local_forward = 0.10F;
+     constexpr float ankle_local_forward = -0.10F;
      const float ankle_local_side = side * 0.11F;
      if (!plant.active) {
       const float anchor_x = character.position.x +
@@ -597,7 +597,7 @@ void run(android_app* app) {
       -yaw_sine * ground.normal.x + yaw_cosine * ground.normal.z
      };
      const auto ik = arut::rendering::solve_two_bone_leg_ik(
-      -delta_y, target_forward, 0.43F, 0.42F, 0.10F, local_normal);
+      -delta_y, target_forward, 0.43F, 0.42F, -0.10F, local_normal);
      if (!ik.valid) {
       log_warn("HUMANOID_IK invalid leg solution foot=%zu", foot);
       continue;
