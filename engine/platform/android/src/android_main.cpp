@@ -74,6 +74,10 @@ struct RuntimeState final {
  bool mouse_look_active{false};
  float gamepad_move_x{0.0F};
  float gamepad_move_y{0.0F};
+ bool combat_attack_light_pressed{false};
+ bool combat_attack_heavy_pressed{false};
+ bool combat_block_held{false};
+ bool combat_dodge_pressed{false};
  arut::core::HumanoidSkeleton humanoid_skeleton{arut::core::make_robot_mannequin_skeleton()};
  arut::rendering::HumanoidAnimator humanoid_animator{};
  arut::animation::PoseHistory animation_pose_history{};
@@ -490,6 +494,14 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
     state->character_input_router.set_key(Key::MoveRight, pressed); break;
    case AKEYCODE_SPACE: case AKEYCODE_BUTTON_A:
     state->character_input_router.set_key(Key::Jump, pressed); break;
+   case AKEYCODE_J: case AKEYCODE_BUTTON_B:
+    state->combat_attack_light_pressed = pressed; break;
+   case AKEYCODE_K: case AKEYCODE_BUTTON_X:
+    state->combat_attack_heavy_pressed = pressed; break;
+   case AKEYCODE_L: case AKEYCODE_BUTTON_Y:
+    state->combat_block_held = pressed; break;
+   case AKEYCODE_I: case AKEYCODE_BUTTON_R1:
+    state->combat_dodge_pressed = pressed; break;
    default: handled = false; break;
   }
   if (handled) {
@@ -704,6 +716,13 @@ void run(android_app* app) {
     animation_input.horizontal_speed = horizontal_speed;
     animation_input.vertical_speed = character.velocity.y;
     animation_input.grounded = character.grounded;
+    animation_input.attack_light_pressed = state.combat_attack_light_pressed;
+    animation_input.attack_heavy_pressed = state.combat_attack_heavy_pressed;
+    animation_input.block_held = state.combat_block_held;
+    animation_input.dodge_pressed = state.combat_dodge_pressed;
+    state.combat_attack_light_pressed = false;
+    state.combat_attack_heavy_pressed = false;
+    state.combat_dodge_pressed = false;
     auto pose = state.humanoid_animator.update(animation_input, frame_delta);
     const auto& animation_snapshot = state.humanoid_animator.snapshot();
     const bool idle_or_landing =
