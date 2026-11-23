@@ -215,15 +215,16 @@ bool apply_additive_layer(const Pose& base_pose, const Pose& layer_pose,
     if (!finite(weight) || !valid_pose(base_pose, base_pose.joint_count) ||
         !valid_pose(layer_pose, base_pose.joint_count) ||
         !valid_pose(reference_pose, base_pose.joint_count)) return false;
+    for (std::size_t i = 0; i < reference_pose.joint_count; ++i) {
+        const auto& scale = reference_pose.joints[i].scale;
+        if (std::abs(scale.x) <= 1.0e-8F || std::abs(scale.y) <= 1.0e-8F || std::abs(scale.z) <= 1.0e-8F) return false;
+    }
     const float w = std::clamp(weight, 0.0F, 1.0F);
     output.joint_count = base_pose.joint_count;
     for (std::size_t i = 0; i < output.joint_count; ++i) {
         const auto& base = base_pose.joints[i];
         const auto& layer = layer_pose.joints[i];
         const auto& reference = reference_pose.joints[i];
-        if (std::abs(reference.scale.x) <= 1.0e-8F ||
-            std::abs(reference.scale.y) <= 1.0e-8F ||
-            std::abs(reference.scale.z) <= 1.0e-8F) return false;
         auto& dst = output.joints[i];
         dst.translation = {base.translation.x + (layer.translation.x-reference.translation.x)*w,
                            base.translation.y + (layer.translation.y-reference.translation.y)*w,
