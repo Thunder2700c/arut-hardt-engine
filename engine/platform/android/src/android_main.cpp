@@ -39,6 +39,7 @@ struct RuntimeState final {
  arut::core::World ecs_world{};
  arut::core::CubeSpawnSystem cube_spawn_system{};
  arut::core::CubeRenderExtractionSystem cube_render_extraction_system{};
+ arut::core::SceneGraphSystem scene_graph_system{};
  std::vector<arut::core::TerrainMesh> terrain_cells{};
  arut::core::LodSystem lod_system{};
  arut::core::WorldPartition world_partition{128.0F};
@@ -342,7 +343,10 @@ void run(android_app* app) {
  else log_warn("Persistent runtime log unavailable; logcat remains active.");
  try {
   state.cube_spawn_system.update(state.ecs_world);
-  state.cube_render_extraction_system.update(state.ecs_world);
+  state.scene_graph_system.update(state.ecs_world);
+  state.cube_render_extraction_system.update(state.ecs_world, &state.scene_graph_system);
+  log_info("SCENE_GRAPH synchronized=true bound_entities=%zu nodes=%u",
+   state.scene_graph_system.bound_entity_count(), state.scene_graph_system.graph().node_count());
   state.ecs_scene_ready =
    state.ecs_world.entity_count() == arut::core::CubeSpawnSystem::target_count &&
    state.cube_spawn_system.spawned_count() == arut::core::CubeSpawnSystem::target_count &&
