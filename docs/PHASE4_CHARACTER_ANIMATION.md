@@ -1,6 +1,6 @@
 # Phase 4 — Character and animation
 
-**Status:** In progress. The first implementation slice is the engine-owned humanoid skeleton contract. This is not yet a rendered or playable character.
+**Status:** In progress. The rig contract and procedural bind-pose mesh generator are implemented. Renderer integration and animation are still pending; this is not yet a rendered or playable character.
 
 ## Canonical scope
 
@@ -15,7 +15,7 @@
 ## Implementation slices
 
 1. **4.1 — Rig foundation:** define a stable humanoid bone order, parent hierarchy, metre-based rest translations and per-joint visual radii. Keep the rig procedural and engine-owned so no licensed character asset is required.
-2. **4.2 — Mannequin geometry and rendering:** generate articulated robot body geometry from the rig, add GPU skinning/bone palette support to the Vulkan path, and validate on Android.
+2. **4.2 — Mannequin rendering:** connect the generated bind-pose mesh to the Vulkan draw path, then add GPU skinning/bone palette support and validate on Android.
 3. **4.3 — Character movement:** fixed-step controller, capsule collision, gravity, grounded state, slope handling, jump and movement acceleration/deceleration.
 4. **4.4 — Locomotion and blending:** in-place idle/walk/run/strafe/backward/jump/fall/land clips, state machine and smooth directional blend.
 5. **4.5 — IK:** two-bone leg solving and terrain-aware foot placement/orientation.
