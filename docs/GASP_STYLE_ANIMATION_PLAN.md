@@ -1,6 +1,6 @@
 # ARUT-HARDT GASP-Style Animation System
 
-**Status:** Active implementation — runtime, pose-search/playback foundations, Android pose-history feed, initial cgltf-backed GLB skeletal mesh/clip importer, and name-based rest-pose retargeting foundations committed; material import, runtime renderer integration, combat graph and full GASP-style feature set remain incomplete  
+**Status:** Active implementation — renderer-independent animation runtime, pose-search/playback foundations, Android pose-history feed, GLB skeletal mesh/clip importer, name-based retargeting and 128-joint CPU pose support committed; material import, runtime renderer integration, combat graph and full GASP-style feature set remain incomplete  
 **Language policy:** Native C++ only. No GDScript.  
 **Targets:** Android ARM64 first; desktop support must remain portable.  
 **Reference:** Unreal Engine Game Animation Sample Project (GASP), recreated as an original engine subsystem. This document describes desired behavior and architecture; it does not claim feature parity or completed implementation.
@@ -11,30 +11,30 @@ Build a reusable, data-driven character animation framework inspired by the tech
 
 The system must work with the engine's replaceable metallic robot mannequin and with developer-imported skeletal characters. The mannequin is a reference asset, not a hard-coded player character.
 
-## 2. Current repository baseline (verified before this plan)
+## 2. Current repository baseline
 
-- A fixed 20-bone humanoid skeleton and procedural mannequin mesh exist.
-- GPU skinning uses a 20-matrix palette and four vertex influences.
-- A procedural animator currently selects Idle, Walk, Run, StrafeLeft, StrafeRight, Backward, Jump, Fall and Land.
-- The current animation poses are synthesized procedurally. There is no imported animation-clip playback or motion-matching database in the current implementation.
-- Terrain-aware two-bone foot IK exists.
+- The reference mannequin remains a fixed 20-bone humanoid skeleton.
+- The legacy Android mannequin renderer still uses a 20-matrix GPU skinning palette and four vertex influences.
+- The procedural animator currently selects Idle, Walk, Run, StrafeLeft, StrafeRight, Backward, Jump, Fall and Land.
+- Renderer-independent animation poses, clips, playback and blending now support up to 128 joints.
+- Terrain-aware two-bone foot IK exists for the reference mannequin.
 - The character controller is kinematic and the current test arena uses static AABBs. A general rigid-body physics backend and ragdoll system are not yet integrated.
-- The current renderer updates the mannequin pose directly. The long-term design must move animation evaluation behind reusable runtime interfaces rather than hard-code a single mannequin animator into the Android renderer.
+- The imported GLB mesh/clip path is CPU-side only; it is not yet connected to Android renderer GPU buffers or a general scene-graph skinning palette.
 
 ## 3. Target architecture
 
 ### 3.1 Asset and skeleton layer
 
-- Import glTF 2.0 / GLB skeletal meshes, skins, joint hierarchies, inverse bind matrices, vertex weights, animation samplers/channels, PBR materials and textures. Initial importer now reads embedded GLB 2.0, one skin (up to the current 20-joint pose limit), triangle primitives, four joint/weight influences, inverse bind matrices, and translation/rotation/scale animation channels. PBR material/texture import, external .gltf URI resolution, matrix-authored joint transforms and compressed geometry remain future work.
+- Import glTF 2.0 / GLB skeletal meshes, skins, joint hierarchies, inverse bind matrices, vertex weights, animation samplers/channels, PBR materials and textures. Initial importer reads embedded GLB 2.0, one skin (up to 128 joints), triangle primitives, four joint/weight influences, inverse bind matrices, and translation/rotation/scale animation channels. PBR material/texture import, external .gltf URI resolution, matrix-authored joint transforms and compressed geometry remain future work.
 - Preserve source skeleton hierarchy and stable bone names/indices.
 - Validate malformed assets, unsupported interpolation modes, invalid weights, missing joints and out-of-range accessors.
-- Support skeleton profiles and retarget maps so different character proportions can use compatible animation libraries. Initial name/alias matching and rest-pose-relative rotation, translation-scale and scale retargeting are implemented for rigs within the current 20-joint pose capacity.
+- Support skeleton profiles and retarget maps so different character proportions can use compatible animation libraries. Initial name/alias matching and rest-pose-relative rotation, translation-scale and scale retargeting now support rigs up to 128 joints.
 - Keep the existing procedural mannequin as a fallback/test asset until imported assets are fully supported.
 
 ### 3.2 Animation runtime
 
 - Animation clips with duration, sample rate, tracks, interpolation and root-motion metadata.
-- Pose representation independent of the renderer.
+- Pose representation independent of the renderer, currently capped at 128 joints.
 - Animation graph primitives: clip player, blend, additive layer, state machine, transition, animation event and output pose. The combat layer will add attack chains, blocks, dodges, hit reactions, recoveries, root-motion windows and authored cancel/combo windows.
 - Inertialized/smooth transitions to avoid visible pose pops.
 - Root-motion extraction and controlled application, with an explicit choice between animation-driven and capsule-driven movement.
@@ -79,8 +79,8 @@ The system must work with the engine's replaceable metallic robot mannequin and 
 ## 4. Implementation sequence
 
 1. **4A — Runtime separation and asset contracts (in progress):** renderer-independent pose/clip runtime, sampling, quaternion interpolation and blending are implemented with host tests. Remaining: move final pose ownership out of renderer-specific code, add graph/state-machine transitions and root-motion contracts, and validate on device.
-2. **4B — Imported animation assets (initial importer + retargeting foundation implemented):** cgltf 1.15 is vendored under MIT; GLB memory import creates a skeletal hierarchy, inverse bind matrices, skinned triangle vertex/index data and animation clips with LINEAR, STEP and CUBICSPLINE sampling. Name/alias-based retarget maps and rest-pose-relative retargeting are implemented with host tests. Remaining: broaden beyond 20 joints, support multiple skins and matrix transforms, import materials/textures, test real licensed assets, and connect imported meshes to renderer upload.
-3. **4C — Animation graph, locomotion and combat:** clip sampling, blending, state machine, transitions, root motion, starts/stops/turns and trajectory generation; then layered martial-arts combat (attacks, blocks, dodges, hit reactions, recoveries and combo/cancel windows). This is where Shadow Fight 3-inspired movement and combat animation gets integrated after mannequin, importer and retargeting.
+2. **4B — Imported animation assets (initial importer + retargeting foundation implemented):** cgltf 1.15 is vendored under MIT; GLB memory import creates a skeletal hierarchy, inverse bind matrices, skinned triangle vertex/index data and animation clips with LINEAR, STEP and CUBICSPLINE sampling. Name/alias-based retarget maps and rest-pose-relative retargeting are implemented. CPU animation and retargeting now accept 128-joint rigs. Remaining: support multiple skins and matrix transforms, import materials/textures, test real licensed assets, and connect imported meshes to renderer upload. The legacy Android renderer remains limited to its 20-joint mannequin palette.
+3. **4C — Animation graph, locomotion and combat:** clip sampling, blending, state machine, transitions, root motion, starts/stops/turns and trajectory generation; then layered martial-arts combat (attacks, blocks, dodges, hit reactions, recoveries and combo/cancel windows). This is where Shadow Fight 3-inspired movement and combat animation gets integrated after mannequin, importer, retargeting and renderer integration.
 4. **4D — Motion matching (foundation implemented):** pose-search schema, offline clip sampling/database generation, weighted feature scoring, tag filtering, continuity cost, pose-history ring buffer and trajectory prediction are implemented. Remaining: robust feature normalization, search profiling/LOD, imported clip database validation, and actual Android motion-matching playback once licensed clips are imported. Stateful clip selection and crossfade handoff are implemented; Android now records live pose history and predicts three future trajectory points.
 5. **4E — IK and traversal:** foot locking, warping, look-at, hand IK, vault/mantle interaction framework.
 6. **4F — Physics animation and ragdoll:** integrate the chosen physics backend; build reusable bone-body/joint profiles, powered ragdoll and recovery.
@@ -91,7 +91,7 @@ The system must work with the engine's replaceable metallic robot mannequin and 
 - C++ owns runtime animation, import validation, graph evaluation, motion matching, IK and physics integration. No GDScript.
 - Android ARM64 must build in CI; do not assume desktop-only dependencies or tools.
 - Do not bundle proprietary Epic animation assets or copy Epic source. Use original code and properly licensed animation data.
-- The mannequin remains replaceable. No renderer code may assume every character uses the 20-bone reference rig.
+- The mannequin remains replaceable. The legacy renderer's 20-joint palette must not become the limit of the general animation runtime.
 - Do not call the system GASP-complete until imported clips, trajectory/pose search, runtime selection, transitions, retargeting and device validation are demonstrated.
 - Do not mark Phase 4 complete until its canonical character deliverable is validated. Vehicle system remains Phase 5.
 
