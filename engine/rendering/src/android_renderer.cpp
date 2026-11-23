@@ -2838,6 +2838,11 @@ bool AndroidRenderer::create_commands_and_sync() noexcept {
     return true;
 }
 
+void AndroidRenderer::set_gamepad_look_input(float x, float y) noexcept {
+    gamepad_look_x_ = std::isfinite(x) ? std::clamp(x, -1.0F, 1.0F) : 0.0F;
+    gamepad_look_y_ = std::isfinite(y) ? std::clamp(y, -1.0F, 1.0F) : 0.0F;
+}
+
 void AndroidRenderer::set_touch_input(std::int32_t action, std::int32_t pointer_id,
                                      float x, float y, float width, float height) noexcept {
     if (action == 0) {
@@ -2886,6 +2891,9 @@ void AndroidRenderer::set_touch_input(std::int32_t action, std::int32_t pointer_
 
 void AndroidRenderer::update_stress_camera(float delta_seconds) noexcept {
     const float dt = std::clamp(delta_seconds, 0.0F, 0.05F);
+    camera_yaw_ += gamepad_look_x_ * 2.2F * dt;
+    camera_pitch_ = std::clamp(
+        camera_pitch_ - gamepad_look_y_ * 1.8F * dt, -1.45F, 1.45F);
     const float cosine_pitch = std::cos(camera_pitch_);
     const std::array<float, 3> forward{
         std::cos(camera_yaw_) * cosine_pitch,
