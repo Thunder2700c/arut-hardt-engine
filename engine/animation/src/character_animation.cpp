@@ -12,15 +12,39 @@ constexpr std::uint32_t state_id(CharacterAnimationState state) noexcept {
 
 bool CharacterAnimationController::configure(const CharacterAnimationSet& clips) {
     reset();
-    clips_ = clips;
+    clips_ = {};
+    owned_clips_ = {};
     graph_ = AnimationStateMachine{};
-    for (std::size_t i = 0; i < clips_.clips.size(); ++i) {
+    for (std::size_t i = 0; i < clips.clips.size(); ++i) {
         const auto state = static_cast<CharacterAnimationState>(i);
-        const auto* clip = clips_.clips[i];
-        if (!clip) continue;
-        const std::size_t joints = clip->keys.empty() ? 0U : clip->keys.front().pose.joint_count;
-        if (!clip->valid(joints)) return false;
-        if (!graph_.add_state(state_id(state), std::to_string(i), clip)) return false;
+        const auto* source = clips.clips[i];
+        if (!source) continue;
+        owned_clips_[i] = *source;
+        // Locomotion/guard/fall loops; attacks, jumps, dodges, reactions and
+        // recoveries clamp at their authored end frame instead of snapping to
+        // frame zero while the controller exits the action state.
+        switch (state) {
+            case CharacterAnimationState::Jump:
+            case CharacterAnimationState::Land:
+            case CharacterAnimationState::AttackLight:
+            case CharacterAnimationState::AttackHeavy:
+            case CharacterAnimationState::Dodge:
+            case CharacterAnimationState::HitReact:
+            case CharacterAnimationState::Recover:
+                owned_clips_[i].looping = false;
+                break;
+            default:
+                owned_clips_[i].looping = true;
+                break;
+        }
+        clips_.clips[i] = &owned_clips_[i];
+        const std::size_t joints = owned_clips_[i].keys.empty()
+            ? 0U : owned_clips_[i].keys.front().pose.joint_count;
+        if (!owned_clips_[i].valid(joints)) { reset(); return false; }
+        if (!graph_.add_state(state_id(state), std::to_string(i), &owned_clips_[i])) {
+            reset();
+            return false;
+        }
     }
     configured_ = has_state(CharacterAnimationState::Idle);
     return configured_;
@@ -167,6 +191,7 @@ bool CharacterAnimationController::update(float delta_seconds,
 void CharacterAnimationController::reset() noexcept {
     graph_.reset();
     clips_ = {};
+    owned_clips_ = {};
     state_ = CharacterAnimationState::Idle;
     state_elapsed_ = 0.0F;
     configured_ = false;
