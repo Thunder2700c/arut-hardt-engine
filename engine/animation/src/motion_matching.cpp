@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace arut::animation {
 namespace {
@@ -44,7 +45,7 @@ bool MotionMatchingDatabase::make_features(
     const Pose& pose,
     const std::array<MotionTrajectoryPoint,kMotionTrajectorySamples>& trajectory,
     const PoseSearchSchema& schema,
-    std::vector<float>& output) const noexcept {
+    std::vector<float>& output) const {
     if (!valid_pose_for_schema(pose,schema)) return false;
     output.clear();
     output.reserve(schema.joints.size()*7U+kMotionTrajectorySamples*3U);
@@ -67,7 +68,7 @@ bool MotionMatchingDatabase::make_features(
 bool MotionMatchingDatabase::build(
     const std::vector<MotionClipSource>& clips,
     const PoseSearchSchema& schema,
-    float sample_rate_hz) noexcept {
+    float sample_rate_hz) {
     samples_.clear();
     feature_count_=0U;
     if (!finite(sample_rate_hz)||sample_rate_hz<1.0F||sample_rate_hz>120.0F||
@@ -112,7 +113,7 @@ bool MotionMatchingDatabase::build(
     return !samples_.empty();
 }
 
-MotionMatchResult MotionMatchingDatabase::search(const MotionMatchQuery& query) const noexcept {
+MotionMatchResult MotionMatchingDatabase::search(const MotionMatchQuery& query) const {
     MotionMatchResult best{};
     if(samples_.empty()||!schema_.valid(query.current_pose.joint_count)) return best;
     std::vector<float> query_features;
