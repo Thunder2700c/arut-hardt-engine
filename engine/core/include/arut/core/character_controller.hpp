@@ -25,6 +25,13 @@ struct CharacterGroundSample final {
 using CharacterGroundQuery =
     CharacterGroundSample (*)(float x, float z, void* context) noexcept;
 
+// Return true when the vertical capsule at feet_position overlaps a blocking
+// object. A broadphase/physics backend can implement this without coupling the
+// controller to a particular physics library.
+using CharacterCollisionQuery =
+    bool (*)(const Vec3& feet_position, float radius, float height,
+             void* context) noexcept;
+
 struct CharacterControllerConfig final {
     float capsule_radius{0.32F};
     float capsule_height{1.80F};
@@ -95,7 +102,9 @@ public:
     // by the first step only, even when one render update catches up several steps.
     [[nodiscard]] std::uint32_t update(
         const CharacterInput& input, float frame_delta_seconds,
-        CharacterGroundQuery ground_query, void* ground_context = nullptr) noexcept {
+        CharacterGroundQuery ground_query, void* ground_context = nullptr,
+        CharacterCollisionQuery collision_query = nullptr,
+        void* collision_context = nullptr) noexcept {
         if (!ground_query || !std::isfinite(frame_delta_seconds) ||
             frame_delta_seconds <= 0.0F) return 0U;
 
@@ -107,7 +116,8 @@ public:
         while (accumulator_seconds_ >= config_.fixed_timestep &&
                steps < config_.maximum_steps_per_update) {
             step_input.jump_pressed = jump_queued_;
-            (void)fixed_step(step_input, ground_query, ground_context);
+            (void)fixed_step(step_input, ground_query, ground_context,
+                             collision_query, collision_context);
             jump_queued_ = false;
             step_input.jump_pressed = false;
             accumulator_seconds_ -= config_.fixed_timestep;
@@ -125,7 +135,9 @@ public:
 
     [[nodiscard]] bool fixed_step(
         const CharacterInput& input, CharacterGroundQuery ground_query,
-        void* ground_context = nullptr) noexcept {
+        void* ground_context = nullptr,
+        CharacterCollisionQuery collision_query = nullptr,
+        void* collision_context = nullptr) noexcept {
         if (!ground_query) return false;
         const float dt = config_.fixed_timestep;
         auto current_ground = ground_query(state_.position.x, state_.position.z,
@@ -173,15 +185,47 @@ public:
                 accept_horizontal = false;
         }
         if (accept_horizontal) {
-            state_.position.x = proposed_x;
-            state_.position.z = proposed_z;
+            const Vec3 proposed_position{proposed_x, state_.position.y, proposed_z};
+            const bool blocked = collision_query &&
+                collision_query(proposed_position, config_.capsule_radius,
+                                config_.capsule_height, collision_context);
+            if (!blocked) {
+                state_.position.x = proposed_x;
+                state_.position.z = proposed_z;
+            } else {
+                // Resolve each horizontal axis independently to preserve
+                // wall sliding instead of stopping all diagonal movement.
+                const Vec3 x_only{proposed_x, state_.position.y, state_.position.z};
+                if (!collision_query(x_only, config_.capsule_radius,
+                                     config_.capsule_height, collision_context)) {
+                    state_.position.x = proposed_x;
+                } else {
+                    state_.velocity.x = 0.0F;
+                }
+                const Vec3 z_only{state_.position.x, state_.position.y, proposed_z};
+                if (!collision_query(z_only, config_.capsule_radius,
+                                     config_.capsule_height, collision_context)) {
+                    state_.position.z = proposed_z;
+                } else {
+                    state_.velocity.z = 0.0F;
+                }
+            }
         } else {
             state_.velocity.x = 0.0F;
             state_.velocity.z = 0.0F;
         }
 
         state_.velocity.y -= config_.gravity * dt;
-        state_.position.y += state_.velocity.y * dt;
+        const float proposed_y = state_.position.y + state_.velocity.y * dt;
+        const Vec3 vertical_position{state_.position.x, proposed_y, state_.position.z};
+        if (!collision_query ||
+            !collision_query(vertical_position, config_.capsule_radius,
+                             config_.capsule_height, collision_context)) {
+            state_.position.y = proposed_y;
+        } else {
+            if (state_.velocity.y > 0.0F) state_.velocity.y = 0.0F;
+            else state_.grounded = false;
+        }
         const auto landing = ground_query(state_.position.x, state_.position.z,
                                           ground_context);
         if (landing.valid && is_walkable(landing.normal) &&
