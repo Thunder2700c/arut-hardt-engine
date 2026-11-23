@@ -60,3 +60,10 @@ The Android profile picker is implemented by `app/src/main/java/com/arut/engine/
 - Third-person camera and Android controls are usable.
 - Runtime logs expose controller, animation, blend, IK and camera state.
 - Physical-device evidence is reviewed before Phase 4 is marked complete.
+
+## Locomotion foundation
+
+- `engine/core/include/arut/core/character_controller.hpp` provides a fixed-timestep kinematic controller with a metre-based capsule profile, horizontal acceleration/deceleration, jump impulse, gravity, walkable-slope checks, maximum step-up height and bounded catch-up steps.
+- Ground contact is queried through a small callback so terrain and other world implementations can supply height and normal samples. The current implementation handles heightfield grounding and slope/step rejection; it does **not** yet collide the capsule against arbitrary walls, props or dynamic rigid bodies.
+- `engine/rendering/include/arut/rendering/humanoid_animation.hpp` provides Idle, Walk, Run, StrafeLeft, StrafeRight, Backward, Jump, Fall and Land states. The current poses are procedural and blended smoothly; they are not imported motion-capture clips.
+- Host tests cover acceleration/deceleration, jump/landing, steep-slope and step-up rejection, fixed-step catch-up limits, animation state selection and pose blending.
