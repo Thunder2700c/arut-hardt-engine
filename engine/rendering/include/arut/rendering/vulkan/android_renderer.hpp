@@ -8,6 +8,7 @@
 #include "arut/rendering/environment.hpp"
 #include "arut/rendering/gpu_visibility.hpp"
 #include "arut/rendering/environment_probe.hpp"
+#include "arut/rendering/humanoid_skinning.hpp"
 #include "arut/core/cube_stress_scene.hpp"
 #include "arut/core/world_systems.hpp"
 #include <array>
@@ -28,13 +29,32 @@ public:
 
     bool initialize(ANativeWindow* window, AAssetManager* assets,
                     std::span<const arut::core::CubeRenderInstance> ecs_instances,
-                    std::span<const arut::core::TerrainMesh> terrain_meshes) noexcept;
+                    std::span<const arut::core::TerrainMesh> terrain_meshes,
+                    bool render_mannequin = true,
+                    std::span<const arut::rendering::Mat4> static_scene_instances = {}) noexcept;
     void shutdown() noexcept;
     bool set_quality_tier(arut::rendering::RenderQualityTier tier) noexcept;
     bool set_environment_probes(std::span<const arut::rendering::EnvironmentProbeInfluence> probes) noexcept;
     bool draw_frame() noexcept;
     bool set_terrain_cells(std::span<const arut::core::TerrainMesh> terrain_meshes) noexcept;
     [[nodiscard]] std::array<float, 3> camera_position() const noexcept { return camera_position_; }
+    [[nodiscard]] float camera_yaw() const noexcept { return camera_yaw_; }
+    [[nodiscard]] float camera_pitch() const noexcept { return camera_pitch_; }
+    void set_gamepad_look_input(float x, float y) noexcept;
+    void set_gamepad_movement_input(float x, float y) noexcept;
+    void clear_input() noexcept;
+    [[nodiscard]] std::array<float, 2> movement_input() const noexcept {
+        return {joystick_x_, joystick_y_};
+    }
+    [[nodiscard]] bool consume_jump_pressed() noexcept {
+        const bool pressed = jump_pressed_;
+        jump_pressed_ = false;
+        return pressed;
+    }
+    void set_humanoid_state(const arut::rendering::Mat4& model,
+        const arut::rendering::HumanoidSkinningPalette& palette,
+        const std::array<float, 3>& camera_target,
+        const std::array<float, 3>& camera_position) noexcept;
     // action: 0=down, 1=move, 2=up. Coordinates are in window pixels.
     void set_touch_input(std::int32_t action, std::int32_t pointer_id,
                          float x, float y, float width, float height) noexcept;
@@ -72,10 +92,13 @@ private:
     bool create_gpu_visibility_resources() noexcept;
     bool record_gpu_visibility(VkCommandBuffer command_buffer) noexcept;
     void update_stress_camera(float delta_seconds) noexcept;
+    void update_humanoid_animation(float delta_seconds) noexcept;
     bool create_triangle_pipeline() noexcept;
     bool create_triangle_geometry() noexcept;
     bool create_pbr_pipeline() noexcept;
     bool create_pbr_geometry() noexcept;
+    bool create_mannequin_geometry() noexcept;
+    bool create_static_scene_geometry() noexcept;
     bool create_terrain_geometry() noexcept;
     bool create_pbr_descriptors() noexcept;
     bool create_shadow_resources() noexcept;
@@ -152,8 +175,24 @@ private:
     }};
     std::uint32_t environment_probe_count_{2U};
     std::vector<arut::core::TerrainMesh> terrain_meshes_{};
+    std::vector<arut::rendering::Mat4> static_scene_instances_{};
     std::vector<TerrainGpuMesh> terrain_gpu_meshes_{};
     std::uint32_t terrain_triangle_count_{0};
+    VkBuffer bone_palette_uniform_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory bone_palette_uniform_memory_{VK_NULL_HANDLE};
+    float humanoid_animation_time_seconds_{0.0F};
+    std::uint64_t humanoid_animation_updates_{0U};
+    VkBuffer mannequin_vertex_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory mannequin_vertex_memory_{VK_NULL_HANDLE};
+    VkBuffer mannequin_index_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory mannequin_index_memory_{VK_NULL_HANDLE};
+    VkBuffer mannequin_instance_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory mannequin_instance_memory_{VK_NULL_HANDLE};
+    std::uint32_t mannequin_index_count_{0};
+    VkBuffer static_scene_instance_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory static_scene_instance_memory_{VK_NULL_HANDLE};
+    std::uint32_t static_scene_instance_count_{0};
+    bool mannequin_scene_enabled_{true};
     VkBuffer cube_vertex_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory cube_vertex_memory_{VK_NULL_HANDLE};
     VkBuffer cube_index_buffer_{VK_NULL_HANDLE};
@@ -240,11 +279,22 @@ private:
     float camera_pitch_{0.0F};
     float joystick_x_{0.0F};
     float joystick_y_{0.0F};
+    float gamepad_move_x_{0.0F};
+    float gamepad_move_y_{0.0F};
+    float gamepad_look_x_{0.0F};
+    float gamepad_look_y_{0.0F};
     float joystick_origin_x_{0.0F};
     float joystick_origin_y_{0.0F};
     float joystick_radius_{72.0F};
     std::int32_t joystick_pointer_{-1};
     std::int32_t look_pointer_{-1};
+    std::int32_t jump_pointer_{-1};
+    bool jump_pressed_{false};
+    bool has_external_humanoid_state_{false};
+    arut::rendering::Mat4 pending_mannequin_model_{arut::rendering::Mat4::identity()};
+    arut::rendering::HumanoidSkinningPalette pending_humanoid_palette_{};
+    std::array<float, 3> humanoid_camera_target_{0.0F, 1.0F, 0.0F};
+    std::array<float, 3> humanoid_camera_position_{0.0F, 1.1F, 4.2F};
     float look_last_x_{0.0F};
     float look_last_y_{0.0F};
     std::uint32_t cpu_expected_visible_{0};

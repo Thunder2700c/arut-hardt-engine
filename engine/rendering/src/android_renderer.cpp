@@ -1,4 +1,6 @@
 #include "arut/rendering/vulkan/android_renderer.hpp"
+#include "arut/rendering/robot_mannequin.hpp"
+#include "arut/rendering/humanoid_skinning.hpp"
 
 #include <android/log.h>
 #include <vulkan/vulkan_android.h>
@@ -60,8 +62,26 @@ AndroidRenderer::~AndroidRenderer() { shutdown(); }
 bool AndroidRenderer::initialize(
     ANativeWindow* window, AAssetManager* assets,
     std::span<const arut::core::CubeRenderInstance> ecs_instances,
-    std::span<const arut::core::TerrainMesh> terrain_meshes) noexcept {
+    std::span<const arut::core::TerrainMesh> terrain_meshes,
+    bool render_mannequin,
+    std::span<const arut::rendering::Mat4> static_scene_instances) noexcept {
     shutdown();
+    mannequin_scene_enabled_ = render_mannequin;
+    try {
+        static_scene_instances_.assign(static_scene_instances.begin(), static_scene_instances.end());
+    } catch (...) {
+        log_error("Static test-scene instance allocation failed");
+        shutdown();
+        return false;
+    }
+    if (static_scene_instances_.size() > UINT32_MAX) {
+        log_error("Static test-scene instance count exceeds Vulkan draw limit");
+        shutdown();
+        return false;
+    }
+    has_external_humanoid_state_ = false;
+    jump_pointer_ = -1;
+    jump_pressed_ = false;
     if (terrain_meshes.empty()) { log_error("Renderer rejected empty streamed terrain cell set"); return false; }
     try {
         terrain_meshes_.assign(terrain_meshes.begin(), terrain_meshes.end());
@@ -74,8 +94,9 @@ bool AndroidRenderer::initialize(
     } catch (...) { terrain_meshes_.clear(); log_error("Renderer could not retain streamed terrain cells"); return false; }
     visibility_instances_.clear();
     visibility_source_instance_count_ = 0U;
-    if (ecs_instances.size() != arut::core::CubeSpawnSystem::target_count) {
-        log_error("Renderer rejected stress scene: expected exactly 5000 ECS render instances");
+    if (!ecs_instances.empty() &&
+        ecs_instances.size() != arut::core::CubeSpawnSystem::target_count) {
+        log_error("Renderer rejected stress scene: expected either zero or exactly 5000 ECS render instances");
         return false;
     }
     try {
@@ -97,6 +118,12 @@ bool AndroidRenderer::initialize(
                   "Renderer input accepted: source=ECS CubeSpawnSystem instances=%u",
                   visibility_source_instance_count_);
     arut_android_log(ANDROID_LOG_INFO, source_message);
+    char scene_message[128]{};
+    std::snprintf(scene_message, sizeof(scene_message),
+        "TEST_LAB_RENDER_PROFILE stress=%s humanoid=%s",
+        visibility_source_instance_count_ == 0U ? "false" : "true",
+        mannequin_scene_enabled_ ? "true" : "false");
+    arut_android_log(ANDROID_LOG_INFO, scene_message);
 
     window_ = window;
     assets_ = assets;
@@ -142,7 +169,9 @@ bool AndroidRenderer::set_terrain_cells(
 bool AndroidRenderer::create_frame_resources() noexcept {
     return create_render_targets() &&
            create_triangle_geometry() && create_triangle_pipeline() &&
-           create_pbr_geometry() && create_terrain_geometry() && create_gpu_visibility_resources() &&
+           create_pbr_geometry() &&
+           (!mannequin_scene_enabled_ || create_mannequin_geometry()) &&
+           create_static_scene_geometry() && create_terrain_geometry() && create_gpu_visibility_resources() &&
            create_fallback_texture() &&
            create_environment_cubemap() && create_environment_probe_cubemaps() &&
            create_brdf_lut() &&
@@ -157,8 +186,12 @@ bool AndroidRenderer::create_gpu_visibility_resources() noexcept {
         arut_android_log(ANDROID_LOG_WARN, "GPU visibility unavailable: selected graphics queue has no compute capability; using CPU culling.");
         return true;
     }
-    if (!visibility_input_buffer_ || !instance_buffer_ || !indirect_draw_buffer_ ||
-        visibility_source_instance_count_ == 0U) {
+    if (visibility_source_instance_count_ == 0U) {
+        arut_android_log(ANDROID_LOG_INFO,
+            "GPU visibility skipped: selected profile has no ECS stress instances.");
+        return true;
+    }
+    if (!visibility_input_buffer_ || !instance_buffer_ || !indirect_draw_buffer_) {
         log_error("GPU visibility buffers are not initialized; using CPU culling.");
         return true;
     }
@@ -1054,12 +1087,14 @@ bool AndroidRenderer::create_shadow_pipeline() noexcept {
         {0, sizeof(arut::rendering::MeshVertex), VK_VERTEX_INPUT_RATE_VERTEX},
         {1, sizeof(arut::rendering::Mat4), VK_VERTEX_INPUT_RATE_INSTANCE}
     }};
-    const std::array<VkVertexInputAttributeDescription, 5> attributes{{
+    const std::array<VkVertexInputAttributeDescription, 7> attributes{{
         {0, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, position))},
         {4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0},
         {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16},
         {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32},
-        {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48}
+        {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48},
+        {8, 0, VK_FORMAT_R32G32B32A32_UINT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, joints))},
+        {9, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, weights))}
     }};
     VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     vertex_input.vertexBindingDescriptionCount = static_cast<std::uint32_t>(bindings.size());
@@ -1882,6 +1917,94 @@ bool AndroidRenderer::create_triangle_pipeline() noexcept {
 }
 
 
+bool AndroidRenderer::create_static_scene_geometry() noexcept {
+    static_scene_instance_count_ =
+        static_cast<std::uint32_t>(static_scene_instances_.size());
+    if (static_scene_instance_count_ == 0U) return true;
+    const VkDeviceSize bytes =
+        static_cast<VkDeviceSize>(static_scene_instances_.size() * sizeof(arut::rendering::Mat4));
+    if (!create_buffer(bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                       static_scene_instance_buffer_, static_scene_instance_memory_)) return false;
+    void* mapped = nullptr;
+    const VkResult result = vkMapMemory(device_, static_scene_instance_memory_,
+        0, bytes, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map static test-scene instance buffer failed", result);
+        return false;
+    }
+    std::memcpy(mapped, static_scene_instances_.data(), static_cast<std::size_t>(bytes));
+    vkUnmapMemory(device_, static_scene_instance_memory_);
+    char message[160]{};
+    std::snprintf(message, sizeof(message),
+        "TEST_ARENA_RENDER_INSTANCES ready=true count=%u", static_scene_instance_count_);
+    arut_android_log(ANDROID_LOG_INFO, message);
+    return true;
+}
+
+bool AndroidRenderer::create_mannequin_geometry() noexcept {
+    const auto mesh = arut::rendering::make_robot_mannequin_mesh();
+    if (mesh.vertices.empty() || mesh.indices.empty() ||
+        mesh.indices.size() > UINT32_MAX) {
+        log_error("Procedural robot mannequin mesh generation failed");
+        return false;
+    }
+    const VkDeviceSize vertex_bytes =
+        static_cast<VkDeviceSize>(mesh.vertices.size() * sizeof(arut::rendering::MeshVertex));
+    const VkDeviceSize index_bytes =
+        static_cast<VkDeviceSize>(mesh.indices.size() * sizeof(std::uint32_t));
+    if (!create_buffer(vertex_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                       mannequin_vertex_buffer_, mannequin_vertex_memory_) ||
+        !create_buffer(index_bytes, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                       mannequin_index_buffer_, mannequin_index_memory_)) return false;
+
+    void* mapped = nullptr;
+    VkResult result = vkMapMemory(device_, mannequin_vertex_memory_, 0, vertex_bytes, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map robot mannequin vertex buffer failed", result);
+        return false;
+    }
+    std::memcpy(mapped, mesh.vertices.data(), static_cast<std::size_t>(vertex_bytes));
+    vkUnmapMemory(device_, mannequin_vertex_memory_);
+
+    mapped = nullptr;
+    result = vkMapMemory(device_, mannequin_index_memory_, 0, index_bytes, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map robot mannequin index buffer failed", result);
+        return false;
+    }
+    std::memcpy(mapped, mesh.indices.data(), static_cast<std::size_t>(index_bytes));
+    vkUnmapMemory(device_, mannequin_index_memory_);
+
+    arut::rendering::Mat4 model = arut::rendering::Mat4::identity();
+    constexpr float scale = 1.0F;
+    model.value[0] = scale;
+    model.value[5] = scale;
+    model.value[10] = scale;
+    // In the combined profile, place the mannequin between the stress grid's
+    // regular two-metre X/Z rows so it remains visible without hiding cube rows.
+    model.value[12] = 0.0F;
+    model.value[13] = 0.0F;
+    model.value[14] = visibility_source_instance_count_ == 0U ? 0.0F : -5.0F;
+    if (!create_buffer(sizeof(model), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                       mannequin_instance_buffer_, mannequin_instance_memory_)) return false;
+    mapped = nullptr;
+    result = vkMapMemory(device_, mannequin_instance_memory_, 0, sizeof(model), 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map robot mannequin instance transform failed", result);
+        return false;
+    }
+    std::memcpy(mapped, &model, sizeof(model));
+    vkUnmapMemory(device_, mannequin_instance_memory_);
+
+    mannequin_index_count_ = static_cast<std::uint32_t>(mesh.indices.size());
+    char message[192]{};
+    std::snprintf(message, sizeof(message),
+        "HUMANOID_RENDERER mesh_ready=true bones=%zu vertices=%zu indices=%u draw_instances=1",
+        arut::core::kHumanoidBoneCount, mesh.vertices.size(), mannequin_index_count_);
+    arut_android_log(ANDROID_LOG_INFO, message);
+    return true;
+}
+
 bool AndroidRenderer::create_pbr_geometry() noexcept {
     const auto mesh = arut::rendering::make_unit_cube();
     if (mesh.vertices.empty() || mesh.indices.empty()) return false;
@@ -1904,15 +2027,23 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
     // Instance transforms and bounds are supplied by the ECS render-extraction system.
     // The renderer only uploads/culls/draws this immutable input; it never creates entities.
     visibility_source_instance_count_ = static_cast<std::uint32_t>(visibility_instances_.size());
-    if (visibility_source_instance_count_ != arut::core::CubeSpawnSystem::target_count) {
-        log_error("Stress scene input invalid: expected 5000 ECS-owned cube instances");
+    if (visibility_source_instance_count_ != 0U &&
+        visibility_source_instance_count_ != arut::core::CubeSpawnSystem::target_count) {
+        log_error("Stress scene input invalid: expected zero or 5000 ECS-owned cube instances");
         return false;
     }
-    const std::array<float, 3> camera{0.0F, 0.0F, 18.0F};
+    const bool humanoid_only =
+        mannequin_scene_enabled_ && visibility_source_instance_count_ == 0U;
+    const std::array<float, 3> camera = humanoid_only
+        ? std::array<float, 3>{0.0F, 1.1F, 7.0F}
+        : std::array<float, 3>{0.0F, 0.0F, 18.0F};
     camera_position_ = camera;
     camera_yaw_ = -1.570796327F;
     camera_pitch_ = 0.0F;
-    const auto view = arut::rendering::look_at_rh(camera, {0.0F, 0.0F, 17.0F}, {0.0F, 1.0F, 0.0F});
+    const std::array<float, 3> camera_target = humanoid_only
+        ? std::array<float, 3>{0.0F, 1.1F, 6.0F}
+        : std::array<float, 3>{0.0F, 0.0F, 17.0F};
+    const auto view = arut::rendering::look_at_rh(camera, camera_target, {0.0F, 1.0F, 0.0F});
     const auto projection = arut::rendering::perspective_rh_zo(0.785398163F,
         static_cast<float>(extent_.width) / static_cast<float>(std::max(1U, extent_.height)), 0.1F, 180.0F);
     const auto view_projection = arut::rendering::multiply(projection, view);
@@ -1923,7 +2054,7 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         log_error("CPU visibility reference compaction failed");
         return false;
     }
-    if (cpu_visible_instances.empty()) {
+    if (visibility_source_instance_count_ != 0U && cpu_visible_instances.empty()) {
         log_error("CPU visibility reference removed every stress-scene instance");
         return false;
     }
@@ -1957,8 +2088,9 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         }
     }
 
-    const VkDeviceSize instance_capacity_bytes =
-        visibility_instances_.size() * sizeof(arut::rendering::Mat4);
+    const VkDeviceSize instance_capacity_bytes = std::max<VkDeviceSize>(
+        sizeof(arut::rendering::Mat4),
+        visibility_instances_.size() * sizeof(arut::rendering::Mat4));
     const VkBufferUsageFlags instance_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
         (compute_queue_supported_ ? VK_BUFFER_USAGE_STORAGE_BUFFER_BIT : 0U);
     if (!create_buffer(instance_capacity_bytes, instance_usage,
@@ -1970,8 +2102,10 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         return false;
     }
     std::memset(mapped, 0, static_cast<std::size_t>(instance_capacity_bytes));
-    std::memcpy(mapped, cpu_visible_instances.data(),
-                cpu_visible_instances.size() * sizeof(arut::rendering::Mat4));
+    if (!cpu_visible_instances.empty()) {
+        std::memcpy(mapped, cpu_visible_instances.data(),
+                    cpu_visible_instances.size() * sizeof(arut::rendering::Mat4));
+    }
     vkUnmapMemory(device_, instance_memory_);
     instance_count_ = static_cast<std::uint32_t>(cpu_visible_instances.size());
 
@@ -1992,10 +2126,15 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
     vkUnmapMemory(device_, indirect_draw_memory_);
 
     char message[192]{};
-    std::snprintf(message, sizeof(message),
-                  "STRESS SCENE: source=ECS vertices=%zu indices=%u source_instances=%u CPU_visible=%u culled=%u grid=20x10x25",
-                  mesh.vertices.size(), cube_index_count_, visibility_source_instance_count_,
-                  instance_count_, visibility_source_instance_count_ - instance_count_);
+    if (visibility_source_instance_count_ != 0U) {
+        std::snprintf(message, sizeof(message),
+                      "STRESS SCENE: source=ECS vertices=%zu indices=%u source_instances=%u CPU_visible=%u culled=%u grid=20x10x25",
+                      mesh.vertices.size(), cube_index_count_, visibility_source_instance_count_,
+                      instance_count_, visibility_source_instance_count_ - instance_count_);
+    } else {
+        std::snprintf(message, sizeof(message),
+                      "STRESS SCENE disabled=true reason=humanoid_only_profile indirect_instances=0");
+    }
     arut_android_log(ANDROID_LOG_INFO, message);
     return true;
 }
@@ -2347,7 +2486,7 @@ bool AndroidRenderer::create_pbr_pipeline() noexcept {
     result = vkCreateShaderModule(device_, &module_info, nullptr, &fragment_module);
     if (result != VK_SUCCESS) { vkDestroyShaderModule(device_, vertex_module, nullptr); log_error("Create PBR fragment shader module failed", result); return false; }
 
-    const std::array<VkDescriptorSetLayoutBinding, 8> frame_bindings{{
+    const std::array<VkDescriptorSetLayoutBinding, 9> frame_bindings{{
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
@@ -2355,7 +2494,8 @@ bool AndroidRenderer::create_pbr_pipeline() noexcept {
         {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
-        {7, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}
+        {7, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+        {8, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr}
     }};
     VkDescriptorSetLayoutCreateInfo set_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     set_info.bindingCount = static_cast<std::uint32_t>(frame_bindings.size());
@@ -2395,7 +2535,7 @@ bool AndroidRenderer::create_pbr_pipeline() noexcept {
         {0, sizeof(arut::rendering::MeshVertex), VK_VERTEX_INPUT_RATE_VERTEX},
         {1, sizeof(arut::rendering::Mat4), VK_VERTEX_INPUT_RATE_INSTANCE}
     }};
-    const std::array<VkVertexInputAttributeDescription, 8> attributes{{
+    const std::array<VkVertexInputAttributeDescription, 10> attributes{{
         {0, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, position))},
         {1, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, normal))},
         {2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, tangent))},
@@ -2403,7 +2543,9 @@ bool AndroidRenderer::create_pbr_pipeline() noexcept {
         {4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0},
         {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16},
         {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32},
-        {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48}
+        {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48},
+        {8, 0, VK_FORMAT_R32G32B32A32_UINT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, joints))},
+        {9, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, weights))}
     }};
     VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     vertex_input.vertexBindingDescriptionCount = static_cast<std::uint32_t>(bindings.size());
@@ -2465,7 +2607,26 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     if (!create_buffer(sizeof(FrameData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, frame_uniform_buffer_, frame_uniform_memory_) ||
         !create_buffer(sizeof(MaterialData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, material_uniform_buffer_, material_uniform_memory_) ||
         !create_buffer(sizeof(arut::rendering::EnvironmentProbeGpuData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                       environment_probe_uniform_buffer_, environment_probe_uniform_memory_)) return false;
+                       environment_probe_uniform_buffer_, environment_probe_uniform_memory_) ||
+        !create_buffer(sizeof(arut::rendering::HumanoidSkinningPalette), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                       bone_palette_uniform_buffer_, bone_palette_uniform_memory_)) return false;
+
+    const auto rest_pose = arut::rendering::make_rest_humanoid_pose();
+    arut::rendering::HumanoidSkinningPalette initial_bone_palette{};
+    if (!arut::rendering::build_humanoid_skinning_palette(
+            arut::core::make_robot_mannequin_skeleton(), rest_pose, initial_bone_palette)) {
+        log_error("Build initial humanoid inverse-bind palette failed");
+        return false;
+    }
+    void* palette_mapped = nullptr;
+    VkResult palette_result = vkMapMemory(device_, bone_palette_uniform_memory_, 0,
+        sizeof(initial_bone_palette), 0, &palette_mapped);
+    if (palette_result != VK_SUCCESS || !palette_mapped) {
+        log_error("Map initial humanoid bone palette failed", palette_result);
+        return false;
+    }
+    std::memcpy(palette_mapped, &initial_bone_palette, sizeof(initial_bone_palette));
+    vkUnmapMemory(device_, bone_palette_uniform_memory_);
 
     FrameData frame{};
     const std::span<const arut::rendering::EnvironmentProbeInfluence> scene_probes(
@@ -2572,7 +2733,7 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     vkUnmapMemory(device_, environment_probe_uniform_memory_);
 
     const std::array<VkDescriptorPoolSize, 2> sizes{{
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4},
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 15}
     }};
     VkDescriptorPoolCreateInfo pool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
@@ -2591,6 +2752,8 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     VkDescriptorBufferInfo material_info{material_uniform_buffer_, 0, sizeof(MaterialData)};
     VkDescriptorBufferInfo environment_probe_info{
         environment_probe_uniform_buffer_, 0, sizeof(arut::rendering::EnvironmentProbeGpuData)};
+    VkDescriptorBufferInfo bone_palette_info{
+        bone_palette_uniform_buffer_, 0, sizeof(arut::rendering::HumanoidSkinningPalette)};
     const VkDescriptorImageInfo shadow_info{shadow_sampler_, shadow_view_, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
     const VkDescriptorImageInfo environment_info{environment_sampler_, environment_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     const VkDescriptorImageInfo brdf_lut_info{brdf_lut_sampler_, brdf_lut_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
@@ -2614,7 +2777,7 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
                 ? environment_probe_diffuse_views_[probe] : irradiance_view_,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     }
-    std::array<VkWriteDescriptorSet, 12> writes{};
+    std::array<VkWriteDescriptorSet, 13> writes{};
     writes[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &frame_info, nullptr};
     writes[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &shadow_info, nullptr, nullptr};
     writes[2] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 2, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &environment_info, nullptr, nullptr};
@@ -2632,6 +2795,8 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     writes[9] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &base_color_info, nullptr, nullptr};
     writes[10] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 2, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normal_info, nullptr, nullptr};
     writes[11] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 3, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &metallic_roughness_info, nullptr, nullptr};
+    writes[12] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 8, 0, 1,
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &bone_palette_info, nullptr};
     vkUpdateDescriptorSets(device_, static_cast<std::uint32_t>(writes.size()), writes.data(), 0, nullptr);
     arut_android_log(ANDROID_LOG_INFO, "PBR frame/material descriptors and fallback texture bound.");
     return true;
@@ -2673,6 +2838,24 @@ bool AndroidRenderer::create_commands_and_sync() noexcept {
     return true;
 }
 
+void AndroidRenderer::set_gamepad_movement_input(float x, float y) noexcept {
+    gamepad_move_x_ = std::isfinite(x) ? std::clamp(x, -1.0F, 1.0F) : 0.0F;
+    gamepad_move_y_ = std::isfinite(y) ? std::clamp(y, -1.0F, 1.0F) : 0.0F;
+}
+
+void AndroidRenderer::clear_input() noexcept {
+    joystick_x_ = joystick_y_ = 0.0F;
+    gamepad_move_x_ = gamepad_move_y_ = 0.0F;
+    gamepad_look_x_ = gamepad_look_y_ = 0.0F;
+    joystick_pointer_ = look_pointer_ = jump_pointer_ = -1;
+    jump_pressed_ = false;
+}
+
+void AndroidRenderer::set_gamepad_look_input(float x, float y) noexcept {
+    gamepad_look_x_ = std::isfinite(x) ? std::clamp(x, -1.0F, 1.0F) : 0.0F;
+    gamepad_look_y_ = std::isfinite(y) ? std::clamp(y, -1.0F, 1.0F) : 0.0F;
+}
+
 void AndroidRenderer::set_touch_input(std::int32_t action, std::int32_t pointer_id,
                                      float x, float y, float width, float height) noexcept {
     if (action == 0) {
@@ -2682,6 +2865,11 @@ void AndroidRenderer::set_touch_input(std::int32_t action, std::int32_t pointer_
             joystick_origin_y_ = y;
             joystick_x_ = 0.0F;
             joystick_y_ = 0.0F;
+        } else if (mannequin_scene_enabled_ && x >= width * 0.48F &&
+                   y >= height * 0.68F && jump_pointer_ < 0) {
+            // Tap/hold in the lower-right quadrant is the humanoid jump action.
+            jump_pointer_ = pointer_id;
+            jump_pressed_ = true;
         } else if (x >= width * 0.48F && look_pointer_ < 0) {
             look_pointer_ = pointer_id;
             look_last_x_ = x;
@@ -2695,6 +2883,7 @@ void AndroidRenderer::set_touch_input(std::int32_t action, std::int32_t pointer_
             joystick_x_ = joystick_y_ = 0.0F;
         }
         if (pointer_id == look_pointer_) look_pointer_ = -1;
+        if (pointer_id == jump_pointer_) jump_pointer_ = -1;
         return;
     }
     if (action != 1) return;
@@ -2715,6 +2904,9 @@ void AndroidRenderer::set_touch_input(std::int32_t action, std::int32_t pointer_
 
 void AndroidRenderer::update_stress_camera(float delta_seconds) noexcept {
     const float dt = std::clamp(delta_seconds, 0.0F, 0.05F);
+    camera_yaw_ += gamepad_look_x_ * 2.2F * dt;
+    camera_pitch_ = std::clamp(
+        camera_pitch_ - gamepad_look_y_ * 1.8F * dt, -1.45F, 1.45F);
     const float cosine_pitch = std::cos(camera_pitch_);
     const std::array<float, 3> forward{
         std::cos(camera_yaw_) * cosine_pitch,
@@ -2722,9 +2914,12 @@ void AndroidRenderer::update_stress_camera(float delta_seconds) noexcept {
         std::sin(camera_yaw_) * cosine_pitch
     };
     const std::array<float, 3> right{-std::sin(camera_yaw_), 0.0F, std::cos(camera_yaw_)};
-    constexpr float speed = 9.0F;
-    for (std::size_t i = 0; i < 3U; ++i) {
-        camera_position_[i] += (forward[i] * joystick_y_ + right[i] * joystick_x_) * speed * dt;
+    if (!mannequin_scene_enabled_) {
+        constexpr float speed = 9.0F;
+        for (std::size_t i = 0; i < 3U; ++i) {
+            camera_position_[i] += (forward[i] * (joystick_y_ + gamepad_move_y_) +
+                                    right[i] * (joystick_x_ + gamepad_move_x_)) * speed * dt;
+        }
     }
     const std::array<float, 3> target{
         camera_position_[0] + forward[0],
@@ -2765,6 +2960,86 @@ void AndroidRenderer::update_stress_camera(float delta_seconds) noexcept {
     vkUnmapMemory(device_, frame_uniform_memory_);
 }
 
+void AndroidRenderer::set_humanoid_state(
+    const arut::rendering::Mat4& model,
+    const arut::rendering::HumanoidSkinningPalette& palette,
+    const std::array<float, 3>& camera_target,
+    const std::array<float, 3>& camera_position) noexcept {
+    if (!mannequin_scene_enabled_) return;
+    pending_mannequin_model_ = model;
+    pending_humanoid_palette_ = palette;
+    humanoid_camera_target_ = camera_target;
+    humanoid_camera_position_ = camera_position;
+    has_external_humanoid_state_ = true;
+}
+
+void AndroidRenderer::update_humanoid_animation(float delta_seconds) noexcept {
+    if (!mannequin_scene_enabled_ || !bone_palette_uniform_memory_) return;
+    if (has_external_humanoid_state_) {
+        void* mapped = nullptr;
+        VkResult result = vkMapMemory(device_, mannequin_instance_memory_, 0,
+            sizeof(pending_mannequin_model_), 0, &mapped);
+        if (result != VK_SUCCESS || !mapped) {
+            log_error("Map humanoid model transform failed", result);
+            return;
+        }
+        std::memcpy(mapped, &pending_mannequin_model_, sizeof(pending_mannequin_model_));
+        vkUnmapMemory(device_, mannequin_instance_memory_);
+
+        mapped = nullptr;
+        result = vkMapMemory(device_, bone_palette_uniform_memory_, 0,
+            sizeof(pending_humanoid_palette_), 0, &mapped);
+        if (result != VK_SUCCESS || !mapped) {
+            log_error("Map externally animated humanoid palette failed", result);
+            return;
+        }
+        std::memcpy(mapped, &pending_humanoid_palette_, sizeof(pending_humanoid_palette_));
+        vkUnmapMemory(device_, bone_palette_uniform_memory_);
+
+        camera_position_ = humanoid_camera_position_;
+        return;
+    }
+    humanoid_animation_time_seconds_ += std::clamp(delta_seconds, 0.0F, 0.05F);
+    auto pose = arut::rendering::make_rest_humanoid_pose();
+    const float phase = humanoid_animation_time_seconds_;
+    const auto chest = static_cast<std::size_t>(arut::core::HumanoidBone::Chest);
+    const auto left_arm = static_cast<std::size_t>(arut::core::HumanoidBone::LeftUpperArm);
+    const auto right_arm = static_cast<std::size_t>(arut::core::HumanoidBone::RightUpperArm);
+    // A small procedural idle cycle validates bone deformation before the
+    // full locomotion clip/blend system is added in the next slice.
+    pose.local_rotations[chest] = arut::rendering::quaternion_from_axis_angle(
+        {0.0F, 0.0F, 1.0F}, 0.025F * std::sin(phase * 1.7F));
+    pose.local_rotations[left_arm] = arut::rendering::quaternion_from_axis_angle(
+        {1.0F, 0.0F, 0.0F}, 0.018F * std::sin(phase * 1.2F));
+    pose.local_rotations[right_arm] = arut::rendering::quaternion_from_axis_angle(
+        {1.0F, 0.0F, 0.0F}, -0.018F * std::sin(phase * 1.2F));
+
+    arut::rendering::HumanoidSkinningPalette palette{};
+    if (!arut::rendering::build_humanoid_skinning_palette(
+            arut::core::make_robot_mannequin_skeleton(), pose, palette)) {
+        log_error("Build animated humanoid skinning palette failed");
+        return;
+    }
+    void* mapped = nullptr;
+    const VkResult result = vkMapMemory(device_, bone_palette_uniform_memory_, 0,
+        sizeof(palette), 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map animated humanoid bone palette failed", result);
+        return;
+    }
+    std::memcpy(mapped, &palette, sizeof(palette));
+    vkUnmapMemory(device_, bone_palette_uniform_memory_);
+    ++humanoid_animation_updates_;
+    if (humanoid_animation_updates_ == 1U || (humanoid_animation_updates_ % 300U) == 0U) {
+        char message[192]{};
+        std::snprintf(message, sizeof(message),
+            "HUMANOID_ANIMATION mode=procedural_idle updates=%llu time_seconds=%.2f skinning=enabled",
+            static_cast<unsigned long long>(humanoid_animation_updates_),
+            humanoid_animation_time_seconds_);
+        arut_android_log(ANDROID_LOG_INFO, message);
+    }
+}
+
 bool AndroidRenderer::draw_frame() noexcept {
     if (!ready()) return false;
     const auto cpu_frame_start = std::chrono::steady_clock::now();
@@ -2777,6 +3052,7 @@ bool AndroidRenderer::draw_frame() noexcept {
         log_error("vkWaitForFences before frame failed", result);
         return false;
     }
+    update_humanoid_animation(delta_seconds);
     update_stress_camera(delta_seconds);
     if (gpu_visibility_enabled_ && gpu_visibility_result_pending_) {
         void* mapped = nullptr;
@@ -2804,14 +3080,22 @@ bool AndroidRenderer::draw_frame() noexcept {
                     static_cast<unsigned long long>(culling_parity_checks_));
                 arut_android_log(ANDROID_LOG_INFO, parity);
             }
-            last_triangles_ = (cube_index_count_ / 3U) * completed.instance_count + terrain_triangle_count_;
+            last_triangles_ = (cube_index_count_ / 3U) * completed.instance_count +
+                terrain_triangle_count_ + mannequin_index_count_ / 3U +
+                (cube_index_count_ / 3U) * static_scene_instance_count_;
+            last_visible_objects_ += static_scene_instance_count_;
+            if (mannequin_index_count_ != 0U) ++last_visible_objects_;
         } else {
             gpu_visibility_result_pending_ = false;
             log_error("Read completed GPU visibility count failed; retaining last profile counters", map_result);
         }
     } else if (!gpu_visibility_enabled_) {
         last_visible_objects_ = instance_count_;
-        last_triangles_ = (cube_index_count_ / 3U) * instance_count_ + terrain_triangle_count_;
+        last_triangles_ = (cube_index_count_ / 3U) * instance_count_ +
+            terrain_triangle_count_ + mannequin_index_count_ / 3U +
+            (cube_index_count_ / 3U) * static_scene_instance_count_;
+        last_visible_objects_ = instance_count_ + static_scene_instance_count_ +
+            (mannequin_index_count_ != 0U ? 1U : 0U);
     }
     if (timestamp_queries_available_ && timestamp_data_pending_) {
         std::array<std::uint64_t, 4> timestamps{};
@@ -2894,6 +3178,27 @@ bool AndroidRenderer::draw_frame() noexcept {
                                VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cascade), &cascade);
             vkCmdDrawIndexedIndirect(command_buffers_[image_index], indirect_draw_buffer_, 0, 1,
                                      sizeof(VkDrawIndexedIndirectCommand));
+            if (mannequin_index_count_ != 0U) {
+                const std::array<VkBuffer, 2> mannequin_buffers{
+                    mannequin_vertex_buffer_, mannequin_instance_buffer_};
+                const std::array<VkDeviceSize, 2> mannequin_offsets{0, 0};
+                vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 2,
+                    mannequin_buffers.data(), mannequin_offsets.data());
+                vkCmdBindIndexBuffer(command_buffers_[image_index], mannequin_index_buffer_,
+                    0, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(command_buffers_[image_index], mannequin_index_count_, 1, 0, 0, 0);
+            }
+            if (static_scene_instance_count_ != 0U) {
+                const std::array<VkBuffer, 2> static_buffers{
+                    cube_vertex_buffer_, static_scene_instance_buffer_};
+                const std::array<VkDeviceSize, 2> static_offsets{0, 0};
+                vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 2,
+                    static_buffers.data(), static_offsets.data());
+                vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_,
+                    0, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(command_buffers_[image_index], cube_index_count_,
+                    static_scene_instance_count_, 0, 0, 0);
+            }
             for (const auto& terrain : terrain_gpu_meshes_) {
                 const std::array<VkBuffer, 2> terrain_buffers{terrain.vertex_buffer, terrain.instance_buffer};
                 const std::array<VkDeviceSize, 2> terrain_offsets{0, 0};
@@ -2942,6 +3247,27 @@ bool AndroidRenderer::draw_frame() noexcept {
     vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_, 0, VK_INDEX_TYPE_UINT32);
     vkCmdDrawIndexedIndirect(command_buffers_[image_index], indirect_draw_buffer_, 0, 1,
                              sizeof(VkDrawIndexedIndirectCommand));
+    if (mannequin_index_count_ != 0U) {
+        const std::array<VkBuffer, 2> mannequin_buffers{
+            mannequin_vertex_buffer_, mannequin_instance_buffer_};
+        const std::array<VkDeviceSize, 2> mannequin_offsets{0, 0};
+        vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 2,
+            mannequin_buffers.data(), mannequin_offsets.data());
+        vkCmdBindIndexBuffer(command_buffers_[image_index], mannequin_index_buffer_,
+            0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(command_buffers_[image_index], mannequin_index_count_, 1, 0, 0, 0);
+    }
+    if (static_scene_instance_count_ != 0U) {
+        const std::array<VkBuffer, 2> static_buffers{
+            cube_vertex_buffer_, static_scene_instance_buffer_};
+        const std::array<VkDeviceSize, 2> static_offsets{0, 0};
+        vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 2,
+            static_buffers.data(), static_offsets.data());
+        vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_,
+            0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(command_buffers_[image_index], cube_index_count_,
+            static_scene_instance_count_, 0, 0, 0);
+    }
     for (const auto& terrain : terrain_gpu_meshes_) {
         const std::array<VkBuffer, 2> terrain_buffers{terrain.vertex_buffer, terrain.instance_buffer};
         const std::array<VkDeviceSize, 2> terrain_offsets{0, 0};
@@ -2994,7 +3320,11 @@ bool AndroidRenderer::draw_frame() noexcept {
         gpu_visibility_result_pending_ = true;
     }
     const auto terrain_draws = static_cast<std::uint32_t>(terrain_gpu_meshes_.size());
-    last_draw_calls_ = (shadow_enabled_ ? shadow_cascade_count_ * (terrain_draws + 1U) : 0U) + terrain_draws + 1U;
+    const std::uint32_t mannequin_draws = mannequin_index_count_ != 0U ? 1U : 0U;
+    const std::uint32_t static_scene_draws = static_scene_instance_count_ != 0U ? 1U : 0U;
+    const std::uint32_t scene_draws =
+        terrain_draws + 1U + mannequin_draws + static_scene_draws;
+    last_draw_calls_ = (shadow_enabled_ ? shadow_cascade_count_ * scene_draws : 0U) + scene_draws;
     VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     present.waitSemaphoreCount = 1;
     present.pWaitSemaphores = &render_finished_[image_index];
@@ -3068,6 +3398,10 @@ void AndroidRenderer::destroy_swapchain() noexcept {
         if (material_uniform_memory_) vkFreeMemory(device_, material_uniform_memory_, nullptr);
         if (environment_probe_uniform_buffer_) vkDestroyBuffer(device_, environment_probe_uniform_buffer_, nullptr);
         if (environment_probe_uniform_memory_) vkFreeMemory(device_, environment_probe_uniform_memory_, nullptr);
+        if (bone_palette_uniform_buffer_) vkDestroyBuffer(device_, bone_palette_uniform_buffer_, nullptr);
+        if (bone_palette_uniform_memory_) vkFreeMemory(device_, bone_palette_uniform_memory_, nullptr);
+        bone_palette_uniform_buffer_ = VK_NULL_HANDLE;
+        bone_palette_uniform_memory_ = VK_NULL_HANDLE;
         for (std::size_t probe = 0; probe < arut::rendering::kMaxEnvironmentProbes; ++probe) {
             if (environment_probe_specular_samplers_[probe]) vkDestroySampler(device_, environment_probe_specular_samplers_[probe], nullptr);
             if (environment_probe_specular_views_[probe]) vkDestroyImageView(device_, environment_probe_specular_views_[probe], nullptr);
@@ -3088,6 +3422,20 @@ void AndroidRenderer::destroy_swapchain() noexcept {
             if (terrain.allocation_bytes <= tracked_gpu_memory_bytes_)
                 tracked_gpu_memory_bytes_ -= terrain.allocation_bytes;
         }
+        if (static_scene_instance_buffer_) vkDestroyBuffer(device_, static_scene_instance_buffer_, nullptr);
+        if (static_scene_instance_memory_) vkFreeMemory(device_, static_scene_instance_memory_, nullptr);
+        static_scene_instance_buffer_ = VK_NULL_HANDLE;
+        static_scene_instance_memory_ = VK_NULL_HANDLE;
+        static_scene_instance_count_ = 0U;
+        if (mannequin_vertex_buffer_) vkDestroyBuffer(device_, mannequin_vertex_buffer_, nullptr);
+        if (mannequin_vertex_memory_) vkFreeMemory(device_, mannequin_vertex_memory_, nullptr);
+        if (mannequin_index_buffer_) vkDestroyBuffer(device_, mannequin_index_buffer_, nullptr);
+        if (mannequin_index_memory_) vkFreeMemory(device_, mannequin_index_memory_, nullptr);
+        if (mannequin_instance_buffer_) vkDestroyBuffer(device_, mannequin_instance_buffer_, nullptr);
+        if (mannequin_instance_memory_) vkFreeMemory(device_, mannequin_instance_memory_, nullptr);
+        mannequin_vertex_buffer_ = mannequin_index_buffer_ = mannequin_instance_buffer_ = VK_NULL_HANDLE;
+        mannequin_vertex_memory_ = mannequin_index_memory_ = mannequin_instance_memory_ = VK_NULL_HANDLE;
+        mannequin_index_count_ = 0U;
         if (cube_vertex_buffer_) vkDestroyBuffer(device_, cube_vertex_buffer_, nullptr);
         if (cube_vertex_memory_) vkFreeMemory(device_, cube_vertex_memory_, nullptr);
         if (cube_index_buffer_) vkDestroyBuffer(device_, cube_index_buffer_, nullptr);
@@ -3257,6 +3605,9 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     command_buffers_.clear();
     images_.clear();
     tracked_gpu_memory_bytes_ = 0;
+    mannequin_index_count_ = 0U;
+    mannequin_vertex_buffer_ = mannequin_index_buffer_ = mannequin_instance_buffer_ = VK_NULL_HANDLE;
+    mannequin_vertex_memory_ = mannequin_index_memory_ = mannequin_instance_memory_ = VK_NULL_HANDLE;
 }
 
 bool AndroidRenderer::recreate_swapchain() noexcept {

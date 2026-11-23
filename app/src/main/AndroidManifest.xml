@@ -4,7 +4,7 @@
  <application android:allowBackup="false" android:label="ARUT-HARDT Engine"
   android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"
   android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="false">
-  <activity android:name="android.app.NativeActivity"
+  <activity android:name="com.arut.engine.TestLabActivity"
    android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|uiMode"
    android:exported="true" android:label="ARUT-HARDT Engine" android:screenOrientation="fullSensor">
    <meta-data android:name="android.app.lib_name" android:value="arut_android" />

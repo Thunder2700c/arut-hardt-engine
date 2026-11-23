@@ -74,14 +74,7 @@ int main() {
         if (!material) return false;
         content.material_asset = material.bytes;
         content.cell = cell;
-        content.terrain = TerrainSystem::build(128.0F, 8U);
-        const float offset_x = (static_cast<float>(cell.x) + 0.5F) * 128.0F;
-        const float offset_z = (static_cast<float>(cell.z) + 0.5F) * 128.0F;
-        for (auto& vertex : content.terrain.vertices) {
-            vertex.x += offset_x;
-            vertex.z += offset_z;
-            vertex.y = TerrainSystem::height(vertex.x, vertex.z);
-        }
+        content.terrain = TerrainSystem::build_cell(cell.x, cell.z, 128.0F, 8U);
         return true;
     };
     const auto unloader = [&unloaded_cells](WorldCell, WorldCellContent&) {
@@ -96,9 +89,9 @@ int main() {
     assert(cell_assets.stats().misses == 1U && cell_assets.stats().hits == 8U);
     for (const auto cell : streamed_partition.active_cells())
         assert(streamer.find(cell)->material_asset == streamer.find({0, 0})->material_asset);
-    const auto refresh_lod = [](WorldCell, WorldCellContent& content) {
+    const auto refresh_lod = [](WorldCell cell, WorldCellContent& content) {
         content.lod = TerrainLod::Low;
-        content.terrain = TerrainSystem::build(128.0F, 4U);
+        content.terrain = TerrainSystem::build_cell(cell.x, cell.z, 128.0F, 4U);
         return true;
     };
     const auto second_stream = streamer.update(
@@ -113,12 +106,18 @@ int main() {
     const auto* west_cell = streamer.find({0, 0});
     const auto* east_cell = streamer.find({1, 0});
     assert(west_cell != nullptr && east_cell != nullptr);
-    for (std::size_t row = 0; row <= 8U; ++row) {
-        const auto& west_edge = west_cell->terrain.vertices[row * 9U + 8U];
-        const auto& east_edge = east_cell->terrain.vertices[row * 9U];
+    assert(west_cell->terrain.resolution == east_cell->terrain.resolution);
+    const std::size_t seam_resolution = west_cell->terrain.resolution;
+    const std::size_t seam_side = seam_resolution + 1U;
+    for (std::size_t row = 0; row <= seam_resolution; ++row) {
+        const auto& west_edge = west_cell->terrain.vertices[row * seam_side + seam_resolution];
+        const auto& east_edge = east_cell->terrain.vertices[row * seam_side];
         assert(std::abs(west_edge.x - east_edge.x) < 0.0001F);
         assert(std::abs(west_edge.y - east_edge.y) < 0.0001F);
         assert(std::abs(west_edge.z - east_edge.z) < 0.0001F);
+        assert(std::abs(west_edge.nx - east_edge.nx) < 0.0001F);
+        assert(std::abs(west_edge.ny - east_edge.ny) < 0.0001F);
+        assert(std::abs(west_edge.nz - east_edge.nz) < 0.0001F);
     }
 
     bool invalid_radius_rejected = false;

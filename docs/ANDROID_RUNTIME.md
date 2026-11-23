@@ -42,3 +42,19 @@ The host stress test verifies 5,000 live ECS entities, all required components, 
 Surface-bound resources are destroyed on `APP_CMD_TERM_WINDOW` and rebuilt on `APP_CMD_INIT_WINDOW`. Swapchain out-of-date/suboptimal results trigger recreation.
 
 The Galaxy S23 FE has been used for runtime testing. This does not establish cross-vendor correctness: the Phase 2 validation gate still requires a second Android GPU family, graceful quality-fallback checks and a GPU-shader-versus-CPU-reference comparison.
+
+## Development Test Laboratory
+
+The NativeActivity subclass `com.arut.engine.TestLabActivity` displays the Android profile picker before scene startup. Select one profile:
+
+- **ECS Stress Test** creates the 5,000-entity ECS stress scene and does not submit the humanoid mannequin.
+- **Humanoid Test** skips creation of the 5,000 ECS entities and submits the procedural mannequin with the streamed terrain arena.
+- **Combined Integration** creates both as a separate combined test.
+
+The selection is passed to native C++ through a small JNI callback and stored as a stable `TestLabProfile` ID. Runtime logs include `TEST_LAB selected=...`, `TEST_LAB_RENDER_PROFILE`, `TEST_ARENA_COLLISION`, and `TEST_ARENA_RENDER_INSTANCES`. Restart the app to select a different profile.
+
+In the Humanoid Test, use the left-side touch stick to move, drag in the upper-right area to orbit the follow camera, and tap the lower-right area to jump. An attached keyboard can use WASD or arrow keys and Space (or gamepad A) to jump; an attached mouse uses right-button drag in the upper-right area to orbit. Gamepad left/right sticks control movement and camera look. A transparent on-screen guide marks the move/look/jump zones without consuming the NativeActivity touch events. The runtime feeds fixed-step terrain-grounded movement into procedural Idle/Walk/Run/Strafe/Backward/Jump/Fall/Land poses, performs stance-phase two-bone terrain foot placement, then uploads the model transform and bone palette for Vulkan skinning. Logs include `CHARACTER_CONTROLLER`, `ANIMATION_STATE`, and `HUMANOID_IK`.
+
+The Android Humanoid and Combined scenes include visible static AABB arena walls and two obstacle blocks. The capsule collision query uses those same AABBs and supports axis sliding. This is a small static test arena; dynamic rigid bodies and general world collision are not integrated yet. The follow camera shortens its distance against the terrain heightfield and static test-arena AABBs. Arbitrary non-AABB geometry, moving obstacles and dynamic rigid bodies are not tested. Desktop keyboard/mouse controls are not implemented. Visual and touch verification on the S23 FE remains outstanding.
+
+The CI workflow compiles all six packaged SPIR-V files into `app/src/main/assets/shaders/` before native/Java checks; it does not assemble an APK.

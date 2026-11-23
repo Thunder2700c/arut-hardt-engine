@@ -3,8 +3,17 @@
 #include "arut/core/cube_stress_scene.hpp"
 #include "arut/core/asset_manager.hpp"
 #include "arut/core/world_systems.hpp"
+#include "arut/core/test_lab_profile.hpp"
+#include "arut/core/humanoid_skeleton.hpp"
+#include "arut/core/character_controller.hpp"
+#include "arut/core/character_input.hpp"
+#include "arut/core/character_collision.hpp"
+#include "arut/core/third_person_camera.hpp"
 #include "arut/platform/android/asset_source.hpp"
 #include "arut/rendering/vulkan/android_renderer.hpp"
+#include "arut/rendering/humanoid_animation.hpp"
+#include "arut/rendering/humanoid_ik.hpp"
+#include "arut/rendering/humanoid_skinning.hpp"
 #include <android/input.h>
 #include <android/log.h>
 #include <android/native_window.h>
@@ -14,11 +23,13 @@
 #include <cstdint>
 #include <cstddef>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <mutex>
+#include <atomic>
 #include <memory>
 #include <utility>
 #include <cerrno>
@@ -32,6 +43,13 @@
 extern "C" std::uint32_t arut_tasks_abi_version() noexcept;
 namespace {
 constexpr char kLogTag[] = "ARUT-HARDT";
+std::atomic<std::int32_t> g_requested_test_profile{-1};
+struct FootPlantState final {
+ arut::core::Vec3 world_anchor{};
+ float blend{0.0F};
+ bool active{false};
+};
+
 struct RuntimeState final {
  bool resumed{false};
  bool focused{false};
@@ -46,11 +64,79 @@ struct RuntimeState final {
  arut::core::WorldCellStreamer world_streamer{};
  arut::core::LodSystem cell_lod_system{};
  bool ecs_scene_ready{false};
+ bool render_scene_ready{false};
+ arut::core::TestLabProfile selected_profile{arut::core::TestLabProfile::EcsStress};
  bool terrain_cells_dirty{false};
  arut::rendering::vulkan::AndroidRenderer renderer{};
+ arut::core::CharacterController character_controller{};
+ arut::core::CharacterInputRouter character_input_router{};
+ bool mouse_look_active{false};
+ float gamepad_move_x{0.0F};
+ float gamepad_move_y{0.0F};
+ arut::core::HumanoidSkeleton humanoid_skeleton{arut::core::make_robot_mannequin_skeleton()};
+ arut::rendering::HumanoidAnimator humanoid_animator{};
+ std::array<FootPlantState, 2> foot_plants{};
+ std::array<bool, 2> foot_ik_clamped{};
+ std::array<arut::core::CharacterAabbObstacle, 6> arena_obstacles{{
+  {{-8.0F,-2.0F,-8.0F},{-7.6F,3.0F,8.0F}},
+  {{ 7.6F,-2.0F,-8.0F},{ 8.0F,3.0F,8.0F}},
+  {{-8.0F,-2.0F,-8.0F},{ 8.0F,3.0F,-7.6F}},
+  {{-8.0F,-2.0F, 7.6F},{ 8.0F,3.0F,8.0F}},
+  {{ 2.0F,-2.0F,-3.4F},{ 3.5F,1.0F,-1.9F}},
+  {{-3.5F,-2.0F,-5.5F},{-2.0F,0.7F,-4.0F}}
+ }};
+ std::array<arut::rendering::Mat4, 6> arena_render_instances{};
+ bool test_arena_enabled{false};
+ float camera_follow_distance{4.2F};
+ bool camera_terrain_obstructed{false};
+ bool camera_geometry_obstructed{false};
+ std::uint64_t character_fixed_steps{0};
  std::uint64_t lifecycle_events{0};
  std::uint64_t input_events{0};
 };
+arut::core::CharacterGroundSample terrain_ground_query(
+ float x, float z, void*) noexcept {
+ arut::core::CharacterGroundSample sample{};
+ const float height = arut::core::TerrainSystem::height(x, z);
+ constexpr float epsilon = 0.1F;
+ const float dx = (arut::core::TerrainSystem::height(x + epsilon, z) -
+                   arut::core::TerrainSystem::height(x - epsilon, z)) /
+                  (2.0F * epsilon);
+ const float dz = (arut::core::TerrainSystem::height(x, z + epsilon) -
+                   arut::core::TerrainSystem::height(x, z - epsilon)) /
+                  (2.0F * epsilon);
+ const float inverse = 1.0F / std::sqrt(dx * dx + 1.0F + dz * dz);
+ if (!std::isfinite(height) || !std::isfinite(inverse)) return sample;
+ sample.height = height;
+ sample.normal = {-dx * inverse, inverse, -dz * inverse};
+ sample.valid = true;
+ return sample;
+}
+
+bool test_arena_collision_query(
+ const arut::core::Vec3& feet, float radius, float height, void* context) noexcept {
+ const auto* state = static_cast<const RuntimeState*>(context);
+ if (!state || !state->test_arena_enabled) return false;
+ return arut::core::character_capsule_overlaps_obstacles(
+  feet, radius, height,
+  std::span<const arut::core::CharacterAabbObstacle>{
+   state->arena_obstacles.data(), state->arena_obstacles.size()});
+}
+
+void build_test_arena_geometry(RuntimeState& state) noexcept {
+ for (std::size_t i = 0; i < state.arena_obstacles.size(); ++i) {
+  const auto& obstacle = state.arena_obstacles[i];
+  auto model = arut::rendering::Mat4::identity();
+  model.value[0] = obstacle.maximum.x - obstacle.minimum.x;
+  model.value[5] = obstacle.maximum.y - obstacle.minimum.y;
+  model.value[10] = obstacle.maximum.z - obstacle.minimum.z;
+  model.value[12] = (obstacle.minimum.x + obstacle.maximum.x) * 0.5F;
+  model.value[13] = (obstacle.minimum.y + obstacle.maximum.y) * 0.5F;
+  model.value[14] = (obstacle.minimum.z + obstacle.maximum.z) * 0.5F;
+  state.arena_render_instances[i] = model;
+ }
+}
+
 std::uint64_t cell_lod_id(arut::core::WorldCell cell) noexcept {
  return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(cell.x)) << 32U) |
         static_cast<std::uint32_t>(cell.z);
@@ -174,6 +260,35 @@ void log_warn(const char* format, ...) {
  write_log(ANDROID_LOG_WARN, "WARN", format, args);
  va_end(args);
 }
+bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
+ if (!app || !app->window || !state.has_window || !state.render_scene_ready) return true;
+ std::span<const arut::core::CubeRenderInstance> stress_instances{};
+ if (arut::core::test_lab_includes_stress(state.selected_profile)) {
+  const auto& instances = state.cube_render_extraction_system.instances();
+  stress_instances = std::span<const arut::core::CubeRenderInstance>{instances.data(), instances.size()};
+ }
+ const bool include_mannequin =
+  arut::core::test_lab_includes_humanoid(state.selected_profile);
+ std::span<const arut::rendering::Mat4> arena_instances{};
+ if (arut::core::test_lab_includes_humanoid(state.selected_profile)) {
+  arena_instances = {state.arena_render_instances.data(), state.arena_render_instances.size()};
+ }
+ if (!state.renderer.initialize(app->window, app->activity->assetManager,
+      stress_instances,
+      std::span<const arut::core::TerrainMesh>{state.terrain_cells.data(), state.terrain_cells.size()},
+      include_mannequin, arena_instances)) {
+  log_warn("TEST_LAB renderer initialization failed profile=%.*s",
+   static_cast<int>(arut::core::test_lab_profile_name(state.selected_profile).size()),
+   arut::core::test_lab_profile_name(state.selected_profile).data());
+  return false;
+ }
+ log_info("TEST_LAB renderer_ready=true profile=%.*s stress_instances=%zu mannequin=%s",
+  static_cast<int>(arut::core::test_lab_profile_name(state.selected_profile).size()),
+  arut::core::test_lab_profile_name(state.selected_profile).data(),
+  stress_instances.size(), include_mannequin ? "true" : "false");
+ return true;
+}
+
 bool export_runtime_log(android_app* app) {
  if (!app || !app->activity || !app->activity->vm || !g_log_path[0]) return false;
  JavaVM* vm = app->activity->vm;
@@ -229,7 +344,13 @@ void handle_app_command(android_app* app, std::int32_t command) {
  switch (command) {
   case APP_CMD_START: log_info("Lifecycle START"); break;
   case APP_CMD_RESUME: state->resumed = true; log_info("Lifecycle RESUME"); break;
-  case APP_CMD_PAUSE: state->resumed = false; log_info("Lifecycle PAUSE");
+  case APP_CMD_PAUSE:
+   state->resumed = false;
+   state->character_input_router.clear();
+   state->mouse_look_active = false;
+   state->gamepad_move_x = state->gamepad_move_y = 0.0F;
+   state->renderer.clear_input();
+   log_info("Lifecycle PAUSE");
    if (export_runtime_log(app)) __android_log_print(ANDROID_LOG_INFO, kLogTag, "Runtime log exported to Downloads/ARUT-HARDT/ARUT-HARDT-runtime.log");
    else __android_log_print(ANDROID_LOG_WARN, kLogTag, "Runtime log export failed; private app log retained.");
    break;
@@ -238,15 +359,10 @@ void handle_app_command(android_app* app, std::int32_t command) {
    state->has_window = app->window != nullptr;
    if (state->has_window) {
     log_info("Window created: %dx%d", ANativeWindow_getWidth(app->window), ANativeWindow_getHeight(app->window));
-    if (!state->ecs_scene_ready) {
-     log_warn("Renderer startup skipped: ECS 5,000-cube scene did not pass its creation check.");
-    } else if (!state->renderer.initialize(
-      app->window, app->activity->assetManager,
-      std::span<const arut::core::CubeRenderInstance>{
-       state->cube_render_extraction_system.instances().data(),
-       state->cube_render_extraction_system.instances().size()},
-      std::span<const arut::core::TerrainMesh>{state->terrain_cells.data(), state->terrain_cells.size()})) {
-     log_warn("Vulkan renderer unavailable; activity remains alive.");
+    if (!state->render_scene_ready) {
+     log_info("TEST_LAB renderer deferred until a valid profile scene is ready.");
+    } else {
+     (void)initialize_profile_renderer(*state, app);
     }
    }
    break;
@@ -256,7 +372,13 @@ void handle_app_command(android_app* app, std::int32_t command) {
    log_info("Window destroyed; Vulkan surface and swapchain released.");
    break;
   case APP_CMD_GAINED_FOCUS: state->focused = true; log_info("Focus gained"); break;
-  case APP_CMD_LOST_FOCUS: state->focused = false; log_info("Focus lost"); break;
+  case APP_CMD_LOST_FOCUS:
+   state->focused = false;
+   state->character_input_router.clear();
+   state->mouse_look_active = false;
+   state->gamepad_move_x = state->gamepad_move_y = 0.0F;
+   state->renderer.set_gamepad_look_input(0.0F, 0.0F);
+   log_info("Focus lost"); break;
   case APP_CMD_CONFIG_CHANGED:
    if (app->window) log_info("Configuration changed: %dx%d", ANativeWindow_getWidth(app->window), ANativeWindow_getHeight(app->window));
    break;
@@ -272,6 +394,55 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
  if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_MOTION) {
   const auto raw_action = AMotionEvent_getAction(event);
   const auto action = raw_action & AMOTION_EVENT_ACTION_MASK;
+  const std::int32_t source = AInputEvent_getSource(event);
+  if ((source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK) {
+   const auto deadzone = [](float value) noexcept {
+    if (!std::isfinite(value) || std::abs(value) <= 0.15F) return 0.0F;
+    const float scaled = (std::abs(value) - 0.15F) / 0.85F;
+    return std::copysign(std::clamp(scaled, 0.0F, 1.0F), value);
+   };
+   state->gamepad_move_x = deadzone(
+    AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_X, 0U));
+   state->gamepad_move_y = -deadzone(
+    AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_Y, 0U));
+   const float look_x = deadzone(
+    AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_Z, 0U));
+   const float look_y = deadzone(
+    AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_RZ, 0U));
+   state->renderer.set_gamepad_movement_input(
+    state->gamepad_move_x, state->gamepad_move_y);
+   state->renderer.set_gamepad_look_input(look_x, look_y);
+   return 1;
+  }
+  if ((source & AINPUT_SOURCE_MOUSE) == AINPUT_SOURCE_MOUSE) {
+   if (!app->window) return 0;
+   const float width = static_cast<float>(ANativeWindow_getWidth(app->window));
+   const float height = static_cast<float>(ANativeWindow_getHeight(app->window));
+   const float x = AMotionEvent_getX(event, 0U);
+   const float y = AMotionEvent_getY(event, 0U);
+   const auto buttons = AMotionEvent_getButtonState(event);
+   if (action == AMOTION_EVENT_ACTION_BUTTON_PRESS &&
+       (buttons & AMOTION_EVENT_BUTTON_SECONDARY) != 0U &&
+       x >= width * 0.48F && y < height * 0.68F) {
+    state->mouse_look_active = true;
+    state->renderer.set_touch_input(0, 0x7ffffffe, x, y, width, height);
+    return 1;
+   }
+   if (state->mouse_look_active &&
+       (action == AMOTION_EVENT_ACTION_MOVE ||
+        action == AMOTION_EVENT_ACTION_HOVER_MOVE)) {
+    state->renderer.set_touch_input(1, 0x7ffffffe, x, y, width, height);
+    return 1;
+   }
+   if (state->mouse_look_active &&
+       (action == AMOTION_EVENT_ACTION_BUTTON_RELEASE ||
+        action == AMOTION_EVENT_ACTION_CANCEL)) {
+    state->renderer.set_touch_input(2, 0x7ffffffe, x, y, width, height);
+    state->mouse_look_active = false;
+    return 1;
+   }
+   return 0;
+  }
   const auto pointer_index = static_cast<std::size_t>((raw_action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
   const auto pointer_count = AMotionEvent_getPointerCount(event);
   const float width = static_cast<float>(ANativeWindow_getWidth(app->window));
@@ -294,12 +465,50 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
   return 1;
  }
  if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_KEY) {
-  log_info("Key action=%d keycode=%d", AKeyEvent_getAction(event), AKeyEvent_getKeyCode(event));
+  const auto key_action = AKeyEvent_getAction(event);
+  if (key_action != AKEY_EVENT_ACTION_DOWN && key_action != AKEY_EVENT_ACTION_UP)
+   return 0;
+  const bool pressed = key_action == AKEY_EVENT_ACTION_DOWN;
+  const auto key_code = AKeyEvent_getKeyCode(event);
+  using Key = arut::core::CharacterInputKey;
+  bool handled = true;
+  switch (key_code) {
+   case AKEYCODE_W: case AKEYCODE_DPAD_UP:
+    state->character_input_router.set_key(Key::MoveForward, pressed); break;
+   case AKEYCODE_S: case AKEYCODE_DPAD_DOWN:
+    state->character_input_router.set_key(Key::MoveBackward, pressed); break;
+   case AKEYCODE_A: case AKEYCODE_DPAD_LEFT:
+    state->character_input_router.set_key(Key::MoveLeft, pressed); break;
+   case AKEYCODE_D: case AKEYCODE_DPAD_RIGHT:
+    state->character_input_router.set_key(Key::MoveRight, pressed); break;
+   case AKEYCODE_SPACE: case AKEYCODE_BUTTON_A:
+    state->character_input_router.set_key(Key::Jump, pressed); break;
+   default: handled = false; break;
+  }
+  if (handled) {
+   log_info("CHARACTER_KEY code=%d pressed=%s",
+    key_code, pressed ? "true" : "false");
+   return 1;
+  }
   return 0;
  }
  return 0;
 }
  }
+extern "C" JNIEXPORT void JNICALL
+Java_com_arut_engine_TestLabActivity_nativeSelectProfile(
+    JNIEnv*, jclass, jint profile_id) noexcept {
+ __android_log_print(ANDROID_LOG_INFO, kLogTag,
+  "TEST_LAB JNI profile_selection_callback profile_id=%d", profile_id);
+ if (arut::core::valid_test_lab_profile(profile_id)) {
+  g_requested_test_profile.store(profile_id, std::memory_order_release);
+  __android_log_print(ANDROID_LOG_INFO, kLogTag,
+   "TEST_LAB JNI profile_selection_accepted profile_id=%d", profile_id);
+ } else {
+  __android_log_print(ANDROID_LOG_ERROR, kLogTag,
+   "TEST_LAB JNI invalid_profile_id=%d", profile_id);
+ }
+}
 extern "C" void arut_android_log(int priority, const char* message) noexcept {
  const char* level = priority >= ANDROID_LOG_ERROR ? "ERROR" : (priority >= ANDROID_LOG_WARN ? "WARN" : "INFO");
  log_message(priority, level, message);
@@ -316,6 +525,39 @@ void run(android_app* app) {
   static_cast<int>(arut::core::name().size()), arut::core::name().data(), v.major, v.minor, v.patch,
   static_cast<int>(getpid()));
  log_info("Rust systems ABI version: 0x%06x", arut_tasks_abi_version());
+ log_info("TEST_LAB waiting_for_profile_selection=true");
+ while (g_requested_test_profile.load(std::memory_order_acquire) < 0 &&
+        app->destroyRequested == 0) {
+  android_poll_source* source = nullptr;
+  const int ident = ALooper_pollOnce(100, nullptr, nullptr,
+                                     reinterpret_cast<void**>(&source));
+  if (ident >= 0 && source) source->process(app, source);
+  if (ident == ALOOPER_POLL_ERROR) log_warn("Android looper error while waiting for Test Laboratory selection.");
+ }
+ if (app->destroyRequested != 0) {
+  log_info("Runtime destroyed before a Test Laboratory profile was selected.");
+  close_file_log();
+  return;
+ }
+ const std::int32_t selected_id =
+  g_requested_test_profile.load(std::memory_order_acquire);
+ if (!arut::core::valid_test_lab_profile(selected_id)) {
+  log_warn("Test Laboratory returned an invalid profile id=%d.", selected_id);
+  close_file_log();
+  return;
+ }
+ state.selected_profile = static_cast<arut::core::TestLabProfile>(selected_id);
+ if (arut::core::test_lab_includes_humanoid(state.selected_profile)) {
+  state.test_arena_enabled = true;
+  build_test_arena_geometry(state);
+  log_info("TEST_ARENA_COLLISION enabled=true obstacles=%zu",
+   state.arena_obstacles.size());
+ }
+ if (state.selected_profile == arut::core::TestLabProfile::Combined)
+  state.character_controller.reset({0.0F, 0.0F, -5.0F});
+ log_info("TEST_LAB selected=%.*s profile_id=%d",
+  static_cast<int>(arut::core::test_lab_profile_name(state.selected_profile).size()),
+  arut::core::test_lab_profile_name(state.selected_profile).data(), selected_id);
  auto asset_source = std::make_shared<arut::platform::android::AndroidAssetSource>(
   app->activity ? app->activity->assetManager : nullptr);
  arut::core::AssetManager asset_manager(asset_source);
@@ -354,23 +596,38 @@ void run(android_app* app) {
  }
  if (g_log_file) log_info("Persistent runtime log: %s", g_log_path);
  else log_warn("Persistent runtime log unavailable; logcat remains active.");
- try {
-  state.cube_spawn_system.update(state.ecs_world);
-  state.scene_graph_system.update(state.ecs_world);
-  state.cube_render_extraction_system.update(state.ecs_world, &state.scene_graph_system);
-  log_info("SCENE_GRAPH synchronized=true bound_entities=%zu nodes=%u",
-   state.scene_graph_system.bound_entity_count(), state.scene_graph_system.graph().node_count());
-  state.ecs_scene_ready =
-   state.ecs_world.entity_count() == arut::core::CubeSpawnSystem::target_count &&
-   state.cube_spawn_system.spawned_count() == arut::core::CubeSpawnSystem::target_count &&
-   state.cube_render_extraction_system.extracted_count() == arut::core::CubeSpawnSystem::target_count;
-  log_info("ECS_STRESS_SCENE ready=%s entities=%u spawned=%zu render_instances=%zu source=CubeSpawnSystem",
-   state.ecs_scene_ready ? "true" : "false", state.ecs_world.entity_count(),
-   state.cube_spawn_system.spawned_count(),
-   state.cube_render_extraction_system.instances().size());
- } catch (const std::exception& error) {
+ if (arut::core::test_lab_includes_stress(state.selected_profile)) {
+  try {
+   state.cube_spawn_system.update(state.ecs_world);
+   state.scene_graph_system.update(state.ecs_world);
+   state.cube_render_extraction_system.update(state.ecs_world, &state.scene_graph_system);
+   log_info("SCENE_GRAPH synchronized=true bound_entities=%zu nodes=%u",
+    state.scene_graph_system.bound_entity_count(), state.scene_graph_system.graph().node_count());
+   state.ecs_scene_ready =
+    state.ecs_world.entity_count() == arut::core::CubeSpawnSystem::target_count &&
+    state.cube_spawn_system.spawned_count() == arut::core::CubeSpawnSystem::target_count &&
+    state.cube_render_extraction_system.extracted_count() == arut::core::CubeSpawnSystem::target_count;
+   log_info("ECS_STRESS_SCENE ready=%s entities=%u spawned=%zu render_instances=%zu source=CubeSpawnSystem",
+    state.ecs_scene_ready ? "true" : "false", state.ecs_world.entity_count(),
+    state.cube_spawn_system.spawned_count(),
+    state.cube_render_extraction_system.instances().size());
+  } catch (const std::exception& error) {
+   state.ecs_scene_ready = false;
+   log_warn("ECS 5,000-cube scene creation failed: %s", error.what());
+  }
+ } else {
   state.ecs_scene_ready = false;
-  log_warn("ECS 5,000-cube scene creation failed: %s", error.what());
+  log_info("ECS_STRESS_SCENE enabled=false reason=humanoid_only_profile");
+ }
+ state.render_scene_ready =
+  !arut::core::test_lab_includes_stress(state.selected_profile) || state.ecs_scene_ready;
+ if (arut::core::test_lab_includes_humanoid(state.selected_profile)) {
+  log_info("HUMANOID_SCENE selected=true rig_bones=%zu mode=%s",
+   arut::core::kHumanoidBoneCount,
+   arut::core::test_lab_includes_stress(state.selected_profile) ? "combined" : "isolated");
+ }
+ if (state.has_window && state.render_scene_ready) {
+  (void)initialize_profile_renderer(state, app);
  }
  std::size_t lod_high = 0U, lod_medium = 0U, lod_low = 0U, lod_impostor = 0U;
  for (std::size_t i = 0; i < state.cube_render_extraction_system.instances().size(); ++i) {
@@ -399,6 +656,174 @@ void run(android_app* app) {
   if (ident >= 0 && source) source->process(app, source);
   if (ident == ALOOPER_POLL_ERROR) log_warn("Android looper returned an error.");
   if (state.resumed && state.has_window && state.focused && state.renderer.ready()) {
+   if (!arut::core::test_lab_includes_humanoid(state.selected_profile)) {
+    state.character_input_router.set_analog(0.0F, 0.0F);
+    const auto keyboard = state.character_input_router.sample();
+    state.renderer.set_gamepad_movement_input(
+     std::clamp(keyboard.move_x + state.gamepad_move_x, -1.0F, 1.0F),
+     std::clamp(keyboard.move_y + state.gamepad_move_y, -1.0F, 1.0F));
+   }
+   if (arut::core::test_lab_includes_humanoid(state.selected_profile)) {
+    const float frame_delta = std::chrono::duration<float>(
+     std::chrono::steady_clock::now() - frame_start).count();
+    const auto movement = state.renderer.movement_input();
+    state.character_input_router.set_analog(
+     std::clamp(movement[0] + state.gamepad_move_x, -1.0F, 1.0F),
+     std::clamp(movement[1] + state.gamepad_move_y, -1.0F, 1.0F));
+    arut::core::CharacterInput character_input =
+     state.character_input_router.sample();
+    character_input.jump_pressed =
+     character_input.jump_pressed || state.renderer.consume_jump_pressed();
+    constexpr float half_turn = 1.570796327F;
+    state.character_controller.set_facing_yaw(state.renderer.camera_yaw() + half_turn);
+    state.character_fixed_steps += state.character_controller.update(
+     character_input, frame_delta, terrain_ground_query, nullptr,
+     test_arena_collision_query, &state);
+
+    const auto& character = state.character_controller.state();
+    const float horizontal_speed = std::sqrt(
+     character.velocity.x * character.velocity.x +
+     character.velocity.z * character.velocity.z);
+    arut::rendering::HumanoidAnimationInput animation_input{};
+    animation_input.local_move_x = character_input.move_x;
+    animation_input.local_move_y = character_input.move_y;
+    animation_input.horizontal_speed = horizontal_speed;
+    animation_input.vertical_speed = character.velocity.y;
+    animation_input.grounded = character.grounded;
+    auto pose = state.humanoid_animator.update(animation_input, frame_delta);
+    const auto& animation_snapshot = state.humanoid_animator.snapshot();
+    const bool idle_or_landing =
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::Idle ||
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::Land;
+    const bool airborne =
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::Jump ||
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::Fall ||
+     !character.grounded;
+    const float gait_wave = std::sin(animation_snapshot.phase_seconds);
+    const std::array<bool, 2> stance{
+     !airborne && (idle_or_landing || gait_wave >= 0.0F),
+     !airborne && (idle_or_landing || gait_wave < 0.0F)
+    };
+    const float yaw_cosine = std::cos(character.facing_yaw_radians);
+    const float yaw_sine = std::sin(character.facing_yaw_radians);
+    for (std::size_t foot = 0; foot < 2U; ++foot) {
+     auto& plant = state.foot_plants[foot];
+     state.foot_ik_clamped[foot] = false;
+     if (!stance[foot]) {
+      plant.active = false;
+      plant.blend = 0.0F;
+      continue;
+     }
+     const float side = foot == 0U ? -1.0F : 1.0F;
+     constexpr float ankle_local_forward = -0.10F;
+     const float ankle_local_side = side * 0.11F;
+     if (!plant.active) {
+      const float anchor_x = character.position.x +
+       yaw_cosine * ankle_local_side - yaw_sine * ankle_local_forward;
+      const float anchor_z = character.position.z +
+       yaw_sine * ankle_local_side + yaw_cosine * ankle_local_forward;
+      const auto ground = terrain_ground_query(anchor_x, anchor_z, nullptr);
+      if (!ground.valid) continue;
+      plant.world_anchor = {anchor_x, ground.height + 0.09F, anchor_z};
+      plant.active = true;
+      plant.blend = 0.0F;
+     }
+     const auto ground = terrain_ground_query(
+      plant.world_anchor.x, plant.world_anchor.z, nullptr);
+     if (!ground.valid) {
+      plant.active = false;
+      plant.blend = 0.0F;
+      continue;
+     }
+     plant.world_anchor.y = ground.height + 0.09F;
+     plant.blend = std::min(1.0F, plant.blend + frame_delta * 12.0F);
+
+     constexpr float root_render_offset = 0.10F;
+     constexpr float hip_height = 0.84F;
+     const float hip_world_x = character.position.x + yaw_cosine * ankle_local_side;
+     const float hip_world_y = character.position.y + root_render_offset + hip_height;
+     const float hip_world_z = character.position.z + yaw_sine * ankle_local_side;
+     const float delta_x = plant.world_anchor.x - hip_world_x;
+     const float delta_y = plant.world_anchor.y - hip_world_y;
+     const float delta_z = plant.world_anchor.z - hip_world_z;
+     const float target_forward = -yaw_sine * delta_x + yaw_cosine * delta_z;
+
+     const arut::core::Vec3 local_normal{
+      yaw_cosine * ground.normal.x + yaw_sine * ground.normal.z,
+      ground.normal.y,
+      -yaw_sine * ground.normal.x + yaw_cosine * ground.normal.z
+     };
+     const auto ik = arut::rendering::solve_two_bone_leg_ik(
+      -delta_y, target_forward, 0.43F, 0.42F, -0.10F, local_normal);
+     if (!ik.valid) {
+      log_warn("HUMANOID_IK invalid leg solution foot=%zu", foot);
+      continue;
+     }
+     state.foot_ik_clamped[foot] = ik.reach_clamped;
+     using Bone = arut::core::HumanoidBone;
+     const Bone upper_bone = foot == 0U ? Bone::LeftUpperLeg : Bone::RightUpperLeg;
+     const Bone lower_bone = foot == 0U ? Bone::LeftLowerLeg : Bone::RightLowerLeg;
+     const Bone foot_bone = foot == 0U ? Bone::LeftFoot : Bone::RightFoot;
+     const auto upper_index = static_cast<std::size_t>(upper_bone);
+     const auto lower_index = static_cast<std::size_t>(lower_bone);
+     const auto foot_index = static_cast<std::size_t>(foot_bone);
+     const auto upper_target = arut::rendering::quaternion_from_axis_angle(
+      {1.0F, 0.0F, 0.0F}, ik.upper_leg_pitch);
+     const auto lower_target = arut::rendering::quaternion_from_axis_angle(
+      {1.0F, 0.0F, 0.0F}, ik.lower_leg_pitch);
+     const auto foot_pitch = arut::rendering::quaternion_from_axis_angle(
+      {1.0F, 0.0F, 0.0F}, ik.foot_pitch);
+     const auto foot_roll = arut::rendering::quaternion_from_axis_angle(
+      {0.0F, 0.0F, 1.0F}, ik.foot_roll);
+     const auto foot_target = arut::rendering::multiply_humanoid_quaternions(
+      foot_roll, foot_pitch);
+     pose.local_rotations[upper_index] =
+      arut::rendering::blend_humanoid_rotation(
+       pose.local_rotations[upper_index], upper_target, plant.blend);
+     pose.local_rotations[lower_index] =
+      arut::rendering::blend_humanoid_rotation(
+       pose.local_rotations[lower_index], lower_target, plant.blend);
+     pose.local_rotations[foot_index] =
+      arut::rendering::blend_humanoid_rotation(
+       pose.local_rotations[foot_index], foot_target, plant.blend);
+    }
+
+    arut::rendering::HumanoidSkinningPalette palette{};
+    if (arut::rendering::build_humanoid_skinning_palette(
+         state.humanoid_skeleton, pose, palette)) {
+     arut::rendering::Mat4 model = arut::rendering::Mat4::identity();
+     const float cosine = std::cos(character.facing_yaw_radians);
+     const float sine = std::sin(character.facing_yaw_radians);
+     model.value[0] = cosine;
+     model.value[2] = sine;
+     model.value[8] = -sine;
+     model.value[10] = cosine;
+     model.value[12] = character.position.x;
+     model.value[13] = character.position.y + 0.10F;
+     model.value[14] = character.position.z;
+     const std::array<float, 3> camera_target{
+      character.position.x, character.position.y + 1.0F, character.position.z};
+     const std::span<const arut::core::CharacterAabbObstacle> camera_obstacles =
+      state.test_arena_enabled
+       ? std::span<const arut::core::CharacterAabbObstacle>{
+          state.arena_obstacles.data(), state.arena_obstacles.size()}
+       : std::span<const arut::core::CharacterAabbObstacle>{};
+     const auto camera = arut::core::solve_third_person_camera(
+      camera_target, state.renderer.camera_yaw(), state.renderer.camera_pitch(),
+      terrain_ground_query, nullptr, {}, camera_obstacles);
+     if (!camera.valid) {
+      log_warn("THIRD_PERSON_CAMERA terrain sweep failed; retaining previous camera.");
+     } else {
+      state.camera_follow_distance = camera.distance;
+      state.camera_terrain_obstructed = camera.terrain_obstructed;
+      state.camera_geometry_obstructed = camera.geometry_obstructed;
+      state.renderer.set_humanoid_state(
+       model, palette, camera_target, camera.position);
+     }
+    } else {
+     log_warn("HUMANOID_SKINNING pose palette generation failed.");
+    }
+   }
    if (!state.renderer.draw_frame()) log_warn("Vulkan frame submission/presentation failed.");
    else {
     const double elapsed = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frame_start).count();
@@ -439,6 +864,32 @@ void run(android_app* app) {
     frame_ms_total / static_cast<double>(frame_count), frame_ms_max, frame_count);
    else log_info("PERF window=%.2fs renderer_idle=true", metrics_seconds);
    if (state.renderer.ready()) {
+    if (arut::core::test_lab_includes_humanoid(state.selected_profile)) {
+     const auto& character = state.character_controller.state();
+     const auto& animation = state.humanoid_animator.snapshot();
+     const float speed = std::sqrt(character.velocity.x * character.velocity.x +
+                                   character.velocity.z * character.velocity.z);
+     log_info("CHARACTER_CONTROLLER position=%.3f,%.3f,%.3f velocity=%.3f,%.3f,%.3f speed=%.3f grounded=%s fixed_steps=%" PRIu64,
+      character.position.x, character.position.y, character.position.z,
+      character.velocity.x, character.velocity.y, character.velocity.z,
+      speed, character.grounded ? "true" : "false", state.character_fixed_steps);
+     log_info("ANIMATION_STATE state=%.*s phase=%.3f blend=%.3f speed=%.3f",
+      static_cast<int>(arut::rendering::humanoid_animation_state_name(animation.state).size()),
+      arut::rendering::humanoid_animation_state_name(animation.state).data(),
+      animation.phase_seconds, animation.blend_alpha, animation.horizontal_speed);
+     log_info("HUMANOID_IK left_planted=%s right_planted=%s left_clamped=%s right_clamped=%s",
+      state.foot_plants[0].active ? "true" : "false",
+      state.foot_plants[1].active ? "true" : "false",
+      state.foot_ik_clamped[0] ? "true" : "false",
+      state.foot_ik_clamped[1] ? "true" : "false");
+     const auto camera_position = state.renderer.camera_position();
+     log_info("THIRD_PERSON_CAMERA distance=%.3f terrain_obstructed=%s geometry_obstructed=%s position=%.3f,%.3f,%.3f yaw=%.3f pitch=%.3f",
+      state.camera_follow_distance,
+      state.camera_terrain_obstructed ? "true" : "false",
+      state.camera_geometry_obstructed ? "true" : "false",
+      camera_position[0], camera_position[1], camera_position[2],
+      state.renderer.camera_yaw(), state.renderer.camera_pitch());
+    }
     const auto render = state.renderer.profile_snapshot();
     log_info("RENDER_PROFILE cpu_frame_ms=%.3f gpu_frame_ms=%.3f visibility_pass_ms=%.3f shadow_pass_ms=%.3f main_pass_ms=%.3f gpu_memory_bytes=%" PRIu64 " gpu_memory_usage_bytes=%" PRIu64 " gpu_memory_budget_bytes=%" PRIu64 " budget=%s gpu_visibility=%s gpu_timestamps=%s draw_calls=%u visible_objects=%u triangles=%u",
      render.cpu_frame_ms, render.gpu_frame_ms, render.visibility_pass_ms, render.shadow_pass_ms, render.main_pass_ms,
