@@ -1,4 +1,5 @@
 #include "arut/rendering/vulkan/android_renderer.hpp"
+#include "arut/rendering/robot_mannequin.hpp"
 
 #include <android/log.h>
 #include <vulkan/vulkan_android.h>
@@ -142,7 +143,7 @@ bool AndroidRenderer::set_terrain_cells(
 bool AndroidRenderer::create_frame_resources() noexcept {
     return create_render_targets() &&
            create_triangle_geometry() && create_triangle_pipeline() &&
-           create_pbr_geometry() && create_terrain_geometry() && create_gpu_visibility_resources() &&
+           create_pbr_geometry() && create_mannequin_geometry() && create_terrain_geometry() && create_gpu_visibility_resources() &&
            create_fallback_texture() &&
            create_environment_cubemap() && create_environment_probe_cubemaps() &&
            create_brdf_lut() &&
@@ -1882,6 +1883,67 @@ bool AndroidRenderer::create_triangle_pipeline() noexcept {
 }
 
 
+bool AndroidRenderer::create_mannequin_geometry() noexcept {
+    const auto mesh = arut::rendering::make_robot_mannequin_mesh();
+    if (mesh.vertices.empty() || mesh.indices.empty() ||
+        mesh.indices.size() > UINT32_MAX) {
+        log_error("Procedural robot mannequin mesh generation failed");
+        return false;
+    }
+    const VkDeviceSize vertex_bytes =
+        static_cast<VkDeviceSize>(mesh.vertices.size() * sizeof(arut::rendering::MeshVertex));
+    const VkDeviceSize index_bytes =
+        static_cast<VkDeviceSize>(mesh.indices.size() * sizeof(std::uint32_t));
+    if (!create_buffer(vertex_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                       mannequin_vertex_buffer_, mannequin_vertex_memory_) ||
+        !create_buffer(index_bytes, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                       mannequin_index_buffer_, mannequin_index_memory_)) return false;
+
+    void* mapped = nullptr;
+    VkResult result = vkMapMemory(device_, mannequin_vertex_memory_, 0, vertex_bytes, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map robot mannequin vertex buffer failed", result);
+        return false;
+    }
+    std::memcpy(mapped, mesh.vertices.data(), static_cast<std::size_t>(vertex_bytes));
+    vkUnmapMemory(device_, mannequin_vertex_memory_);
+
+    mapped = nullptr;
+    result = vkMapMemory(device_, mannequin_index_memory_, 0, index_bytes, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map robot mannequin index buffer failed", result);
+        return false;
+    }
+    std::memcpy(mapped, mesh.indices.data(), static_cast<std::size_t>(index_bytes));
+    vkUnmapMemory(device_, mannequin_index_memory_);
+
+    arut::rendering::Mat4 model = arut::rendering::Mat4::identity();
+    constexpr float scale = 3.5F;
+    model.value[0] = scale;
+    model.value[5] = scale;
+    model.value[10] = scale;
+    model.value[13] = 3.3F;
+    model.value[14] = -26.0F;
+    if (!create_buffer(sizeof(model), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                       mannequin_instance_buffer_, mannequin_instance_memory_)) return false;
+    mapped = nullptr;
+    result = vkMapMemory(device_, mannequin_instance_memory_, 0, sizeof(model), 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map robot mannequin instance transform failed", result);
+        return false;
+    }
+    std::memcpy(mapped, &model, sizeof(model));
+    vkUnmapMemory(device_, mannequin_instance_memory_);
+
+    mannequin_index_count_ = static_cast<std::uint32_t>(mesh.indices.size());
+    char message[192]{};
+    std::snprintf(message, sizeof(message),
+        "HUMANOID_RENDERER mesh_ready=true bones=%zu vertices=%zu indices=%u draw_instances=1",
+        arut::core::kHumanoidBoneCount, mesh.vertices.size(), mannequin_index_count_);
+    arut_android_log(ANDROID_LOG_INFO, message);
+    return true;
+}
+
 bool AndroidRenderer::create_pbr_geometry() noexcept {
     const auto mesh = arut::rendering::make_unit_cube();
     if (mesh.vertices.empty() || mesh.indices.empty()) return false;
@@ -2894,6 +2956,16 @@ bool AndroidRenderer::draw_frame() noexcept {
                                VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cascade), &cascade);
             vkCmdDrawIndexedIndirect(command_buffers_[image_index], indirect_draw_buffer_, 0, 1,
                                      sizeof(VkDrawIndexedIndirectCommand));
+            if (mannequin_index_count_ != 0U) {
+                const std::array<VkBuffer, 2> mannequin_buffers{
+                    mannequin_vertex_buffer_, mannequin_instance_buffer_};
+                const std::array<VkDeviceSize, 2> mannequin_offsets{0, 0};
+                vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 2,
+                    mannequin_buffers.data(), mannequin_offsets.data());
+                vkCmdBindIndexBuffer(command_buffers_[image_index], mannequin_index_buffer_,
+                    0, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(command_buffers_[image_index], mannequin_index_count_, 1, 0, 0, 0);
+            }
             for (const auto& terrain : terrain_gpu_meshes_) {
                 const std::array<VkBuffer, 2> terrain_buffers{terrain.vertex_buffer, terrain.instance_buffer};
                 const std::array<VkDeviceSize, 2> terrain_offsets{0, 0};
@@ -2942,6 +3014,16 @@ bool AndroidRenderer::draw_frame() noexcept {
     vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_, 0, VK_INDEX_TYPE_UINT32);
     vkCmdDrawIndexedIndirect(command_buffers_[image_index], indirect_draw_buffer_, 0, 1,
                              sizeof(VkDrawIndexedIndirectCommand));
+    if (mannequin_index_count_ != 0U) {
+        const std::array<VkBuffer, 2> mannequin_buffers{
+            mannequin_vertex_buffer_, mannequin_instance_buffer_};
+        const std::array<VkDeviceSize, 2> mannequin_offsets{0, 0};
+        vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 2,
+            mannequin_buffers.data(), mannequin_offsets.data());
+        vkCmdBindIndexBuffer(command_buffers_[image_index], mannequin_index_buffer_,
+            0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(command_buffers_[image_index], mannequin_index_count_, 1, 0, 0, 0);
+    }
     for (const auto& terrain : terrain_gpu_meshes_) {
         const std::array<VkBuffer, 2> terrain_buffers{terrain.vertex_buffer, terrain.instance_buffer};
         const std::array<VkDeviceSize, 2> terrain_offsets{0, 0};
@@ -3088,6 +3170,15 @@ void AndroidRenderer::destroy_swapchain() noexcept {
             if (terrain.allocation_bytes <= tracked_gpu_memory_bytes_)
                 tracked_gpu_memory_bytes_ -= terrain.allocation_bytes;
         }
+        if (mannequin_vertex_buffer_) vkDestroyBuffer(device_, mannequin_vertex_buffer_, nullptr);
+        if (mannequin_vertex_memory_) vkFreeMemory(device_, mannequin_vertex_memory_, nullptr);
+        if (mannequin_index_buffer_) vkDestroyBuffer(device_, mannequin_index_buffer_, nullptr);
+        if (mannequin_index_memory_) vkFreeMemory(device_, mannequin_index_memory_, nullptr);
+        if (mannequin_instance_buffer_) vkDestroyBuffer(device_, mannequin_instance_buffer_, nullptr);
+        if (mannequin_instance_memory_) vkFreeMemory(device_, mannequin_instance_memory_, nullptr);
+        mannequin_vertex_buffer_ = mannequin_index_buffer_ = mannequin_instance_buffer_ = VK_NULL_HANDLE;
+        mannequin_vertex_memory_ = mannequin_index_memory_ = mannequin_instance_memory_ = VK_NULL_HANDLE;
+        mannequin_index_count_ = 0U;
         if (cube_vertex_buffer_) vkDestroyBuffer(device_, cube_vertex_buffer_, nullptr);
         if (cube_vertex_memory_) vkFreeMemory(device_, cube_vertex_memory_, nullptr);
         if (cube_index_buffer_) vkDestroyBuffer(device_, cube_index_buffer_, nullptr);
