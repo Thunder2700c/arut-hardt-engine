@@ -74,7 +74,7 @@ int main() {
     assert(std::abs(controller.state().position.x) < 1.0e-5F);
 
     controller.reset();
-    const auto steps = controller.update(forward, 0.2F, ground_query, &flat);
+    const auto steps = controller.update(forward, 0.16F, ground_query, &flat);
     assert(steps == controller.config().maximum_steps_per_update);
     assert(controller.interpolation_alpha() >= 0.0F &&
            controller.interpolation_alpha() < 1.0F);
