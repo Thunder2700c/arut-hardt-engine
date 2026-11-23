@@ -30,7 +30,8 @@ public:
     bool initialize(ANativeWindow* window, AAssetManager* assets,
                     std::span<const arut::core::CubeRenderInstance> ecs_instances,
                     std::span<const arut::core::TerrainMesh> terrain_meshes,
-                    bool render_mannequin = true) noexcept;
+                    bool render_mannequin = true,
+                    std::span<const arut::rendering::Mat4> static_scene_instances = {}) noexcept;
     void shutdown() noexcept;
     bool set_quality_tier(arut::rendering::RenderQualityTier tier) noexcept;
     bool set_environment_probes(std::span<const arut::rendering::EnvironmentProbeInfluence> probes) noexcept;
@@ -94,6 +95,7 @@ private:
     bool create_pbr_pipeline() noexcept;
     bool create_pbr_geometry() noexcept;
     bool create_mannequin_geometry() noexcept;
+    bool create_static_scene_geometry() noexcept;
     bool create_terrain_geometry() noexcept;
     bool create_pbr_descriptors() noexcept;
     bool create_shadow_resources() noexcept;
@@ -170,6 +172,7 @@ private:
     }};
     std::uint32_t environment_probe_count_{2U};
     std::vector<arut::core::TerrainMesh> terrain_meshes_{};
+    std::vector<arut::rendering::Mat4> static_scene_instances_{};
     std::vector<TerrainGpuMesh> terrain_gpu_meshes_{};
     std::uint32_t terrain_triangle_count_{0};
     VkBuffer bone_palette_uniform_buffer_{VK_NULL_HANDLE};
@@ -183,6 +186,9 @@ private:
     VkBuffer mannequin_instance_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory mannequin_instance_memory_{VK_NULL_HANDLE};
     std::uint32_t mannequin_index_count_{0};
+    VkBuffer static_scene_instance_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory static_scene_instance_memory_{VK_NULL_HANDLE};
+    std::uint32_t static_scene_instance_count_{0};
     bool mannequin_scene_enabled_{true};
     VkBuffer cube_vertex_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory cube_vertex_memory_{VK_NULL_HANDLE};
