@@ -19,6 +19,7 @@ struct Quaternion final {
 struct Transform final {
     core::Vec3 translation{};
     Quaternion rotation{};
+    core::Vec3 scale{1.0F, 1.0F, 1.0F};
 };
 
 struct Pose final {
