@@ -79,6 +79,14 @@ int main() {
     assert(controller.interpolation_alpha() >= 0.0F &&
            controller.interpolation_alpha() < 1.0F);
 
+    controller.reset();
+    CharacterInput queued_jump{};
+    queued_jump.jump_pressed = true;
+    assert(controller.update(queued_jump, 0.001F, ground_query, &flat) == 0U);
+    assert(controller.update(release, 0.02F, ground_query, &flat) == 1U);
+    assert(!controller.state().grounded);
+    assert(controller.state().position.y > 0.0F);
+
     CharacterControllerConfig invalid{};
     invalid.capsule_height = 0.1F;
     CharacterController fallback{invalid};
