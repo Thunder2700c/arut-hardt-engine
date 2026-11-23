@@ -75,6 +75,8 @@ private:
     bool configured_{false};
     bool started_{false};
     bool was_grounded_{true};
+    bool combo_window_open_{false};
+    bool cancel_window_open_{false};
 };
 
 } // namespace arut::animation
