@@ -55,11 +55,12 @@ int main() {
     const auto loader = [](WorldCell cell, WorldCellContent& content) {
         content.cell = cell;
         content.terrain = TerrainSystem::build(128.0F, 8U);
-        const float offset_x = static_cast<float>(cell.x) * 128.0F;
-        const float offset_z = static_cast<float>(cell.z) * 128.0F;
+        const float offset_x = (static_cast<float>(cell.x) + 0.5F) * 128.0F;
+        const float offset_z = (static_cast<float>(cell.z) + 0.5F) * 128.0F;
         for (auto& vertex : content.terrain.vertices) {
             vertex.x += offset_x;
             vertex.z += offset_z;
+            vertex.y = TerrainSystem::height(vertex.x, vertex.z);
         }
         return true;
     };
@@ -83,6 +84,16 @@ int main() {
     assert(streamer.find({0, 0})->lod == TerrainLod::Low);
     assert(streamer.find({-1, 0}) == nullptr);
     assert(streamer.find({2, 0}) != nullptr);
+    const auto* west_cell = streamer.find({0, 0});
+    const auto* east_cell = streamer.find({1, 0});
+    assert(west_cell != nullptr && east_cell != nullptr);
+    for (std::size_t row = 0; row <= 8U; ++row) {
+        const auto& west_edge = west_cell->terrain.vertices[row * 9U + 8U];
+        const auto& east_edge = east_cell->terrain.vertices[row * 9U];
+        assert(std::abs(west_edge.x - east_edge.x) < 0.0001F);
+        assert(std::abs(west_edge.y - east_edge.y) < 0.0001F);
+        assert(std::abs(west_edge.z - east_edge.z) < 0.0001F);
+    }
 
     bool invalid_radius_rejected = false;
     try { (void)world.update_streaming(0.0F, 0.0F, 1000U); }
