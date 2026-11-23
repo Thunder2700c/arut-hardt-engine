@@ -553,8 +553,15 @@ void run(android_app* app) {
   log_info("TEST_ARENA_COLLISION enabled=true obstacles=%zu",
    state.arena_obstacles.size());
  }
- if (state.selected_profile == arut::core::TestLabProfile::Combined)
-  state.character_controller.reset({0.0F, 0.0F, -5.0F});
+ if (arut::core::test_lab_includes_humanoid(state.selected_profile)) {
+  const float spawn_z =
+   state.selected_profile == arut::core::TestLabProfile::Combined ? -5.0F : 0.0F;
+  const auto spawn_ground = terrain_ground_query(0.0F, spawn_z, nullptr);
+  const float spawn_y = spawn_ground.valid ? spawn_ground.height : 0.0F;
+  state.character_controller.reset({0.0F, spawn_y, spawn_z});
+  log_info("CHARACTER_SPAWN position=%.3f,%.3f,%.3f grounded_on_terrain=%s",
+   0.0F, spawn_y, spawn_z, spawn_ground.valid ? "true" : "false");
+ }
  log_info("TEST_LAB selected=%.*s profile_id=%d",
   static_cast<int>(arut::core::test_lab_profile_name(state.selected_profile).size()),
   arut::core::test_lab_profile_name(state.selected_profile).data(), selected_id);
