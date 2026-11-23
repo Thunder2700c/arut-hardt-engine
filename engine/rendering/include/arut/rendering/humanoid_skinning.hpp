@@ -1,6 +1,7 @@
 #pragma once
 
 #include "arut/core/humanoid_skeleton.hpp"
+#include "arut/animation/runtime.hpp"
 #include "arut/rendering/mesh.hpp"
 
 #include <array>
@@ -9,9 +10,9 @@
 
 namespace arut::rendering {
 
-inline constexpr std::size_t kHumanoidShaderBoneCount = 20U;
-static_assert(core::kHumanoidBoneCount == kHumanoidShaderBoneCount,
-              "C++ humanoid rig must match the GLSL bone palette array size");
+inline constexpr std::size_t kHumanoidShaderBoneCount = animation::kMaxPoseJoints;
+static_assert(core::kHumanoidBoneCount <= kHumanoidShaderBoneCount,
+              "Reference mannequin must fit in the scalable GLSL bone palette");
 
 struct HumanoidQuaternion final {
     float x{0.0F};
@@ -26,7 +27,7 @@ struct HumanoidPose final {
 };
 
 struct HumanoidSkinningPalette final {
-    std::array<Mat4, core::kHumanoidBoneCount> matrices{};
+    std::array<Mat4, kHumanoidShaderBoneCount> matrices{};
 };
 
 [[nodiscard]] inline HumanoidPose make_rest_humanoid_pose(
@@ -82,6 +83,7 @@ struct HumanoidSkinningPalette final {
     const HumanoidPose& pose,
     HumanoidSkinningPalette& output) noexcept {
     output = {};
+    for (auto& matrix : output.matrices) matrix = Mat4::identity();
     if (!skeleton.valid()) return false;
     std::array<Mat4, core::kHumanoidBoneCount> global_pose{};
     std::array<std::array<float, 3>, core::kHumanoidBoneCount> bind_positions{};
@@ -138,6 +140,6 @@ struct HumanoidSkinningPalette final {
 }
 
 static_assert(sizeof(HumanoidSkinningPalette) ==
-              sizeof(Mat4) * core::kHumanoidBoneCount);
+              sizeof(Mat4) * kHumanoidShaderBoneCount);
 
 } // namespace arut::rendering
