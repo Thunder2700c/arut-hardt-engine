@@ -74,8 +74,8 @@ bool TrajectoryPredictor::predict(
         const float yaw=in.facing_yaw_radians;
         const float c=std::cos(yaw), sn=std::sin(yaw);
         // Convert world displacement into character-local X/Z coordinates.
-        out[i]={t,{c*dx-sn*dz, in.world_velocity.y*t+0.5F*in.world_acceleration.y*t*t,
-                    sn*dx+c*dz}};
+        out[i]={t,{c*dx+sn*dz, in.world_velocity.y*t+0.5F*in.world_acceleration.y*t*t,
+                    -sn*dx+c*dz}};
         if(!finite(out[i].position_offset.x)||!finite(out[i].position_offset.y)||
            !finite(out[i].position_offset.z)) return false;
     }
