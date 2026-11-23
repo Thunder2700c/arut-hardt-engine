@@ -76,6 +76,7 @@ private:
     bool create_triangle_geometry() noexcept;
     bool create_pbr_pipeline() noexcept;
     bool create_pbr_geometry() noexcept;
+    bool create_mannequin_geometry() noexcept;
     bool create_terrain_geometry() noexcept;
     bool create_pbr_descriptors() noexcept;
     bool create_shadow_resources() noexcept;
@@ -154,6 +155,13 @@ private:
     std::vector<arut::core::TerrainMesh> terrain_meshes_{};
     std::vector<TerrainGpuMesh> terrain_gpu_meshes_{};
     std::uint32_t terrain_triangle_count_{0};
+    VkBuffer mannequin_vertex_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory mannequin_vertex_memory_{VK_NULL_HANDLE};
+    VkBuffer mannequin_index_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory mannequin_index_memory_{VK_NULL_HANDLE};
+    VkBuffer mannequin_instance_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory mannequin_instance_memory_{VK_NULL_HANDLE};
+    std::uint32_t mannequin_index_count_{0};
     VkBuffer cube_vertex_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory cube_vertex_memory_{VK_NULL_HANDLE};
     VkBuffer cube_index_buffer_{VK_NULL_HANDLE};
