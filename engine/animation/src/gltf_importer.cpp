@@ -10,6 +10,7 @@
 #include <memory>
 #include <numeric>
 #include <unordered_map>
+#include <utility>
 
 namespace arut::animation {
 namespace {
