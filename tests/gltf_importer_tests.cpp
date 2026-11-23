@@ -32,11 +32,6 @@ std::vector<std::uint8_t> make_glb() {
         return std::string("{\"buffer\":0,\"byteOffset\":")+std::to_string(offset)+
             ",\"byteLength\":"+std::to_string(length)+"}";
     };
-    const auto add_view=[&](const std::vector<std::uint8_t>& data) mutable {
-        (void)data;
-    };
-    (void)add_view;
-
     const std::size_t p=bin.size();
     for(float v:{0.F,0.F,0.F, 1.F,0.F,0.F, 0.F,1.F,0.F}) f32(bin,v);
     const std::size_t p_len=bin.size()-p;
