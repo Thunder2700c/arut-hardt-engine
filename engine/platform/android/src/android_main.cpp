@@ -6,6 +6,7 @@
 #include "arut/core/test_lab_profile.hpp"
 #include "arut/core/humanoid_skeleton.hpp"
 #include "arut/core/character_controller.hpp"
+#include "arut/core/character_input.hpp"
 #include "arut/core/character_collision.hpp"
 #include "arut/core/third_person_camera.hpp"
 #include "arut/platform/android/asset_source.hpp"
@@ -68,6 +69,8 @@ struct RuntimeState final {
  bool terrain_cells_dirty{false};
  arut::rendering::vulkan::AndroidRenderer renderer{};
  arut::core::CharacterController character_controller{};
+ arut::core::CharacterInputRouter character_input_router{};
+ bool mouse_look_active{false};
  arut::core::HumanoidSkeleton humanoid_skeleton{arut::core::make_robot_mannequin_skeleton()};
  arut::rendering::HumanoidAnimator humanoid_animator{};
  std::array<FootPlantState, 2> foot_plants{};
@@ -339,7 +342,11 @@ void handle_app_command(android_app* app, std::int32_t command) {
  switch (command) {
   case APP_CMD_START: log_info("Lifecycle START"); break;
   case APP_CMD_RESUME: state->resumed = true; log_info("Lifecycle RESUME"); break;
-  case APP_CMD_PAUSE: state->resumed = false; log_info("Lifecycle PAUSE");
+  case APP_CMD_PAUSE:
+   state->resumed = false;
+   state->character_input_router.clear();
+   state->mouse_look_active = false;
+   log_info("Lifecycle PAUSE");
    if (export_runtime_log(app)) __android_log_print(ANDROID_LOG_INFO, kLogTag, "Runtime log exported to Downloads/ARUT-HARDT/ARUT-HARDT-runtime.log");
    else __android_log_print(ANDROID_LOG_WARN, kLogTag, "Runtime log export failed; private app log retained.");
    break;
@@ -361,7 +368,11 @@ void handle_app_command(android_app* app, std::int32_t command) {
    log_info("Window destroyed; Vulkan surface and swapchain released.");
    break;
   case APP_CMD_GAINED_FOCUS: state->focused = true; log_info("Focus gained"); break;
-  case APP_CMD_LOST_FOCUS: state->focused = false; log_info("Focus lost"); break;
+  case APP_CMD_LOST_FOCUS:
+   state->focused = false;
+   state->character_input_router.clear();
+   state->mouse_look_active = false;
+   log_info("Focus lost"); break;
   case APP_CMD_CONFIG_CHANGED:
    if (app->window) log_info("Configuration changed: %dx%d", ANativeWindow_getWidth(app->window), ANativeWindow_getHeight(app->window));
    break;
@@ -377,6 +388,36 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
  if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_MOTION) {
   const auto raw_action = AMotionEvent_getAction(event);
   const auto action = raw_action & AMOTION_EVENT_ACTION_MASK;
+  const std::int32_t source = AInputEvent_getSource(event);
+  if ((source & AINPUT_SOURCE_MOUSE) == AINPUT_SOURCE_MOUSE) {
+   if (!app->window) return 0;
+   const float width = static_cast<float>(ANativeWindow_getWidth(app->window));
+   const float height = static_cast<float>(ANativeWindow_getHeight(app->window));
+   const float x = AMotionEvent_getX(event, 0U);
+   const float y = AMotionEvent_getY(event, 0U);
+   const auto buttons = AMotionEvent_getButtonState(event);
+   if (action == AMOTION_EVENT_ACTION_BUTTON_PRESS &&
+       (buttons & AMOTION_EVENT_BUTTON_SECONDARY) != 0U &&
+       x >= width * 0.48F && y < height * 0.68F) {
+    state->mouse_look_active = true;
+    state->renderer.set_touch_input(0, 0x7ffffffe, x, y, width, height);
+    return 1;
+   }
+   if (state->mouse_look_active &&
+       (action == AMOTION_EVENT_ACTION_MOVE ||
+        action == AMOTION_EVENT_ACTION_HOVER_MOVE)) {
+    state->renderer.set_touch_input(1, 0x7ffffffe, x, y, width, height);
+    return 1;
+   }
+   if (state->mouse_look_active &&
+       (action == AMOTION_EVENT_ACTION_BUTTON_RELEASE ||
+        action == AMOTION_EVENT_ACTION_CANCEL)) {
+    state->renderer.set_touch_input(2, 0x7ffffffe, x, y, width, height);
+    state->mouse_look_active = false;
+    return 1;
+   }
+   return 0;
+  }
   const auto pointer_index = static_cast<std::size_t>((raw_action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
   const auto pointer_count = AMotionEvent_getPointerCount(event);
   const float width = static_cast<float>(ANativeWindow_getWidth(app->window));
@@ -399,7 +440,31 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
   return 1;
  }
  if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_KEY) {
-  log_info("Key action=%d keycode=%d", AKeyEvent_getAction(event), AKeyEvent_getKeyCode(event));
+  const auto key_action = AKeyEvent_getAction(event);
+  if (key_action != AKEY_EVENT_ACTION_DOWN && key_action != AKEY_EVENT_ACTION_UP)
+   return 0;
+  const bool pressed = key_action == AKEY_EVENT_ACTION_DOWN;
+  const auto key_code = AKeyEvent_getKeyCode(event);
+  using Key = arut::core::CharacterInputKey;
+  bool handled = true;
+  switch (key_code) {
+   case AKEYCODE_W: case AKEYCODE_DPAD_UP:
+    state->character_input_router.set_key(Key::MoveForward, pressed); break;
+   case AKEYCODE_S: case AKEYCODE_DPAD_DOWN:
+    state->character_input_router.set_key(Key::MoveBackward, pressed); break;
+   case AKEYCODE_A: case AKEYCODE_DPAD_LEFT:
+    state->character_input_router.set_key(Key::MoveLeft, pressed); break;
+   case AKEYCODE_D: case AKEYCODE_DPAD_RIGHT:
+    state->character_input_router.set_key(Key::MoveRight, pressed); break;
+   case AKEYCODE_SPACE: case AKEYCODE_BUTTON_A:
+    state->character_input_router.set_key(Key::Jump, pressed); break;
+   default: handled = false; break;
+  }
+  if (handled) {
+   log_info("CHARACTER_KEY code=%d pressed=%s",
+    key_code, pressed ? "true" : "false");
+   return 1;
+  }
   return 0;
  }
  return 0;
@@ -563,10 +628,11 @@ void run(android_app* app) {
     const float frame_delta = std::chrono::duration<float>(
      std::chrono::steady_clock::now() - frame_start).count();
     const auto movement = state.renderer.movement_input();
-    arut::core::CharacterInput character_input{};
-    character_input.move_x = movement[0];
-    character_input.move_y = movement[1];
-    character_input.jump_pressed = state.renderer.consume_jump_pressed();
+    state.character_input_router.set_analog(movement[0], movement[1]);
+    arut::core::CharacterInput character_input =
+     state.character_input_router.sample();
+    character_input.jump_pressed =
+     character_input.jump_pressed || state.renderer.consume_jump_pressed();
     constexpr float half_turn = 1.570796327F;
     state.character_controller.set_facing_yaw(state.renderer.camera_yaw() + half_turn);
     state.character_fixed_steps += state.character_controller.update(
@@ -578,8 +644,8 @@ void run(android_app* app) {
      character.velocity.x * character.velocity.x +
      character.velocity.z * character.velocity.z);
     arut::rendering::HumanoidAnimationInput animation_input{};
-    animation_input.local_move_x = movement[0];
-    animation_input.local_move_y = movement[1];
+    animation_input.local_move_x = character_input.move_x;
+    animation_input.local_move_y = character_input.move_y;
     animation_input.horizontal_speed = horizontal_speed;
     animation_input.vertical_speed = character.velocity.y;
     animation_input.grounded = character.grounded;
