@@ -5,10 +5,11 @@ on:
     paths:
       - ".github/phase3-apk-test.trigger"
       - ".github/phase4-apk-test.trigger"
+      - "scripts/fetch_default_character.sh"
   workflow_dispatch:
     inputs:
       build_apk:
-        description: "Build the Android APK (only after the project reaches the agreed testing stage)"
+        description: "Build the Android ARM64 APK with the bundled default humanoid"
         required: true
         type: boolean
         default: false
@@ -25,6 +26,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Prepare build diagnostics
         run: mkdir -p build-logs
+      - name: Fetch and validate bundled CC0 default humanoid
+        run: bash scripts/fetch_default_character.sh 2>&1 | tee build-logs/default-character.log
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
