@@ -37,6 +37,18 @@ namespace {
                         wa*a.z+wb*b.z, wa*a.w+wb*b.w});
 }
 
+[[nodiscard]] Quaternion multiply(Quaternion a, Quaternion b) noexcept {
+    return normalized({a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y,
+                       a.w*b.y - a.x*b.z + a.y*b.w + a.z*b.x,
+                       a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w,
+                       a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z});
+}
+
+[[nodiscard]] Quaternion conjugate(Quaternion q) noexcept {
+    q = normalized(q);
+    return {-q.x, -q.y, -q.z, q.w};
+}
+
 [[nodiscard]] bool valid_pose(const Pose& pose, std::size_t count) noexcept {
     if (pose.joint_count != count || count == 0U || count > kMaxPoseJoints) return false;
     for (std::size_t i=0; i<count; ++i) {
@@ -194,6 +206,37 @@ bool blend_poses(const Pose& from, const Pose& to, float alpha, Pose& output) no
         d.scale={x.scale.x+(y.scale.x-x.scale.x)*a,
                   x.scale.y+(y.scale.y-x.scale.y)*a,
                   x.scale.z+(y.scale.z-x.scale.z)*a};
+    }
+    return true;
+}
+
+bool apply_additive_layer(const Pose& base_pose, const Pose& layer_pose,
+                          const Pose& reference_pose, float weight, Pose& output) noexcept {
+    if (!finite(weight) || !valid_pose(base_pose, base_pose.joint_count) ||
+        !valid_pose(layer_pose, base_pose.joint_count) ||
+        !valid_pose(reference_pose, base_pose.joint_count)) return false;
+    const float w = std::clamp(weight, 0.0F, 1.0F);
+    output.joint_count = base_pose.joint_count;
+    for (std::size_t i = 0; i < output.joint_count; ++i) {
+        const auto& base = base_pose.joints[i];
+        const auto& layer = layer_pose.joints[i];
+        const auto& reference = reference_pose.joints[i];
+        if (std::abs(reference.scale.x) <= 1.0e-8F ||
+            std::abs(reference.scale.y) <= 1.0e-8F ||
+            std::abs(reference.scale.z) <= 1.0e-8F) return false;
+        auto& dst = output.joints[i];
+        dst.translation = {base.translation.x + (layer.translation.x-reference.translation.x)*w,
+                           base.translation.y + (layer.translation.y-reference.translation.y)*w,
+                           base.translation.z + (layer.translation.z-reference.translation.z)*w};
+        const Quaternion delta = multiply(conjugate(reference.rotation), layer.rotation);
+        const Quaternion weighted_delta = slerp({}, delta, w);
+        dst.rotation = multiply(base.rotation, weighted_delta);
+        const float sx = layer.scale.x / reference.scale.x;
+        const float sy = layer.scale.y / reference.scale.y;
+        const float sz = layer.scale.z / reference.scale.z;
+        dst.scale = {base.scale.x * (1.0F + (sx-1.0F)*w),
+                     base.scale.y * (1.0F + (sy-1.0F)*w),
+                     base.scale.z * (1.0F + (sz-1.0F)*w)};
     }
     return true;
 }
