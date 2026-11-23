@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <utility>
 
 namespace arut::rendering {
 
@@ -16,7 +17,8 @@ namespace arut::rendering {
     const animation::ImportedSkinnedMesh& source,
     MeshData& output) {
     output = {};
-    if (!asset.valid() || source.vertices.empty() || source.indices.empty() ||
+    if (asset.joint_count == 0U || asset.joint_count > animation::kMaxImportedJoints ||
+        source.vertices.empty() || source.indices.empty() ||
         source.indices.size() % 3U != 0U ||
         source.vertices.size() > std::numeric_limits<std::uint32_t>::max()) return false;
 
