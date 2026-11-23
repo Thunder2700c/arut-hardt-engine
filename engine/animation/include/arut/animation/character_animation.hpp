@@ -47,6 +47,12 @@ struct CharacterAnimationInput final {
 
 class CharacterAnimationController final {
 public:
+    CharacterAnimationController() = default;
+    CharacterAnimationController(const CharacterAnimationController&) = delete;
+    CharacterAnimationController& operator=(const CharacterAnimationController&) = delete;
+    CharacterAnimationController(CharacterAnimationController&&) = delete;
+    CharacterAnimationController& operator=(CharacterAnimationController&&) = delete;
+
     [[nodiscard]] bool configure(const CharacterAnimationSet& clips);
     [[nodiscard]] bool start() noexcept;
     [[nodiscard]] bool update(float delta_seconds, const CharacterAnimationInput& input,
