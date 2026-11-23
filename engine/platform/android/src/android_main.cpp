@@ -398,6 +398,8 @@ void run(android_app* app) {
   return;
  }
  state.selected_profile = static_cast<arut::core::TestLabProfile>(selected_id);
+ if (state.selected_profile == arut::core::TestLabProfile::Combined)
+  state.character_controller.reset({0.0F, 0.0F, -5.0F});
  log_info("TEST_LAB selected=%.*s profile_id=%d",
   static_cast<int>(arut::core::test_lab_profile_name(state.selected_profile).size()),
   arut::core::test_lab_profile_name(state.selected_profile).data(), selected_id);
