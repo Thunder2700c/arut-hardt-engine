@@ -496,7 +496,7 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
 }
  }
 extern "C" JNIEXPORT void JNICALL
-Java_com_arut_engine_TestLabActivity_nativeSelectProfile(
+Java_com_arut_engine_EngineNativeActivity_nativeSelectProfile(
     JNIEnv*, jclass, jint profile_id) noexcept {
  __android_log_print(ANDROID_LOG_INFO, kLogTag,
   "TEST_LAB JNI profile_selection_callback profile_id=%d", profile_id);
