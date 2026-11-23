@@ -15,6 +15,8 @@
 #include "arut/rendering/humanoid_ik.hpp"
 #include "arut/rendering/humanoid_skinning.hpp"
 #include "arut/animation/pose_history.hpp"
+#include "arut/animation/character_animation.hpp"
+#include "arut/animation/gltf_importer.hpp"
 #include <android/input.h>
 #include <android/log.h>
 #include <android/native_window.h>
@@ -28,6 +30,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cctype>
 #include <ctime>
 #include <mutex>
 #include <atomic>
@@ -81,6 +84,11 @@ struct RuntimeState final {
  arut::core::HumanoidSkeleton humanoid_skeleton{arut::core::make_robot_mannequin_skeleton()};
  arut::rendering::HumanoidAnimator humanoid_animator{};
  arut::animation::PoseHistory animation_pose_history{};
+ arut::animation::SkeletalAsset imported_character_asset{};
+ arut::animation::CharacterAnimationController imported_character_animator{};
+ arut::animation::Pose imported_character_rest_pose{};
+ bool imported_character_active{false};
+ bool imported_character_animator_ready{false};
  double animation_clock_seconds{0.0};
  float previous_facing_yaw{0.0F};
  bool has_previous_facing_yaw{false};
@@ -271,6 +279,63 @@ void log_warn(const char* format, ...) {
  write_log(ANDROID_LOG_WARN, "WARN", format, args);
  va_end(args);
 }
+bool configure_imported_character_animator(RuntimeState& state) {
+ using S = arut::animation::CharacterAnimationState;
+ arut::animation::CharacterAnimationSet clips{};
+ for (const auto& clip : state.imported_character_asset.animations) {
+  std::string name = clip.name;
+  name.erase(std::remove_if(name.begin(), name.end(), [](unsigned char ch) {
+   return !std::isalnum(ch);
+  }), name.end());
+  std::transform(name.begin(), name.end(), name.begin(), [](unsigned char ch) {
+   return static_cast<char>(std::tolower(ch));
+  });
+  auto bind = [&](S state_id) {
+   if (!clips.get(state_id)) clips.set(state_id, &clip);
+  };
+  if (name.find("idle") != std::string::npos || name.find("stand") != std::string::npos)
+   bind(S::Idle);
+  else if (name.find("strafeleft") != std::string::npos || name.find("leftstrafe") != std::string::npos)
+   bind(S::StrafeLeft);
+  else if (name.find("straferight") != std::string::npos || name.find("rightstrafe") != std::string::npos)
+   bind(S::StrafeRight);
+  else if (name.find("backward") != std::string::npos || name.find("backpedal") != std::string::npos)
+   bind(S::Backward);
+  else if (name.find("attackheavy") != std::string::npos || name.find("heavyattack") != std::string::npos ||
+           name.find("heavy") != std::string::npos)
+   bind(S::AttackHeavy);
+  else if (name.find("attacklight") != std::string::npos || name.find("lightattack") != std::string::npos ||
+           name.find("punch") != std::string::npos || name.find("jab") != std::string::npos)
+   bind(S::AttackLight);
+  else if (name.find("block") != std::string::npos || name.find("guard") != std::string::npos)
+   bind(S::Block);
+  else if (name.find("dodge") != std::string::npos || name.find("evade") != std::string::npos ||
+           name.find("roll") != std::string::npos)
+   bind(S::Dodge);
+  else if (name.find("hitreact") != std::string::npos || name.find("damage") != std::string::npos ||
+           name == "hit")
+   bind(S::HitReact);
+  else if (name.find("recover") != std::string::npos || name.find("getup") != std::string::npos)
+   bind(S::Recover);
+  else if (name.find("jump") != std::string::npos)
+   bind(S::Jump);
+  else if (name.find("fall") != std::string::npos || name.find("airborne") != std::string::npos)
+   bind(S::Fall);
+  else if (name.find("land") != std::string::npos || name.find("landing") != std::string::npos)
+   bind(S::Land);
+  else if (name.find("run") != std::string::npos || name.find("sprint") != std::string::npos)
+   bind(S::Run);
+  else if (name.find("walk") != std::string::npos)
+   bind(S::Walk);
+ }
+ // A GLB with a single generically named clip is still usable for an
+ // animation smoke test; projects should name production clips explicitly.
+ if (!clips.get(S::Idle) && !state.imported_character_asset.animations.empty())
+  clips.set(S::Idle, &state.imported_character_asset.animations.front());
+ return state.imported_character_animator.configure(clips) &&
+        state.imported_character_animator.start();
+}
+
 bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
  if (!app || !app->window || !state.has_window || !state.render_scene_ready) return true;
  std::span<const arut::core::CubeRenderInstance> stress_instances{};
