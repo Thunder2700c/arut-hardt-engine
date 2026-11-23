@@ -61,8 +61,10 @@ AndroidRenderer::~AndroidRenderer() { shutdown(); }
 bool AndroidRenderer::initialize(
     ANativeWindow* window, AAssetManager* assets,
     std::span<const arut::core::CubeRenderInstance> ecs_instances,
-    std::span<const arut::core::TerrainMesh> terrain_meshes) noexcept {
+    std::span<const arut::core::TerrainMesh> terrain_meshes,
+    bool render_mannequin) noexcept {
     shutdown();
+    mannequin_scene_enabled_ = render_mannequin;
     if (terrain_meshes.empty()) { log_error("Renderer rejected empty streamed terrain cell set"); return false; }
     try {
         terrain_meshes_.assign(terrain_meshes.begin(), terrain_meshes.end());
@@ -75,8 +77,9 @@ bool AndroidRenderer::initialize(
     } catch (...) { terrain_meshes_.clear(); log_error("Renderer could not retain streamed terrain cells"); return false; }
     visibility_instances_.clear();
     visibility_source_instance_count_ = 0U;
-    if (ecs_instances.size() != arut::core::CubeSpawnSystem::target_count) {
-        log_error("Renderer rejected stress scene: expected exactly 5000 ECS render instances");
+    if (!ecs_instances.empty() &&
+        ecs_instances.size() != arut::core::CubeSpawnSystem::target_count) {
+        log_error("Renderer rejected stress scene: expected either zero or exactly 5000 ECS render instances");
         return false;
     }
     try {
@@ -98,6 +101,12 @@ bool AndroidRenderer::initialize(
                   "Renderer input accepted: source=ECS CubeSpawnSystem instances=%u",
                   visibility_source_instance_count_);
     arut_android_log(ANDROID_LOG_INFO, source_message);
+    char scene_message[128]{};
+    std::snprintf(scene_message, sizeof(scene_message),
+        "TEST_LAB_RENDER_PROFILE stress=%s humanoid=%s",
+        visibility_source_instance_count_ == 0U ? "false" : "true",
+        mannequin_scene_enabled_ ? "true" : "false");
+    arut_android_log(ANDROID_LOG_INFO, scene_message);
 
     window_ = window;
     assets_ = assets;
@@ -143,7 +152,9 @@ bool AndroidRenderer::set_terrain_cells(
 bool AndroidRenderer::create_frame_resources() noexcept {
     return create_render_targets() &&
            create_triangle_geometry() && create_triangle_pipeline() &&
-           create_pbr_geometry() && create_mannequin_geometry() && create_terrain_geometry() && create_gpu_visibility_resources() &&
+           create_pbr_geometry() &&
+           (!mannequin_scene_enabled_ || create_mannequin_geometry()) &&
+           create_terrain_geometry() && create_gpu_visibility_resources() &&
            create_fallback_texture() &&
            create_environment_cubemap() && create_environment_probe_cubemaps() &&
            create_brdf_lut() &&
@@ -158,8 +169,12 @@ bool AndroidRenderer::create_gpu_visibility_resources() noexcept {
         arut_android_log(ANDROID_LOG_WARN, "GPU visibility unavailable: selected graphics queue has no compute capability; using CPU culling.");
         return true;
     }
-    if (!visibility_input_buffer_ || !instance_buffer_ || !indirect_draw_buffer_ ||
-        visibility_source_instance_count_ == 0U) {
+    if (visibility_source_instance_count_ == 0U) {
+        arut_android_log(ANDROID_LOG_INFO,
+            "GPU visibility skipped: selected profile has no ECS stress instances.");
+        return true;
+    }
+    if (!visibility_input_buffer_ || !instance_buffer_ || !indirect_draw_buffer_) {
         log_error("GPU visibility buffers are not initialized; using CPU culling.");
         return true;
     }
@@ -1970,11 +1985,16 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         log_error("Stress scene input invalid: expected 5000 ECS-owned cube instances");
         return false;
     }
-    const std::array<float, 3> camera{0.0F, 0.0F, 18.0F};
+    const std::array<float, 3> camera = mannequin_scene_enabled_
+        ? std::array<float, 3>{0.0F, 1.1F, 7.0F}
+        : std::array<float, 3>{0.0F, 0.0F, 18.0F};
     camera_position_ = camera;
     camera_yaw_ = -1.570796327F;
     camera_pitch_ = 0.0F;
-    const auto view = arut::rendering::look_at_rh(camera, {0.0F, 0.0F, 17.0F}, {0.0F, 1.0F, 0.0F});
+    const std::array<float, 3> camera_target = mannequin_scene_enabled_
+        ? std::array<float, 3>{0.0F, 1.1F, 6.0F}
+        : std::array<float, 3>{0.0F, 0.0F, 17.0F};
+    const auto view = arut::rendering::look_at_rh(camera, camera_target, {0.0F, 1.0F, 0.0F});
     const auto projection = arut::rendering::perspective_rh_zo(0.785398163F,
         static_cast<float>(extent_.width) / static_cast<float>(std::max(1U, extent_.height)), 0.1F, 180.0F);
     const auto view_projection = arut::rendering::multiply(projection, view);
@@ -1985,7 +2005,7 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         log_error("CPU visibility reference compaction failed");
         return false;
     }
-    if (cpu_visible_instances.empty()) {
+    if (visibility_source_instance_count_ != 0U && cpu_visible_instances.empty()) {
         log_error("CPU visibility reference removed every stress-scene instance");
         return false;
     }
@@ -2019,8 +2039,9 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         }
     }
 
-    const VkDeviceSize instance_capacity_bytes =
-        visibility_instances_.size() * sizeof(arut::rendering::Mat4);
+    const VkDeviceSize instance_capacity_bytes = std::max<VkDeviceSize>(
+        sizeof(arut::rendering::Mat4),
+        visibility_instances_.size() * sizeof(arut::rendering::Mat4));
     const VkBufferUsageFlags instance_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
         (compute_queue_supported_ ? VK_BUFFER_USAGE_STORAGE_BUFFER_BIT : 0U);
     if (!create_buffer(instance_capacity_bytes, instance_usage,
@@ -2032,8 +2053,10 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         return false;
     }
     std::memset(mapped, 0, static_cast<std::size_t>(instance_capacity_bytes));
-    std::memcpy(mapped, cpu_visible_instances.data(),
-                cpu_visible_instances.size() * sizeof(arut::rendering::Mat4));
+    if (!cpu_visible_instances.empty()) {
+        std::memcpy(mapped, cpu_visible_instances.data(),
+                    cpu_visible_instances.size() * sizeof(arut::rendering::Mat4));
+    }
     vkUnmapMemory(device_, instance_memory_);
     instance_count_ = static_cast<std::uint32_t>(cpu_visible_instances.size());
 
@@ -2054,10 +2077,15 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
     vkUnmapMemory(device_, indirect_draw_memory_);
 
     char message[192]{};
-    std::snprintf(message, sizeof(message),
-                  "STRESS SCENE: source=ECS vertices=%zu indices=%u source_instances=%u CPU_visible=%u culled=%u grid=20x10x25",
-                  mesh.vertices.size(), cube_index_count_, visibility_source_instance_count_,
-                  instance_count_, visibility_source_instance_count_ - instance_count_);
+    if (visibility_source_instance_count_ != 0U) {
+        std::snprintf(message, sizeof(message),
+                      "STRESS SCENE: source=ECS vertices=%zu indices=%u source_instances=%u CPU_visible=%u culled=%u grid=20x10x25",
+                      mesh.vertices.size(), cube_index_count_, visibility_source_instance_count_,
+                      instance_count_, visibility_source_instance_count_ - instance_count_);
+    } else {
+        std::snprintf(message, sizeof(message),
+                      "STRESS SCENE disabled=true reason=humanoid_only_profile indirect_instances=0");
+    }
     arut_android_log(ANDROID_LOG_INFO, message);
     return true;
 }
@@ -3348,6 +3376,10 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     command_buffers_.clear();
     images_.clear();
     tracked_gpu_memory_bytes_ = 0;
+    mannequin_scene_enabled_ = true;
+    mannequin_index_count_ = 0U;
+    mannequin_vertex_buffer_ = mannequin_index_buffer_ = mannequin_instance_buffer_ = VK_NULL_HANDLE;
+    mannequin_vertex_memory_ = mannequin_index_memory_ = mannequin_instance_memory_ = VK_NULL_HANDLE;
 }
 
 bool AndroidRenderer::recreate_swapchain() noexcept {
