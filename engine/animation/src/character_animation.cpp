@@ -105,6 +105,8 @@ bool CharacterAnimationController::enter(CharacterAnimationState next,
     if (!graph_.transition_to(state_id(next), blend_seconds)) return false;
     state_ = next;
     state_elapsed_ = 0.0F;
+    combo_window_open_ = false;
+    cancel_window_open_ = false;
     return true;
 }
 
@@ -121,7 +123,11 @@ bool CharacterAnimationController::update(float delta_seconds,
     if (is_timed_action(state_) && state_elapsed_ < duration_of(state_)) {
         // A held block may be interrupted by a hit/dodge; ordinary locomotion
         // cannot cancel a committed attack or recovery before its clip ends.
-        const bool interrupt = input.hit_reaction || input.dodge_pressed;
+        const bool attack_requested = input.attack_light_pressed || input.attack_heavy_pressed;
+        const bool combo_cancel = combo_window_open_ && attack_requested;
+        const bool defensive_cancel = cancel_window_open_ &&
+            (input.dodge_pressed || input.block_held || input.recover_pressed);
+        const bool interrupt = input.hit_reaction || combo_cancel || defensive_cancel;
         if (!interrupt) desired = state_;
     }
     if (state_ == CharacterAnimationState::Block && !input.block_held &&
@@ -134,7 +140,19 @@ bool CharacterAnimationController::update(float delta_seconds,
         if (fallback != state_ && !enter(fallback, transition_seconds_)) return false;
     }
 
+    const std::size_t event_begin = events.size();
     if (!graph_.update(dt, output, events)) return false;
+    for (std::size_t i = event_begin; i < events.size(); ++i) {
+        const auto& name = events[i].name;
+        if (name == "combo_open" || name == "combo_window_open")
+            combo_window_open_ = true;
+        else if (name == "combo_close" || name == "combo_window_close")
+            combo_window_open_ = false;
+        else if (name == "cancel_open" || name == "cancel_window_open")
+            cancel_window_open_ = true;
+        else if (name == "cancel_close" || name == "cancel_window_close")
+            cancel_window_open_ = false;
+    }
     state_elapsed_ += dt;
     was_grounded_ = input.grounded;
 
@@ -153,6 +171,8 @@ void CharacterAnimationController::reset() noexcept {
     configured_ = false;
     started_ = false;
     was_grounded_ = true;
+    combo_window_open_ = false;
+    cancel_window_open_ = false;
 }
 
 } // namespace arut::animation
