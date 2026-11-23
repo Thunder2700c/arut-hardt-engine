@@ -25,7 +25,7 @@ public final class TestLabActivity extends NativeActivity {
             public void run() {
                 new AlertDialog.Builder(TestLabActivity.this)
                     .setTitle("ARUT-HARDT Test Laboratory")
-                    .setMessage("Choose one isolated runtime profile. You can return here by restarting the app.")
+                    .setMessage("Choose one isolated runtime profile. Humanoid controls: left stick to move, drag on the right to look, tap the lower-right area to jump. Restart the app to choose another profile.")
                     .setItems(PROFILES, new DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
