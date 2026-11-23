@@ -2567,7 +2567,26 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     if (!create_buffer(sizeof(FrameData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, frame_uniform_buffer_, frame_uniform_memory_) ||
         !create_buffer(sizeof(MaterialData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, material_uniform_buffer_, material_uniform_memory_) ||
         !create_buffer(sizeof(arut::rendering::EnvironmentProbeGpuData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                       environment_probe_uniform_buffer_, environment_probe_uniform_memory_)) return false;
+                       environment_probe_uniform_buffer_, environment_probe_uniform_memory_) ||
+        !create_buffer(sizeof(arut::rendering::HumanoidSkinningPalette), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                       bone_palette_uniform_buffer_, bone_palette_uniform_memory_)) return false;
+
+    const auto rest_pose = arut::rendering::make_rest_humanoid_pose();
+    arut::rendering::HumanoidSkinningPalette initial_bone_palette{};
+    if (!arut::rendering::build_humanoid_skinning_palette(
+            arut::core::make_robot_mannequin_skeleton(), rest_pose, initial_bone_palette)) {
+        log_error("Build initial humanoid inverse-bind palette failed");
+        return false;
+    }
+    void* palette_mapped = nullptr;
+    VkResult palette_result = vkMapMemory(device_, bone_palette_uniform_memory_, 0,
+        sizeof(initial_bone_palette), 0, &palette_mapped);
+    if (palette_result != VK_SUCCESS || !palette_mapped) {
+        log_error("Map initial humanoid bone palette failed", palette_result);
+        return false;
+    }
+    std::memcpy(palette_mapped, &initial_bone_palette, sizeof(initial_bone_palette));
+    vkUnmapMemory(device_, bone_palette_uniform_memory_);
 
     FrameData frame{};
     const std::span<const arut::rendering::EnvironmentProbeInfluence> scene_probes(
@@ -2674,7 +2693,7 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     vkUnmapMemory(device_, environment_probe_uniform_memory_);
 
     const std::array<VkDescriptorPoolSize, 2> sizes{{
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4},
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 15}
     }};
     VkDescriptorPoolCreateInfo pool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
@@ -2693,6 +2712,8 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     VkDescriptorBufferInfo material_info{material_uniform_buffer_, 0, sizeof(MaterialData)};
     VkDescriptorBufferInfo environment_probe_info{
         environment_probe_uniform_buffer_, 0, sizeof(arut::rendering::EnvironmentProbeGpuData)};
+    VkDescriptorBufferInfo bone_palette_info{
+        bone_palette_uniform_buffer_, 0, sizeof(arut::rendering::HumanoidSkinningPalette)};
     const VkDescriptorImageInfo shadow_info{shadow_sampler_, shadow_view_, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
     const VkDescriptorImageInfo environment_info{environment_sampler_, environment_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     const VkDescriptorImageInfo brdf_lut_info{brdf_lut_sampler_, brdf_lut_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
@@ -2716,7 +2737,7 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
                 ? environment_probe_diffuse_views_[probe] : irradiance_view_,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     }
-    std::array<VkWriteDescriptorSet, 12> writes{};
+    std::array<VkWriteDescriptorSet, 13> writes{};
     writes[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 0, 0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &frame_info, nullptr};
     writes[1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &shadow_info, nullptr, nullptr};
     writes[2] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 2, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &environment_info, nullptr, nullptr};
@@ -2734,6 +2755,8 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     writes[9] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 1, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &base_color_info, nullptr, nullptr};
     writes[10] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 2, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &normal_info, nullptr, nullptr};
     writes[11] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, material_descriptor_set_, 3, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &metallic_roughness_info, nullptr, nullptr};
+    writes[12] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, frame_descriptor_set_, 8, 0, 1,
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &bone_palette_info, nullptr};
     vkUpdateDescriptorSets(device_, static_cast<std::uint32_t>(writes.size()), writes.data(), 0, nullptr);
     arut_android_log(ANDROID_LOG_INFO, "PBR frame/material descriptors and fallback texture bound.");
     return true;
@@ -2867,6 +2890,49 @@ void AndroidRenderer::update_stress_camera(float delta_seconds) noexcept {
     vkUnmapMemory(device_, frame_uniform_memory_);
 }
 
+void AndroidRenderer::update_humanoid_animation(float delta_seconds) noexcept {
+    if (!mannequin_scene_enabled_ || !bone_palette_uniform_memory_) return;
+    humanoid_animation_time_seconds_ += std::clamp(delta_seconds, 0.0F, 0.05F);
+    auto pose = arut::rendering::make_rest_humanoid_pose();
+    const float phase = humanoid_animation_time_seconds_;
+    const auto chest = static_cast<std::size_t>(arut::core::HumanoidBone::Chest);
+    const auto left_arm = static_cast<std::size_t>(arut::core::HumanoidBone::LeftUpperArm);
+    const auto right_arm = static_cast<std::size_t>(arut::core::HumanoidBone::RightUpperArm);
+    // A small procedural idle cycle validates bone deformation before the
+    // full locomotion clip/blend system is added in the next slice.
+    pose.local_rotations[chest] = arut::rendering::quaternion_from_axis_angle(
+        {0.0F, 0.0F, 1.0F}, 0.025F * std::sin(phase * 1.7F));
+    pose.local_rotations[left_arm] = arut::rendering::quaternion_from_axis_angle(
+        {1.0F, 0.0F, 0.0F}, 0.018F * std::sin(phase * 1.2F));
+    pose.local_rotations[right_arm] = arut::rendering::quaternion_from_axis_angle(
+        {1.0F, 0.0F, 0.0F}, -0.018F * std::sin(phase * 1.2F));
+
+    arut::rendering::HumanoidSkinningPalette palette{};
+    if (!arut::rendering::build_humanoid_skinning_palette(
+            arut::core::make_robot_mannequin_skeleton(), pose, palette)) {
+        log_error("Build animated humanoid skinning palette failed");
+        return;
+    }
+    void* mapped = nullptr;
+    const VkResult result = vkMapMemory(device_, bone_palette_uniform_memory_, 0,
+        sizeof(palette), 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map animated humanoid bone palette failed", result);
+        return;
+    }
+    std::memcpy(mapped, &palette, sizeof(palette));
+    vkUnmapMemory(device_, bone_palette_uniform_memory_);
+    ++humanoid_animation_updates_;
+    if (humanoid_animation_updates_ == 1U || (humanoid_animation_updates_ % 300U) == 0U) {
+        char message[192]{};
+        std::snprintf(message, sizeof(message),
+            "HUMANOID_ANIMATION mode=procedural_idle updates=%llu time_seconds=%.2f skinning=enabled",
+            static_cast<unsigned long long>(humanoid_animation_updates_),
+            humanoid_animation_time_seconds_);
+        arut_android_log(ANDROID_LOG_INFO, message);
+    }
+}
+
 bool AndroidRenderer::draw_frame() noexcept {
     if (!ready()) return false;
     const auto cpu_frame_start = std::chrono::steady_clock::now();
@@ -2880,6 +2946,7 @@ bool AndroidRenderer::draw_frame() noexcept {
         return false;
     }
     update_stress_camera(delta_seconds);
+    update_humanoid_animation(delta_seconds);
     if (gpu_visibility_enabled_ && gpu_visibility_result_pending_) {
         void* mapped = nullptr;
         const VkResult map_result = vkMapMemory(device_, indirect_draw_memory_, 0,
@@ -3196,6 +3263,10 @@ void AndroidRenderer::destroy_swapchain() noexcept {
         if (material_uniform_memory_) vkFreeMemory(device_, material_uniform_memory_, nullptr);
         if (environment_probe_uniform_buffer_) vkDestroyBuffer(device_, environment_probe_uniform_buffer_, nullptr);
         if (environment_probe_uniform_memory_) vkFreeMemory(device_, environment_probe_uniform_memory_, nullptr);
+        if (bone_palette_uniform_buffer_) vkDestroyBuffer(device_, bone_palette_uniform_buffer_, nullptr);
+        if (bone_palette_uniform_memory_) vkFreeMemory(device_, bone_palette_uniform_memory_, nullptr);
+        bone_palette_uniform_buffer_ = VK_NULL_HANDLE;
+        bone_palette_uniform_memory_ = VK_NULL_HANDLE;
         for (std::size_t probe = 0; probe < arut::rendering::kMaxEnvironmentProbes; ++probe) {
             if (environment_probe_specular_samplers_[probe]) vkDestroySampler(device_, environment_probe_specular_samplers_[probe], nullptr);
             if (environment_probe_specular_views_[probe]) vkDestroyImageView(device_, environment_probe_specular_views_[probe], nullptr);
