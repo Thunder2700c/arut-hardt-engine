@@ -112,6 +112,9 @@ int main() {
         assert(std::abs(west_edge.x - east_edge.x) < 0.0001F);
         assert(std::abs(west_edge.y - east_edge.y) < 0.0001F);
         assert(std::abs(west_edge.z - east_edge.z) < 0.0001F);
+        assert(std::abs(west_edge.nx - east_edge.nx) < 0.0001F);
+        assert(std::abs(west_edge.ny - east_edge.ny) < 0.0001F);
+        assert(std::abs(west_edge.nz - east_edge.nz) < 0.0001F);
     }
 
     bool invalid_radius_rejected = false;
