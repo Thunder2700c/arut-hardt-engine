@@ -44,6 +44,7 @@ namespace {
         const auto& q=t.rotation;
         const float q2=q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w;
         if (!finite(t.translation.x) || !finite(t.translation.y) || !finite(t.translation.z) ||
+            !finite(t.scale.x) || !finite(t.scale.y) || !finite(t.scale.z) ||
             !finite(q.x) || !finite(q.y) || !finite(q.z) || !finite(q.w) ||
             !finite(q2) || q2 <= 1.0e-12F) return false;
     }
@@ -90,6 +91,9 @@ bool AnimationClip::sample(float time_seconds, Pose& output) const noexcept {
                          x.translation.y+(y.translation.y-x.translation.y)*alpha,
                          x.translation.z+(y.translation.z-x.translation.z)*alpha};
         dst.rotation=slerp(x.rotation,y.rotation,alpha);
+        dst.scale={x.scale.x+(y.scale.x-x.scale.x)*alpha,
+                   x.scale.y+(y.scale.y-x.scale.y)*alpha,
+                   x.scale.z+(y.scale.z-x.scale.z)*alpha};
     }
     return true;
 }
@@ -141,6 +145,9 @@ bool blend_poses(const Pose& from, const Pose& to, float alpha, Pose& output) no
                        x.translation.y+(y.translation.y-x.translation.y)*a,
                        x.translation.z+(y.translation.z-x.translation.z)*a};
         d.rotation=slerp(x.rotation,y.rotation,a);
+        d.scale={x.scale.x+(y.scale.x-x.scale.x)*a,
+                  x.scale.y+(y.scale.y-x.scale.y)*a,
+                  x.scale.z+(y.scale.z-x.scale.z)*a};
     }
     return true;
 }
