@@ -349,7 +349,7 @@ void handle_app_command(android_app* app, std::int32_t command) {
    state->character_input_router.clear();
    state->mouse_look_active = false;
    state->gamepad_move_x = state->gamepad_move_y = 0.0F;
-   state->renderer.set_gamepad_look_input(0.0F, 0.0F);
+   state->renderer.clear_input();
    log_info("Lifecycle PAUSE");
    if (export_runtime_log(app)) __android_log_print(ANDROID_LOG_INFO, kLogTag, "Runtime log exported to Downloads/ARUT-HARDT/ARUT-HARDT-runtime.log");
    else __android_log_print(ANDROID_LOG_WARN, kLogTag, "Runtime log export failed; private app log retained.");
@@ -409,6 +409,8 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
     AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_Z, 0U));
    const float look_y = deadzone(
     AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_RZ, 0U));
+   state->renderer.set_gamepad_movement_input(
+    state->gamepad_move_x, state->gamepad_move_y);
    state->renderer.set_gamepad_look_input(look_x, look_y);
    return 1;
   }
