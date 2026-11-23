@@ -65,10 +65,13 @@ struct HumanoidLegIkResult final {
     const float target_pitch = std::atan2(target_forward, target_down);
     const float hip_triangle_angle = std::acos(cosine_hip_triangle);
     const float knee_internal_angle = std::acos(cosine_knee_internal);
-    const float knee_flexion = pi - knee_internal_angle;
     const float lower_rest_pitch = std::atan2(lower_forward, lower_down);
+    const float bend_sign = std::abs(target_forward) > 1.0e-5F
+        ? (target_forward < 0.0F ? -1.0F : 1.0F)
+        : (lower_forward < 0.0F ? -1.0F : 1.0F);
+    const float knee_flexion = bend_sign * (pi - knee_internal_angle);
 
-    result.upper_leg_pitch = target_pitch - hip_triangle_angle;
+    result.upper_leg_pitch = target_pitch - bend_sign * hip_triangle_angle;
     result.lower_leg_pitch = knee_flexion - lower_rest_pitch;
 
     const float inverse_normal_length = 1.0F / std::sqrt(normal_length_squared);
