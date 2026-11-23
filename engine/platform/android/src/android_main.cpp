@@ -9,6 +9,7 @@
 #include "arut/platform/android/asset_source.hpp"
 #include "arut/rendering/vulkan/android_renderer.hpp"
 #include "arut/rendering/humanoid_animation.hpp"
+#include "arut/rendering/humanoid_ik.hpp"
 #include "arut/rendering/humanoid_skinning.hpp"
 #include <android/input.h>
 #include <android/log.h>
@@ -40,6 +41,12 @@ extern "C" std::uint32_t arut_tasks_abi_version() noexcept;
 namespace {
 constexpr char kLogTag[] = "ARUT-HARDT";
 std::atomic<std::int32_t> g_requested_test_profile{-1};
+struct FootPlantState final {
+ arut::core::Vec3 world_anchor{};
+ float blend{0.0F};
+ bool active{false};
+};
+
 struct RuntimeState final {
  bool resumed{false};
  bool focused{false};
@@ -61,6 +68,8 @@ struct RuntimeState final {
  arut::core::CharacterController character_controller{};
  arut::core::HumanoidSkeleton humanoid_skeleton{arut::core::make_robot_mannequin_skeleton()};
  arut::rendering::HumanoidAnimator humanoid_animator{};
+ std::array<FootPlantState, 2> foot_plants{};
+ std::array<bool, 2> foot_ik_clamped{};
  std::uint64_t character_fixed_steps{0};
  std::uint64_t lifecycle_events{0};
  std::uint64_t input_events{0};
@@ -524,7 +533,103 @@ void run(android_app* app) {
     animation_input.horizontal_speed = horizontal_speed;
     animation_input.vertical_speed = character.velocity.y;
     animation_input.grounded = character.grounded;
-    const auto& pose = state.humanoid_animator.update(animation_input, frame_delta);
+    auto pose = state.humanoid_animator.update(animation_input, frame_delta);
+    const auto& animation_snapshot = state.humanoid_animator.snapshot();
+    const bool idle_or_landing =
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::Idle ||
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::Land;
+    const bool airborne =
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::Jump ||
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::Fall ||
+     !character.grounded;
+    const float gait_wave = std::sin(animation_snapshot.phase_seconds);
+    const std::array<bool, 2> stance{
+     !airborne && (idle_or_landing || gait_wave >= 0.0F),
+     !airborne && (idle_or_landing || gait_wave < 0.0F)
+    };
+    const float yaw_cosine = std::cos(character.facing_yaw_radians);
+    const float yaw_sine = std::sin(character.facing_yaw_radians);
+    for (std::size_t foot = 0; foot < 2U; ++foot) {
+     auto& plant = state.foot_plants[foot];
+     state.foot_ik_clamped[foot] = false;
+     if (!stance[foot]) {
+      plant.active = false;
+      plant.blend = 0.0F;
+      continue;
+     }
+     const float side = foot == 0U ? -1.0F : 1.0F;
+     constexpr float ankle_local_forward = 0.10F;
+     const float ankle_local_side = side * 0.11F;
+     if (!plant.active) {
+      const float anchor_x = character.position.x +
+       yaw_cosine * ankle_local_side - yaw_sine * ankle_local_forward;
+      const float anchor_z = character.position.z +
+       yaw_sine * ankle_local_side + yaw_cosine * ankle_local_forward;
+      const auto ground = terrain_ground_query(anchor_x, anchor_z, nullptr);
+      if (!ground.valid) continue;
+      plant.world_anchor = {anchor_x, ground.height + 0.09F, anchor_z};
+      plant.active = true;
+      plant.blend = 0.0F;
+     }
+     const auto ground = terrain_ground_query(
+      plant.world_anchor.x, plant.world_anchor.z, nullptr);
+     if (!ground.valid) {
+      plant.active = false;
+      plant.blend = 0.0F;
+      continue;
+     }
+     plant.world_anchor.y = ground.height + 0.09F;
+     plant.blend = std::min(1.0F, plant.blend + frame_delta * 12.0F);
+
+     constexpr float root_render_offset = 0.10F;
+     constexpr float hip_height = 0.84F;
+     const float hip_world_x = character.position.x + yaw_cosine * ankle_local_side;
+     const float hip_world_y = character.position.y + root_render_offset + hip_height;
+     const float hip_world_z = character.position.z + yaw_sine * ankle_local_side;
+     const float delta_x = plant.world_anchor.x - hip_world_x;
+     const float delta_y = plant.world_anchor.y - hip_world_y;
+     const float delta_z = plant.world_anchor.z - hip_world_z;
+     const float target_forward = -yaw_sine * delta_x + yaw_cosine * delta_z;
+
+     const arut::core::Vec3 local_normal{
+      yaw_cosine * ground.normal.x + yaw_sine * ground.normal.z,
+      ground.normal.y,
+      -yaw_sine * ground.normal.x + yaw_cosine * ground.normal.z
+     };
+     const auto ik = arut::rendering::solve_two_bone_leg_ik(
+      -delta_y, target_forward, 0.43F, 0.42F, 0.10F, local_normal);
+     if (!ik.valid) {
+      log_warn("HUMANOID_IK invalid leg solution foot=%zu", foot);
+      continue;
+     }
+     state.foot_ik_clamped[foot] = ik.reach_clamped;
+     using Bone = arut::core::HumanoidBone;
+     const Bone upper_bone = foot == 0U ? Bone::LeftUpperLeg : Bone::RightUpperLeg;
+     const Bone lower_bone = foot == 0U ? Bone::LeftLowerLeg : Bone::RightLowerLeg;
+     const Bone foot_bone = foot == 0U ? Bone::LeftFoot : Bone::RightFoot;
+     const auto upper_index = static_cast<std::size_t>(upper_bone);
+     const auto lower_index = static_cast<std::size_t>(lower_bone);
+     const auto foot_index = static_cast<std::size_t>(foot_bone);
+     const auto upper_target = arut::rendering::quaternion_from_axis_angle(
+      {1.0F, 0.0F, 0.0F}, ik.upper_leg_pitch);
+     const auto lower_target = arut::rendering::quaternion_from_axis_angle(
+      {1.0F, 0.0F, 0.0F}, ik.lower_leg_pitch);
+     const auto foot_pitch = arut::rendering::quaternion_from_axis_angle(
+      {1.0F, 0.0F, 0.0F}, ik.foot_pitch);
+     const auto foot_roll = arut::rendering::quaternion_from_axis_angle(
+      {0.0F, 0.0F, 1.0F}, ik.foot_roll);
+     const auto foot_target = arut::rendering::multiply_humanoid_quaternions(
+      foot_roll, foot_pitch);
+     pose.local_rotations[upper_index] =
+      arut::rendering::blend_humanoid_rotation(
+       pose.local_rotations[upper_index], upper_target, plant.blend);
+     pose.local_rotations[lower_index] =
+      arut::rendering::blend_humanoid_rotation(
+       pose.local_rotations[lower_index], lower_target, plant.blend);
+     pose.local_rotations[foot_index] =
+      arut::rendering::blend_humanoid_rotation(
+       pose.local_rotations[foot_index], foot_target, plant.blend);
+    }
 
     arut::rendering::HumanoidSkinningPalette palette{};
     if (arut::rendering::build_humanoid_skinning_palette(
@@ -537,7 +642,7 @@ void run(android_app* app) {
      model.value[8] = -sine;
      model.value[10] = cosine;
      model.value[12] = character.position.x;
-     model.value[13] = character.position.y;
+     model.value[13] = character.position.y + 0.10F;
      model.value[14] = character.position.z;
      const std::array<float, 3> camera_target{
       character.position.x, character.position.y + 1.0F, character.position.z};
@@ -599,6 +704,11 @@ void run(android_app* app) {
       static_cast<int>(arut::rendering::humanoid_animation_state_name(animation.state).size()),
       arut::rendering::humanoid_animation_state_name(animation.state).data(),
       animation.phase_seconds, animation.blend_alpha, animation.horizontal_speed);
+     log_info("HUMANOID_IK left_planted=%s right_planted=%s left_clamped=%s right_clamped=%s",
+      state.foot_plants[0].active ? "true" : "false",
+      state.foot_plants[1].active ? "true" : "false",
+      state.foot_ik_clamped[0] ? "true" : "false",
+      state.foot_ik_clamped[1] ? "true" : "false");
     }
     const auto render = state.renderer.profile_snapshot();
     log_info("RENDER_PROFILE cpu_frame_ms=%.3f gpu_frame_ms=%.3f visibility_pass_ms=%.3f shadow_pass_ms=%.3f main_pass_ms=%.3f gpu_memory_bytes=%" PRIu64 " gpu_memory_usage_bytes=%" PRIu64 " gpu_memory_budget_bytes=%" PRIu64 " budget=%s gpu_visibility=%s gpu_timestamps=%s draw_calls=%u visible_objects=%u triangles=%u",
