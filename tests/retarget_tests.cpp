@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <string>
 
 int main() {
     using namespace arut::animation;
@@ -46,5 +47,27 @@ int main() {
     assert(std::abs(result.joints[1].translation.y-1.08F)<1.0e-4F);
     assert(std::abs(result.joints[2].rotation.z-0.38268343F)<1.0e-4F);
     assert(std::abs(result.joints[2].scale.x-1.2F)<1.0e-4F);
-    std::cout<<"RETARGET_TEST pass mapped=3 scale_ratio=1.5\n";
+
+    constexpr std::size_t large_count=96U;
+    RetargetRig large_source{},large_target{};
+    large_source.joint_count=large_count;
+    large_target.joint_count=large_count;
+    Pose large_pose{};
+    large_pose.joint_count=large_count;
+    for(std::size_t i=0;i<large_count;++i) {
+        large_source.joints[i].name="Bone"+std::to_string(i);
+        large_target.joints[i].name="Bone"+std::to_string(i);
+        large_source.joints[i].parent=i==0U?-1:static_cast<std::int16_t>(i-1U);
+        large_target.joints[i].parent=i==0U?-1:static_cast<std::int16_t>(i-1U);
+        large_pose.joints[i]=large_source.joints[i].rest_local;
+    }
+    large_pose.joints[95].translation.x=0.2F;
+    RetargetMap large_map{};
+    assert(build_retarget_map(large_source,large_target,large_map));
+    assert(large_map.pair_count==large_count);
+    Pose large_result{};
+    assert(retarget_pose(large_pose,large_source,large_target,large_map,large_result));
+    assert(large_result.joint_count==large_count);
+    assert(std::abs(large_result.joints[95].translation.x-0.2F)<1.0e-5F);
+    std::cout<<"RETARGET_TEST pass mapped=3 large_rig=96 scale_ratio=1.5\n";
 }
