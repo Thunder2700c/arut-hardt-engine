@@ -1,6 +1,6 @@
 # ARUT-HARDT GASP-Style Animation System
 
-**Status:** Active implementation — renderer-independent animation runtime, pose-search/playback foundations, Android pose-history feed, GLB skeletal mesh/clip importer, name-based retargeting and 128-joint CPU pose support committed; material import, runtime renderer integration, combat graph and full GASP-style feature set remain incomplete  
+**Status:** Active implementation — renderer-independent animation runtime, pose-search/playback foundations, Android pose-history feed, GLB skeletal mesh/clip importer, name-based retargeting, 128-joint CPU poses and a crossfading animation state graph committed; material import, runtime renderer integration, root-motion graph nodes, combat graph and full GASP-style feature set remain incomplete  
 **Language policy:** Native C++ only. No GDScript.  
 **Targets:** Android ARM64 first; desktop support must remain portable.  
 **Reference:** Unreal Engine Game Animation Sample Project (GASP), recreated as an original engine subsystem. This document describes desired behavior and architecture; it does not claim feature parity or completed implementation.
@@ -35,7 +35,7 @@ The system must work with the engine's replaceable metallic robot mannequin and 
 
 - Animation clips with duration, sample rate, tracks, interpolation and root-motion metadata.
 - Pose representation independent of the renderer, currently capped at 128 joints.
-- Animation graph primitives: clip player, blend, additive layer, state machine, transition, animation event and output pose. The combat layer will add attack chains, blocks, dodges, hit reactions, recoveries, root-motion windows and authored cancel/combo windows.
+- Animation graph primitives: clip player, blend, additive layer, state machine, transition, animation event and output pose. Initial C++ state machine now registers named clip states, starts a state, performs timed crossfades, supports immediate transitions and owns per-character playback state; additive layers, event tracks, transition conditions and root-motion nodes remain future work. The combat layer will add attack chains, blocks, dodges, hit reactions, recoveries, root-motion windows and authored cancel/combo windows.
 - Inertialized/smooth transitions to avoid visible pose pops.
 - Root-motion extraction and controlled application, with an explicit choice between animation-driven and capsule-driven movement.
 - Thread-safe evaluation with immutable asset data and per-character runtime state.
@@ -78,7 +78,7 @@ The system must work with the engine's replaceable metallic robot mannequin and 
 
 ## 4. Implementation sequence
 
-1. **4A — Runtime separation and asset contracts (in progress):** renderer-independent pose/clip runtime, sampling, quaternion interpolation and blending are implemented with host tests. Remaining: move final pose ownership out of renderer-specific code, add graph/state-machine transitions and root-motion contracts, and validate on device.
+1. **4A — Runtime separation and asset contracts (in progress):** renderer-independent pose/clip runtime, sampling, quaternion interpolation and blending are implemented with host tests. Remaining: move final pose ownership out of renderer-specific code, add root-motion contracts, graph conditions/events/additive layers, integrate the graph with the Android character runtime, and validate on device.
 2. **4B — Imported animation assets (initial importer + retargeting foundation implemented):** cgltf 1.15 is vendored under MIT; GLB memory import creates a skeletal hierarchy, inverse bind matrices, skinned triangle vertex/index data and animation clips with LINEAR, STEP and CUBICSPLINE sampling. Name/alias-based retarget maps and rest-pose-relative retargeting are implemented. CPU animation and retargeting now accept 128-joint rigs. Remaining: support multiple skins and matrix transforms, import materials/textures, test real licensed assets, and connect imported meshes to renderer upload. The legacy Android renderer remains limited to its 20-joint mannequin palette.
 3. **4C — Animation graph, locomotion and combat:** clip sampling, blending, state machine, transitions, root motion, starts/stops/turns and trajectory generation; then layered martial-arts combat (attacks, blocks, dodges, hit reactions, recoveries and combo/cancel windows). This is where Shadow Fight 3-inspired movement and combat animation gets integrated after mannequin, importer, retargeting and renderer integration.
 4. **4D — Motion matching (foundation implemented):** pose-search schema, offline clip sampling/database generation, weighted feature scoring, tag filtering, continuity cost, pose-history ring buffer and trajectory prediction are implemented. Remaining: robust feature normalization, search profiling/LOD, imported clip database validation, and actual Android motion-matching playback once licensed clips are imported. Stateful clip selection and crossfade handoff are implemented; Android now records live pose history and predicts three future trajectory points.
