@@ -121,8 +121,9 @@ bool CharacterAnimationController::update(float delta_seconds,
     const float dt = std::min(delta_seconds, 0.25F);
     CharacterAnimationState desired = choose_state(input);
     if (is_timed_action(state_) && state_elapsed_ < duration_of(state_)) {
-        // A held block may be interrupted by a hit/dodge; ordinary locomotion
-        // cannot cancel a committed attack or recovery before its clip ends.
+        // Authored cancel markers permit defensive actions; combo markers permit
+        // chained attacks. Hits always interrupt. Ordinary locomotion cannot
+        // cancel a committed attack or recovery before its clip ends.
         const bool attack_requested = input.attack_light_pressed || input.attack_heavy_pressed;
         const bool combo_cancel = combo_window_open_ && attack_requested;
         const bool defensive_cancel = cancel_window_open_ &&
