@@ -66,6 +66,9 @@ bool AndroidRenderer::initialize(
     bool render_mannequin) noexcept {
     shutdown();
     mannequin_scene_enabled_ = render_mannequin;
+    has_external_humanoid_state_ = false;
+    jump_pointer_ = -1;
+    jump_pressed_ = false;
     if (terrain_meshes.empty()) { log_error("Renderer rejected empty streamed terrain cell set"); return false; }
     try {
         terrain_meshes_.assign(terrain_meshes.begin(), terrain_meshes.end());
@@ -2807,6 +2810,11 @@ void AndroidRenderer::set_touch_input(std::int32_t action, std::int32_t pointer_
             joystick_origin_y_ = y;
             joystick_x_ = 0.0F;
             joystick_y_ = 0.0F;
+        } else if (mannequin_scene_enabled_ && x >= width * 0.48F &&
+                   y >= height * 0.68F && jump_pointer_ < 0) {
+            // Tap/hold in the lower-right quadrant is the humanoid jump action.
+            jump_pointer_ = pointer_id;
+            jump_pressed_ = true;
         } else if (x >= width * 0.48F && look_pointer_ < 0) {
             look_pointer_ = pointer_id;
             look_last_x_ = x;
@@ -2820,6 +2828,7 @@ void AndroidRenderer::set_touch_input(std::int32_t action, std::int32_t pointer_
             joystick_x_ = joystick_y_ = 0.0F;
         }
         if (pointer_id == look_pointer_) look_pointer_ = -1;
+        if (pointer_id == jump_pointer_) jump_pointer_ = -1;
         return;
     }
     if (action != 1) return;
@@ -2847,9 +2856,11 @@ void AndroidRenderer::update_stress_camera(float delta_seconds) noexcept {
         std::sin(camera_yaw_) * cosine_pitch
     };
     const std::array<float, 3> right{-std::sin(camera_yaw_), 0.0F, std::cos(camera_yaw_)};
-    constexpr float speed = 9.0F;
-    for (std::size_t i = 0; i < 3U; ++i) {
-        camera_position_[i] += (forward[i] * joystick_y_ + right[i] * joystick_x_) * speed * dt;
+    if (!mannequin_scene_enabled_) {
+        constexpr float speed = 9.0F;
+        for (std::size_t i = 0; i < 3U; ++i) {
+            camera_position_[i] += (forward[i] * joystick_y_ + right[i] * joystick_x_) * speed * dt;
+        }
     }
     const std::array<float, 3> target{
         camera_position_[0] + forward[0],
@@ -2890,8 +2901,51 @@ void AndroidRenderer::update_stress_camera(float delta_seconds) noexcept {
     vkUnmapMemory(device_, frame_uniform_memory_);
 }
 
+void AndroidRenderer::set_humanoid_state(
+    const arut::rendering::Mat4& model,
+    const arut::rendering::HumanoidSkinningPalette& palette,
+    const std::array<float, 3>& camera_target) noexcept {
+    if (!mannequin_scene_enabled_) return;
+    pending_mannequin_model_ = model;
+    pending_humanoid_palette_ = palette;
+    humanoid_camera_target_ = camera_target;
+    has_external_humanoid_state_ = true;
+}
+
 void AndroidRenderer::update_humanoid_animation(float delta_seconds) noexcept {
     if (!mannequin_scene_enabled_ || !bone_palette_uniform_memory_) return;
+    if (has_external_humanoid_state_) {
+        void* mapped = nullptr;
+        VkResult result = vkMapMemory(device_, mannequin_instance_memory_, 0,
+            sizeof(pending_mannequin_model_), 0, &mapped);
+        if (result != VK_SUCCESS || !mapped) {
+            log_error("Map humanoid model transform failed", result);
+            return;
+        }
+        std::memcpy(mapped, &pending_mannequin_model_, sizeof(pending_mannequin_model_));
+        vkUnmapMemory(device_, mannequin_instance_memory_);
+
+        mapped = nullptr;
+        result = vkMapMemory(device_, bone_palette_uniform_memory_, 0,
+            sizeof(pending_humanoid_palette_), 0, &mapped);
+        if (result != VK_SUCCESS || !mapped) {
+            log_error("Map externally animated humanoid palette failed", result);
+            return;
+        }
+        std::memcpy(mapped, &pending_humanoid_palette_, sizeof(pending_humanoid_palette_));
+        vkUnmapMemory(device_, bone_palette_uniform_memory_);
+
+        const float cosine_pitch = std::cos(camera_pitch_);
+        const std::array<float, 3> forward{
+            std::cos(camera_yaw_) * cosine_pitch,
+            std::sin(camera_pitch_),
+            std::sin(camera_yaw_) * cosine_pitch
+        };
+        constexpr float follow_distance = 4.2F;
+        for (std::size_t axis = 0; axis < 3U; ++axis)
+            camera_position_[axis] = humanoid_camera_target_[axis] - forward[axis] * follow_distance;
+        return;
+    }
     humanoid_animation_time_seconds_ += std::clamp(delta_seconds, 0.0F, 0.05F);
     auto pose = arut::rendering::make_rest_humanoid_pose();
     const float phase = humanoid_animation_time_seconds_;
@@ -2945,8 +2999,8 @@ bool AndroidRenderer::draw_frame() noexcept {
         log_error("vkWaitForFences before frame failed", result);
         return false;
     }
-    update_stress_camera(delta_seconds);
     update_humanoid_animation(delta_seconds);
+    update_stress_camera(delta_seconds);
     if (gpu_visibility_enabled_ && gpu_visibility_result_pending_) {
         void* mapped = nullptr;
         const VkResult map_result = vkMapMemory(device_, indirect_draw_memory_, 0,
