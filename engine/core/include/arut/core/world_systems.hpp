@@ -76,6 +76,31 @@ public:
         }
         return mesh;
     }
+
+    // Builds a terrain tile in absolute world coordinates. Adjacent cells share
+    // identical edge samples because the height field is evaluated globally.
+    [[nodiscard]] static TerrainMesh build_cell(
+        std::int32_t cell_x, std::int32_t cell_z,
+        float world_size, std::uint32_t resolution) {
+        TerrainMesh mesh = build(world_size, resolution);
+        const float offset_x = (static_cast<float>(cell_x) + 0.5F) * world_size;
+        const float offset_z = (static_cast<float>(cell_z) + 0.5F) * world_size;
+        constexpr float e = 0.1F;
+        for (auto& vertex : mesh.vertices) {
+            vertex.x += offset_x;
+            vertex.z += offset_z;
+            vertex.y = height(vertex.x, vertex.z);
+            const float dx = (height(vertex.x + e, vertex.z) -
+                              height(vertex.x - e, vertex.z)) / (2.0F * e);
+            const float dz = (height(vertex.x, vertex.z + e) -
+                              height(vertex.x, vertex.z - e)) / (2.0F * e);
+            const float inv = 1.0F / std::sqrt(dx * dx + 1.0F + dz * dz);
+            vertex.nx = -dx * inv;
+            vertex.ny = inv;
+            vertex.nz = -dz * inv;
+        }
+        return mesh;
+    }
 };
 
 enum class TerrainLod : std::uint8_t { High = 0, Medium = 1, Low = 2, Impostor = 3 };
