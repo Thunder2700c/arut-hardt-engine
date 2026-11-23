@@ -58,8 +58,9 @@ namespace arut::rendering {
     const auto append_limb=[&](V3 start,V3 end,float radius,float depth,
                                std::uint32_t parent,std::uint32_t child){
         const V3 axis=norm(sub(end,start));
-        V3 tangent=norm(cross(axis,{0,0,1}));
-        if(std::abs(dot(tangent,tangent))<0.5F)tangent=norm(cross(axis,{0,1,0}));
+        V3 tangent = std::abs(axis[2]) < 0.85F
+            ? norm(cross(axis, {0,0,1}))
+            : norm(cross(axis, {1,0,0}));
         const V3 bitangent=norm(cross(axis,tangent));
         constexpr std::uint32_t rings=16U;
         const std::uint32_t base=static_cast<std::uint32_t>(mesh.vertices.size());
