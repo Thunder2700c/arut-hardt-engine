@@ -74,6 +74,8 @@ int main() {
     input.attack_light_pressed = false;
     for (int i = 0; i < 20; ++i) animator.update(input, dt);
     assert(animator.snapshot().state == HumanoidAnimationState::AttackLight);
+    const auto punch_arm = animator.pose().local_rotations[static_cast<std::size_t>(B::RightUpperArm)];
+    assert(std::abs(punch_arm.x) > 0.01F);
     input.attack_heavy_pressed = true;
     animator.update(input, dt);
     assert(animator.snapshot().state == HumanoidAnimationState::AttackHeavy);
@@ -91,6 +93,8 @@ int main() {
     input.dodge_pressed = false;
     for (int i = 0; i < 30; ++i) animator.update(input, dt);
     assert(animator.snapshot().state == HumanoidAnimationState::Block);
+    const auto guard_arm = animator.pose().local_rotations[static_cast<std::size_t>(B::RightUpperArm)];
+    assert(std::abs(guard_arm.z) > 0.01F);
     input.block_held = false;
     animator.update(input, dt);
     assert(animator.snapshot().state == HumanoidAnimationState::Idle);
