@@ -6,6 +6,7 @@
 #include "arut/core/test_lab_profile.hpp"
 #include "arut/core/humanoid_skeleton.hpp"
 #include "arut/core/character_controller.hpp"
+#include "arut/core/character_collision.hpp"
 #include "arut/core/third_person_camera.hpp"
 #include "arut/platform/android/asset_source.hpp"
 #include "arut/rendering/vulkan/android_renderer.hpp"
@@ -71,6 +72,15 @@ struct RuntimeState final {
  arut::rendering::HumanoidAnimator humanoid_animator{};
  std::array<FootPlantState, 2> foot_plants{};
  std::array<bool, 2> foot_ik_clamped{};
+ std::array<arut::core::CharacterAabbObstacle, 6> arena_obstacles{{
+  {{-8.0F,-2.0F,-8.0F},{-7.6F,3.0F,8.0F}},
+  {{ 7.6F,-2.0F,-8.0F},{ 8.0F,3.0F,8.0F}},
+  {{-8.0F,-2.0F,-8.0F},{ 8.0F,3.0F,-7.6F}},
+  {{-8.0F,-2.0F, 7.6F},{ 8.0F,3.0F,8.0F}},
+  {{ 2.0F,-2.0F,-3.4F},{ 3.5F,1.0F,-1.9F}},
+  {{-3.5F,-2.0F,-5.5F},{-2.0F,0.7F,-4.0F}}
+ }};
+ std::array<arut::rendering::Mat4, 6> arena_render_instances{};
  float camera_follow_distance{4.2F};
  bool camera_terrain_obstructed{false};
  std::uint64_t character_fixed_steps{0};
@@ -94,6 +104,30 @@ arut::core::CharacterGroundSample terrain_ground_query(
  sample.normal = {-dx * inverse, inverse, -dz * inverse};
  sample.valid = true;
  return sample;
+}
+
+bool test_arena_collision_query(
+ const arut::core::Vec3& feet, float radius, float height, void* context) noexcept {
+ const auto* state = static_cast<const RuntimeState*>(context);
+ if (!state) return false;
+ return arut::core::character_capsule_overlaps_obstacles(
+  feet, radius, height,
+  std::span<const arut::core::CharacterAabbObstacle>{
+   state->arena_obstacles.data(), state->arena_obstacles.size()});
+}
+
+void build_test_arena_geometry(RuntimeState& state) noexcept {
+ for (std::size_t i = 0; i < state.arena_obstacles.size(); ++i) {
+  const auto& obstacle = state.arena_obstacles[i];
+  auto model = arut::rendering::Mat4::identity();
+  model.value[0] = obstacle.maximum.x - obstacle.minimum.x;
+  model.value[5] = obstacle.maximum.y - obstacle.minimum.y;
+  model.value[10] = obstacle.maximum.z - obstacle.minimum.z;
+  model.value[12] = (obstacle.minimum.x + obstacle.maximum.x) * 0.5F;
+  model.value[13] = (obstacle.minimum.y + obstacle.maximum.y) * 0.5F;
+  model.value[14] = (obstacle.minimum.z + obstacle.maximum.z) * 0.5F;
+  state.arena_render_instances[i] = model;
+ }
 }
 
 std::uint64_t cell_lod_id(arut::core::WorldCell cell) noexcept {
@@ -228,10 +262,14 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
  }
  const bool include_mannequin =
   arut::core::test_lab_includes_humanoid(state.selected_profile);
+ std::span<const arut::rendering::Mat4> arena_instances{};
+ if (state.selected_profile == arut::core::TestLabProfile::Humanoid) {
+  arena_instances = {state.arena_render_instances.data(), state.arena_render_instances.size()};
+ }
  if (!state.renderer.initialize(app->window, app->activity->assetManager,
       stress_instances,
       std::span<const arut::core::TerrainMesh>{state.terrain_cells.data(), state.terrain_cells.size()},
-      include_mannequin)) {
+      include_mannequin, arena_instances)) {
   log_warn("TEST_LAB renderer initialization failed profile=%.*s",
    static_cast<int>(arut::core::test_lab_profile_name(state.selected_profile).size()),
    arut::core::test_lab_profile_name(state.selected_profile).data());
@@ -410,6 +448,11 @@ void run(android_app* app) {
   return;
  }
  state.selected_profile = static_cast<arut::core::TestLabProfile>(selected_id);
+ if (state.selected_profile == arut::core::TestLabProfile::Humanoid) {
+  build_test_arena_geometry(state);
+  log_info("TEST_ARENA_COLLISION enabled=true obstacles=%zu",
+   state.arena_obstacles.size());
+ }
  if (state.selected_profile == arut::core::TestLabProfile::Combined)
   state.character_controller.reset({0.0F, 0.0F, -5.0F});
  log_info("TEST_LAB selected=%.*s profile_id=%d",
@@ -524,7 +567,8 @@ void run(android_app* app) {
     constexpr float half_turn = 1.570796327F;
     state.character_controller.set_facing_yaw(state.renderer.camera_yaw() + half_turn);
     state.character_fixed_steps += state.character_controller.update(
-     character_input, frame_delta, terrain_ground_query, nullptr);
+     character_input, frame_delta, terrain_ground_query, nullptr,
+     test_arena_collision_query, &state);
 
     const auto& character = state.character_controller.state();
     const float horizontal_speed = std::sqrt(
