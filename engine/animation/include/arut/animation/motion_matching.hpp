@@ -55,9 +55,9 @@ public:
     [[nodiscard]] bool build(
         const std::vector<MotionClipSource>& clips,
         const PoseSearchSchema& schema,
-        float sample_rate_hz) noexcept;
+        float sample_rate_hz);
 
-    [[nodiscard]] MotionMatchResult search(const MotionMatchQuery& query) const noexcept;
+    [[nodiscard]] MotionMatchResult search(const MotionMatchQuery& query) const;
     [[nodiscard]] std::size_t sample_count() const noexcept { return samples_.size(); }
     [[nodiscard]] std::size_t feature_count() const noexcept { return feature_count_; }
     [[nodiscard]] bool empty() const noexcept { return samples_.empty(); }
@@ -74,7 +74,7 @@ private:
         const Pose& pose,
         const std::array<MotionTrajectoryPoint, kMotionTrajectorySamples>& trajectory,
         const PoseSearchSchema& schema,
-        std::vector<float>& output) const noexcept;
+        std::vector<float>& output) const;
 
     PoseSearchSchema schema_{};
     std::vector<Sample> samples_;
