@@ -55,7 +55,7 @@ struct HumanoidSkeleton final {
     }
 };
 
-// Engine-owned, procedural reference rig. Units are metres; +Y is up.
+// Engine-owned, procedural reference rig. Units are metres; +Y is up and -Z is forward.
 // It deliberately contains no third-party or copyrighted character assets.
 [[nodiscard]] inline HumanoidSkeleton make_robot_mannequin_skeleton() {
     using B = HumanoidBone;
@@ -79,10 +79,10 @@ struct HumanoidSkeleton final {
     set(B::RightHand, 12, {0.23F, 0, 0}, 0.055F);
     set(B::LeftUpperLeg, 1, {-0.11F, -0.08F, 0}, 0.105F);
     set(B::LeftLowerLeg, 14, {0, -0.43F, 0}, 0.075F);
-    set(B::LeftFoot, 15, {0, -0.42F, 0.10F}, 0.075F);
+    set(B::LeftFoot, 15, {0, -0.42F, -0.10F}, 0.075F);
     set(B::RightUpperLeg, 1, {0.11F, -0.08F, 0}, 0.105F);
     set(B::RightLowerLeg, 17, {0, -0.43F, 0}, 0.075F);
-    set(B::RightFoot, 18, {0, -0.42F, 0.10F}, 0.075F);
+    set(B::RightFoot, 18, {0, -0.42F, -0.10F}, 0.075F);
     if (!s.valid()) throw std::logic_error("invalid built-in humanoid skeleton");
     return s;
 }
