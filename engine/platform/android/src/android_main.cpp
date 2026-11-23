@@ -396,8 +396,8 @@ void run(android_app* app) {
      if (state.renderer.set_terrain_cells(updated_cells)) {
       state.terrain_cells = std::move(updated_cells);
       state.terrain_cells_dirty = false;
-      log_info("WORLD_STREAMING camera_cell_updated=true loaded=%zu unloaded=%zu resident=%zu gpu_cells=%zu",
-       streaming.loaded, streaming.unloaded, streaming.resident, state.terrain_cells.size());
+      log_info("WORLD_STREAMING camera_cell_updated=true loaded=%zu unloaded=%zu lod_refreshed=%zu resident=%zu gpu_cells=%zu",
+       streaming.loaded, streaming.unloaded, streaming.updated, streaming.resident, state.terrain_cells.size());
      } else {
       log_warn("WORLD_STREAMING GPU cell mesh refresh failed; retrying on next frame.");
      }
