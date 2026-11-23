@@ -73,6 +73,7 @@ private:
     bool create_gpu_visibility_resources() noexcept;
     bool record_gpu_visibility(VkCommandBuffer command_buffer) noexcept;
     void update_stress_camera(float delta_seconds) noexcept;
+    void update_humanoid_animation(float delta_seconds) noexcept;
     bool create_triangle_pipeline() noexcept;
     bool create_triangle_geometry() noexcept;
     bool create_pbr_pipeline() noexcept;
@@ -156,6 +157,9 @@ private:
     std::vector<arut::core::TerrainMesh> terrain_meshes_{};
     std::vector<TerrainGpuMesh> terrain_gpu_meshes_{};
     std::uint32_t terrain_triangle_count_{0};
+    VkBuffer bone_palette_uniform_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory bone_palette_uniform_memory_{VK_NULL_HANDLE};
+    float humanoid_animation_time_seconds_{0.0F};
     VkBuffer mannequin_vertex_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory mannequin_vertex_memory_{VK_NULL_HANDLE};
     VkBuffer mannequin_index_buffer_{VK_NULL_HANDLE};
