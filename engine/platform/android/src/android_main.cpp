@@ -3,6 +3,7 @@
 #include "arut/core/cube_stress_scene.hpp"
 #include "arut/core/asset_manager.hpp"
 #include "arut/core/world_systems.hpp"
+#include "arut/core/test_lab_profile.hpp"
 #include "arut/platform/android/asset_source.hpp"
 #include "arut/rendering/vulkan/android_renderer.hpp"
 #include <android/input.h>
@@ -19,6 +20,7 @@
 #include <cstring>
 #include <ctime>
 #include <mutex>
+#include <atomic>
 #include <memory>
 #include <utility>
 #include <cerrno>
@@ -32,6 +34,7 @@
 extern "C" std::uint32_t arut_tasks_abi_version() noexcept;
 namespace {
 constexpr char kLogTag[] = "ARUT-HARDT";
+std::atomic<std::int32_t> g_requested_test_profile{-1};
 struct RuntimeState final {
  bool resumed{false};
  bool focused{false};
@@ -46,6 +49,8 @@ struct RuntimeState final {
  arut::core::WorldCellStreamer world_streamer{};
  arut::core::LodSystem cell_lod_system{};
  bool ecs_scene_ready{false};
+ bool render_scene_ready{false};
+ arut::core::TestLabProfile selected_profile{arut::core::TestLabProfile::EcsStress};
  bool terrain_cells_dirty{false};
  arut::rendering::vulkan::AndroidRenderer renderer{};
  std::uint64_t lifecycle_events{0};
@@ -174,6 +179,31 @@ void log_warn(const char* format, ...) {
  write_log(ANDROID_LOG_WARN, "WARN", format, args);
  va_end(args);
 }
+bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
+ if (!app || !app->window || !state.has_window || !state.render_scene_ready) return true;
+ std::span<const arut::core::CubeRenderInstance> stress_instances{};
+ if (arut::core::test_lab_includes_stress(state.selected_profile)) {
+  const auto& instances = state.cube_render_extraction_system.instances();
+  stress_instances = {instances.data(), instances.size()};
+ }
+ const bool include_mannequin =
+  arut::core::test_lab_includes_humanoid(state.selected_profile);
+ if (!state.renderer.initialize(app->window, app->activity->assetManager,
+      stress_instances,
+      std::span<const arut::core::TerrainMesh>{state.terrain_cells.data(), state.terrain_cells.size()},
+      include_mannequin)) {
+  log_warn("TEST_LAB renderer initialization failed profile=%.*s",
+   static_cast<int>(arut::core::test_lab_profile_name(state.selected_profile).size()),
+   arut::core::test_lab_profile_name(state.selected_profile).data());
+  return false;
+ }
+ log_info("TEST_LAB renderer_ready=true profile=%.*s stress_instances=%zu mannequin=%s",
+  static_cast<int>(arut::core::test_lab_profile_name(state.selected_profile).size()),
+  arut::core::test_lab_profile_name(state.selected_profile).data(),
+  stress_instances.size(), include_mannequin ? "true" : "false");
+ return true;
+}
+
 bool export_runtime_log(android_app* app) {
  if (!app || !app->activity || !app->activity->vm || !g_log_path[0]) return false;
  JavaVM* vm = app->activity->vm;
@@ -238,15 +268,10 @@ void handle_app_command(android_app* app, std::int32_t command) {
    state->has_window = app->window != nullptr;
    if (state->has_window) {
     log_info("Window created: %dx%d", ANativeWindow_getWidth(app->window), ANativeWindow_getHeight(app->window));
-    if (!state->ecs_scene_ready) {
-     log_warn("Renderer startup skipped: ECS 5,000-cube scene did not pass its creation check.");
-    } else if (!state->renderer.initialize(
-      app->window, app->activity->assetManager,
-      std::span<const arut::core::CubeRenderInstance>{
-       state->cube_render_extraction_system.instances().data(),
-       state->cube_render_extraction_system.instances().size()},
-      std::span<const arut::core::TerrainMesh>{state->terrain_cells.data(), state->terrain_cells.size()})) {
-     log_warn("Vulkan renderer unavailable; activity remains alive.");
+    if (!state->render_scene_ready) {
+     log_info("TEST_LAB renderer deferred until a valid profile scene is ready.");
+    } else {
+     (void)initialize_profile_renderer(*state, app);
     }
    }
    break;
@@ -300,6 +325,13 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
  return 0;
 }
  }
+extern "C" JNIEXPORT void JNICALL
+Java_com_arut_engine_TestLabActivity_nativeSelectProfile(
+    JNIEnv*, jclass, jint profile_id) noexcept {
+ if (arut::core::valid_test_lab_profile(profile_id)) {
+  g_requested_test_profile.store(profile_id, std::memory_order_release);
+ }
+}
 extern "C" void arut_android_log(int priority, const char* message) noexcept {
  const char* level = priority >= ANDROID_LOG_ERROR ? "ERROR" : (priority >= ANDROID_LOG_WARN ? "WARN" : "INFO");
  log_message(priority, level, message);
@@ -316,6 +348,31 @@ void run(android_app* app) {
   static_cast<int>(arut::core::name().size()), arut::core::name().data(), v.major, v.minor, v.patch,
   static_cast<int>(getpid()));
  log_info("Rust systems ABI version: 0x%06x", arut_tasks_abi_version());
+ log_info("TEST_LAB waiting_for_profile_selection=true");
+ while (g_requested_test_profile.load(std::memory_order_acquire) < 0 &&
+        app->destroyRequested == 0) {
+  android_poll_source* source = nullptr;
+  const int ident = ALooper_pollOnce(100, nullptr, nullptr,
+                                     reinterpret_cast<void**>(&source));
+  if (ident >= 0 && source) source->process(app, source);
+  if (ident == ALOOPER_POLL_ERROR) log_warn("Android looper error while waiting for Test Laboratory selection.");
+ }
+ if (app->destroyRequested != 0) {
+  log_info("Runtime destroyed before a Test Laboratory profile was selected.");
+  close_file_log();
+  return;
+ }
+ const std::int32_t selected_id =
+  g_requested_test_profile.load(std::memory_order_acquire);
+ if (!arut::core::valid_test_lab_profile(selected_id)) {
+  log_warn("Test Laboratory returned an invalid profile id=%d.", selected_id);
+  close_file_log();
+  return;
+ }
+ state.selected_profile = static_cast<arut::core::TestLabProfile>(selected_id);
+ log_info("TEST_LAB selected=%.*s profile_id=%d",
+  static_cast<int>(arut::core::test_lab_profile_name(state.selected_profile).size()),
+  arut::core::test_lab_profile_name(state.selected_profile).data(), selected_id);
  auto asset_source = std::make_shared<arut::platform::android::AndroidAssetSource>(
   app->activity ? app->activity->assetManager : nullptr);
  arut::core::AssetManager asset_manager(asset_source);
@@ -354,23 +411,38 @@ void run(android_app* app) {
  }
  if (g_log_file) log_info("Persistent runtime log: %s", g_log_path);
  else log_warn("Persistent runtime log unavailable; logcat remains active.");
- try {
-  state.cube_spawn_system.update(state.ecs_world);
-  state.scene_graph_system.update(state.ecs_world);
-  state.cube_render_extraction_system.update(state.ecs_world, &state.scene_graph_system);
-  log_info("SCENE_GRAPH synchronized=true bound_entities=%zu nodes=%u",
-   state.scene_graph_system.bound_entity_count(), state.scene_graph_system.graph().node_count());
-  state.ecs_scene_ready =
-   state.ecs_world.entity_count() == arut::core::CubeSpawnSystem::target_count &&
-   state.cube_spawn_system.spawned_count() == arut::core::CubeSpawnSystem::target_count &&
-   state.cube_render_extraction_system.extracted_count() == arut::core::CubeSpawnSystem::target_count;
-  log_info("ECS_STRESS_SCENE ready=%s entities=%u spawned=%zu render_instances=%zu source=CubeSpawnSystem",
-   state.ecs_scene_ready ? "true" : "false", state.ecs_world.entity_count(),
-   state.cube_spawn_system.spawned_count(),
-   state.cube_render_extraction_system.instances().size());
- } catch (const std::exception& error) {
+ if (arut::core::test_lab_includes_stress(state.selected_profile)) {
+  try {
+   state.cube_spawn_system.update(state.ecs_world);
+   state.scene_graph_system.update(state.ecs_world);
+   state.cube_render_extraction_system.update(state.ecs_world, &state.scene_graph_system);
+   log_info("SCENE_GRAPH synchronized=true bound_entities=%zu nodes=%u",
+    state.scene_graph_system.bound_entity_count(), state.scene_graph_system.graph().node_count());
+   state.ecs_scene_ready =
+    state.ecs_world.entity_count() == arut::core::CubeSpawnSystem::target_count &&
+    state.cube_spawn_system.spawned_count() == arut::core::CubeSpawnSystem::target_count &&
+    state.cube_render_extraction_system.extracted_count() == arut::core::CubeSpawnSystem::target_count;
+   log_info("ECS_STRESS_SCENE ready=%s entities=%u spawned=%zu render_instances=%zu source=CubeSpawnSystem",
+    state.ecs_scene_ready ? "true" : "false", state.ecs_world.entity_count(),
+    state.cube_spawn_system.spawned_count(),
+    state.cube_render_extraction_system.instances().size());
+  } catch (const std::exception& error) {
+   state.ecs_scene_ready = false;
+   log_warn("ECS 5,000-cube scene creation failed: %s", error.what());
+  }
+ } else {
   state.ecs_scene_ready = false;
-  log_warn("ECS 5,000-cube scene creation failed: %s", error.what());
+  log_info("ECS_STRESS_SCENE enabled=false reason=humanoid_only_profile");
+ }
+ state.render_scene_ready =
+  !arut::core::test_lab_includes_stress(state.selected_profile) || state.ecs_scene_ready;
+ if (arut::core::test_lab_includes_humanoid(state.selected_profile)) {
+  log_info("HUMANOID_SCENE selected=true rig_bones=%zu mode=%s",
+   arut::core::kHumanoidBoneCount,
+   arut::core::test_lab_includes_stress(state.selected_profile) ? "combined" : "isolated");
+ }
+ if (state.has_window && state.render_scene_ready) {
+  (void)initialize_profile_renderer(state, app);
  }
  std::size_t lod_high = 0U, lod_medium = 0U, lod_low = 0U, lod_impostor = 0U;
  for (std::size_t i = 0; i < state.cube_render_extraction_system.instances().size(); ++i) {
