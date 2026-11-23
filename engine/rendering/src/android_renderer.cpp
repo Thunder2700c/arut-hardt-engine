@@ -2900,14 +2900,18 @@ bool AndroidRenderer::draw_frame() noexcept {
                     static_cast<unsigned long long>(culling_parity_checks_));
                 arut_android_log(ANDROID_LOG_INFO, parity);
             }
-            last_triangles_ = (cube_index_count_ / 3U) * completed.instance_count + terrain_triangle_count_;
+            last_triangles_ = (cube_index_count_ / 3U) * completed.instance_count +
+                terrain_triangle_count_ + mannequin_index_count_ / 3U;
+            if (mannequin_index_count_ != 0U) ++last_visible_objects_;
         } else {
             gpu_visibility_result_pending_ = false;
             log_error("Read completed GPU visibility count failed; retaining last profile counters", map_result);
         }
     } else if (!gpu_visibility_enabled_) {
         last_visible_objects_ = instance_count_;
-        last_triangles_ = (cube_index_count_ / 3U) * instance_count_ + terrain_triangle_count_;
+        last_triangles_ = (cube_index_count_ / 3U) * instance_count_ +
+            terrain_triangle_count_ + mannequin_index_count_ / 3U;
+        last_visible_objects_ = instance_count_ + (mannequin_index_count_ != 0U ? 1U : 0U);
     }
     if (timestamp_queries_available_ && timestamp_data_pending_) {
         std::array<std::uint64_t, 4> timestamps{};
@@ -3110,7 +3114,9 @@ bool AndroidRenderer::draw_frame() noexcept {
         gpu_visibility_result_pending_ = true;
     }
     const auto terrain_draws = static_cast<std::uint32_t>(terrain_gpu_meshes_.size());
-    last_draw_calls_ = (shadow_enabled_ ? shadow_cascade_count_ * (terrain_draws + 1U) : 0U) + terrain_draws + 1U;
+    const std::uint32_t mannequin_draws = mannequin_index_count_ != 0U ? 1U : 0U;
+    const std::uint32_t scene_draws = terrain_draws + 1U + mannequin_draws;
+    last_draw_calls_ = (shadow_enabled_ ? shadow_cascade_count_ * scene_draws : 0U) + scene_draws;
     VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     present.waitSemaphoreCount = 1;
     present.pWaitSemaphores = &render_finished_[image_index];
@@ -3382,7 +3388,6 @@ void AndroidRenderer::destroy_swapchain() noexcept {
     command_buffers_.clear();
     images_.clear();
     tracked_gpu_memory_bytes_ = 0;
-    mannequin_scene_enabled_ = true;
     mannequin_index_count_ = 0U;
     mannequin_vertex_buffer_ = mannequin_index_buffer_ = mannequin_instance_buffer_ = VK_NULL_HANDLE;
     mannequin_vertex_memory_ = mannequin_index_memory_ = mannequin_instance_memory_ = VK_NULL_HANDLE;
