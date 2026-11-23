@@ -41,6 +41,8 @@ public:
     [[nodiscard]] float camera_yaw() const noexcept { return camera_yaw_; }
     [[nodiscard]] float camera_pitch() const noexcept { return camera_pitch_; }
     void set_gamepad_look_input(float x, float y) noexcept;
+    void set_gamepad_movement_input(float x, float y) noexcept;
+    void clear_input() noexcept;
     [[nodiscard]] std::array<float, 2> movement_input() const noexcept {
         return {joystick_x_, joystick_y_};
     }
@@ -277,6 +279,8 @@ private:
     float camera_pitch_{0.0F};
     float joystick_x_{0.0F};
     float joystick_y_{0.0F};
+    float gamepad_move_x_{0.0F};
+    float gamepad_move_y_{0.0F};
     float gamepad_look_x_{0.0F};
     float gamepad_look_y_{0.0F};
     float joystick_origin_x_{0.0F};
