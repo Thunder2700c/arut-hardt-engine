@@ -46,6 +46,7 @@ public:
     void set_clip(const AnimationClip* clip, bool restart = true) noexcept;
     [[nodiscard]] bool update(float delta_seconds, Pose& output) noexcept;
     void set_playback_rate(float rate) noexcept;
+    [[nodiscard]] bool seek(float time_seconds) noexcept;
     void set_looping(bool looping) noexcept;
     [[nodiscard]] float time_seconds() const noexcept { return time_seconds_; }
     [[nodiscard]] const AnimationClip* clip() const noexcept { return clip_; }
