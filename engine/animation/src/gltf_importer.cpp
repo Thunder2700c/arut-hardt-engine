@@ -191,12 +191,14 @@ bool SkeletalAsset::valid() const noexcept {
            (joints[i].parent>=0 &&
             (static_cast<std::size_t>(joints[i].parent)>=joint_count ||
              static_cast<std::size_t>(joints[i].parent)==i))) return false;
+        std::array<bool,kMaxImportedJoints> visited{};
         std::size_t ancestor=i;
         for(std::size_t depth=0;depth<joint_count;++depth) {
+            if(visited[ancestor]) return false;
+            visited[ancestor]=true;
             const auto parent=joints[ancestor].parent;
             if(parent<0) break;
             ancestor=static_cast<std::size_t>(parent);
-            if(ancestor==i) return false;
         }
         const auto& t=joints[i].rest_local;
         if(!finite(t.translation.x)||!finite(t.translation.y)||!finite(t.translation.z)||
