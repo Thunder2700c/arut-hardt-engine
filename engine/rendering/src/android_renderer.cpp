@@ -2964,12 +2964,68 @@ void AndroidRenderer::update_stress_camera(float delta_seconds) noexcept {
     vkUnmapMemory(device_, frame_uniform_memory_);
 }
 
+bool AndroidRenderer::load_imported_character_glb(
+    const char* asset_path, const arut::rendering::Mat4& model) noexcept {
+    if (!assets_ || !asset_path || asset_path[0] == '\0') {
+        log_error("GLB load rejected: Android asset manager or path is missing");
+        return false;
+    }
+    AAsset* file = AAssetManager_open(assets_, asset_path, AASSET_MODE_BUFFER);
+    if (!file) {
+        log_error("GLB load failed: packaged character asset was not found");
+        return false;
+    }
+    const off_t length = AAsset_getLength(file);
+    if (length <= 0 || length > static_cast<off_t>(256 * 1024 * 1024)) {
+        AAsset_close(file);
+        log_error("GLB load rejected: file size is empty or exceeds the 256 MiB safety limit");
+        return false;
+    }
+
+    std::vector<std::uint8_t> bytes;
+    try {
+        bytes.resize(static_cast<std::size_t>(length));
+    } catch (...) {
+        AAsset_close(file);
+        log_error("GLB load failed: could not allocate file buffer");
+        return false;
+    }
+    const int read = AAsset_read(file, bytes.data(), bytes.size());
+    AAsset_close(file);
+    if (read != length) {
+        log_error("GLB load failed: packaged asset read was incomplete");
+        return false;
+    }
+
+    arut::animation::SkeletalAsset asset{};
+    arut::animation::GltfImportReport report{};
+    if (!arut::animation::import_glb(bytes.data(), bytes.size(), asset, report)) {
+        char message[256]{};
+        std::snprintf(message, sizeof(message), "GLB import failed: %s", report.message.c_str());
+        log_error(message);
+        return false;
+    }
+
+    arut::animation::Pose rest_pose{};
+    rest_pose.joint_count = asset.joint_count;
+    for (std::size_t joint = 0; joint < asset.joint_count; ++joint)
+        rest_pose.joints[joint] = asset.joints[joint].rest_local;
+    if (!set_imported_character(asset, rest_pose, model)) {
+        log_error("GLB parsed successfully but Vulkan character installation failed");
+        return false;
+    }
+    arut_android_log(ANDROID_LOG_INFO, "GLB_CHARACTER_LOAD success=true initial_pose=rest");
+    return true;
+}
+
 bool AndroidRenderer::set_imported_character(
     const arut::animation::SkeletalAsset& asset,
     const arut::animation::Pose& pose,
     const arut::rendering::Mat4& model) noexcept {
+    const bool model_is_finite = std::all_of(model.value.begin(), model.value.end(),
+        [](float value) { return std::isfinite(value); });
     if (!ready() || !mannequin_scene_enabled_ || !mannequin_instance_memory_ ||
-        !bone_palette_uniform_memory_ || !asset.valid() || asset.meshes.empty() ||
+        !bone_palette_uniform_memory_ || !model_is_finite || !asset.valid() || asset.meshes.empty() ||
         asset.meshes.front().indices.size() > UINT32_MAX) {
         log_error("Imported character rejected: renderer, asset, or mannequin resources are not ready");
         return false;
