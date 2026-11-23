@@ -90,22 +90,28 @@ public:
         };
         const bool committed_action = action_remaining_ > 0.0F &&
             state_ != HumanoidAnimationState::Block;
+        const bool attack_state = state_ == HumanoidAnimationState::AttackLight ||
+                                  state_ == HumanoidAnimationState::AttackHeavy;
+        const bool combo_window = committed_action && attack_state &&
+                                  action_elapsed_ >= action_duration_ * 0.60F;
         if (raw_input.hit_reaction) {
             begin_action(HumanoidAnimationState::HitReact, 0.42F);
         } else if (raw_input.dodge_pressed) {
             begin_action(HumanoidAnimationState::Dodge, 0.46F);
-        } else if (raw_input.recover_pressed) {
+        } else if (raw_input.recover_pressed && !committed_action) {
             begin_action(HumanoidAnimationState::Recover, 0.55F);
-        } else if (raw_input.grounded && raw_input.attack_heavy_pressed) {
+        } else if (raw_input.grounded && raw_input.attack_heavy_pressed &&
+                   (!committed_action || combo_window)) {
             begin_action(HumanoidAnimationState::AttackHeavy, 0.72F);
-        } else if (raw_input.grounded && raw_input.attack_light_pressed) {
+        } else if (raw_input.grounded && raw_input.attack_light_pressed &&
+                   (!committed_action || combo_window)) {
             begin_action(HumanoidAnimationState::AttackLight, 0.52F);
-        } else if (raw_input.block_held && raw_input.grounded) {
-            state_ = HumanoidAnimationState::Block;
-            action_remaining_ = 0.0F;
         } else if (committed_action) {
             action_elapsed_ += dt;
             action_remaining_ = std::max(0.0F, action_duration_ - action_elapsed_);
+        } else if (raw_input.block_held && raw_input.grounded) {
+            state_ = HumanoidAnimationState::Block;
+            action_remaining_ = 0.0F;
         } else if (!raw_input.grounded) {
             state_ = vertical_speed > 0.20F
                 ? HumanoidAnimationState::Jump : HumanoidAnimationState::Fall;
