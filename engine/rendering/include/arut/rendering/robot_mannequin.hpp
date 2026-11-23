@@ -1,0 +1,100 @@
+#pragma once
+
+#include "arut/core/humanoid_skeleton.hpp"
+#include "arut/rendering/mesh.hpp"
+
+#include <array>
+#include <cmath>
+#include <cstdint>
+
+namespace arut::rendering {
+
+// Builds a deterministic, engine-owned robot mannequin from the reference rig.
+// The result is a static bind-pose mesh; it is not yet a skinned/animated mesh.
+[[nodiscard]] inline MeshData make_robot_mannequin_mesh(
+    const core::HumanoidSkeleton& skeleton = core::make_robot_mannequin_skeleton(),
+    std::uint32_t radial_segments = 10U) {
+    MeshData mesh{};
+    if (!skeleton.valid() || radial_segments < 6U || radial_segments > 64U) return mesh;
+
+    using V3 = std::array<float, 3>;
+    const auto add = [](const V3& a, const V3& b) -> V3 {
+        return {a[0] + b[0], a[1] + b[1], a[2] + b[2]};
+    };
+    const auto sub = [](const V3& a, const V3& b) -> V3 {
+        return {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
+    };
+    const auto mul = [](const V3& a, float s) -> V3 {
+        return {a[0] * s, a[1] * s, a[2] * s};
+    };
+    const auto dot = [](const V3& a, const V3& b) {
+        return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+    };
+    const auto cross = [](const V3& a, const V3& b) -> V3 {
+        return {a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]};
+    };
+    const auto norm = [&](const V3& v) -> V3 {
+        const float d = dot(v, v);
+        if (!(d > 1.0e-12F)) return {0.0F, 1.0F, 0.0F};
+        return mul(v, 1.0F / std::sqrt(d));
+    };
+    std::array<V3, core::kHumanoidBoneCount> positions{};
+    for (std::size_t i = 0; i < skeleton.bones.size(); ++i) {
+        const auto& bone = skeleton.bones[i];
+        const V3 local{bone.rest_translation.x, bone.rest_translation.y, bone.rest_translation.z};
+        positions[i] = bone.parent < 0 ? local : add(positions[static_cast<std::size_t>(bone.parent)], local);
+    }
+
+    const auto append_sphere = [&](const V3& center, float radius) {
+        constexpr std::uint32_t rings = 6U;
+        const std::uint32_t base = static_cast<std::uint32_t>(mesh.vertices.size());
+        for (std::uint32_t r = 0; r <= rings; ++r) {
+            const float phi = 3.14159265358979323846F * static_cast<float>(r) / static_cast<float>(rings);
+            for (std::uint32_t s = 0; s <= radial_segments; ++s) {
+                const float theta = 6.28318530717958647692F * static_cast<float>(s) / static_cast<float>(radial_segments);
+                const V3 n{std::sin(phi)*std::cos(theta), std::cos(phi), std::sin(phi)*std::sin(theta)};
+                const V3 p = add(center, mul(n, radius));
+                mesh.vertices.push_back({p, n, {1.0F,0.0F,0.0F,1.0F},
+                    {static_cast<float>(s)/static_cast<float>(radial_segments), static_cast<float>(r)/static_cast<float>(rings)}});
+            }
+        }
+        for (std::uint32_t r = 0; r < rings; ++r) for (std::uint32_t s = 0; s < radial_segments; ++s) {
+            const std::uint32_t a = base + r*(radial_segments+1U)+s, b=a+radial_segments+1U;
+            mesh.indices.insert(mesh.indices.end(), {a,b,a+1U,a+1U,b,b+1U});
+        }
+    };
+
+    const auto append_bone = [&](const V3& start, const V3& end, float radius) {
+        const V3 axis = norm(sub(end, start));
+        V3 tangent = norm(cross(axis, {0.0F,0.0F,1.0F}));
+        if (dot(tangent,tangent) < 0.5F) tangent = norm(cross(axis,{0.0F,1.0F,0.0F}));
+        const V3 bitangent = norm(cross(axis,tangent));
+        const std::uint32_t base = static_cast<std::uint32_t>(mesh.vertices.size());
+        for (std::uint32_t cap=0; cap<2U; ++cap) {
+            const V3 center = cap==0U ? start : end;
+            for (std::uint32_t s=0; s<=radial_segments; ++s) {
+                const float angle=6.28318530717958647692F*static_cast<float>(s)/static_cast<float>(radial_segments);
+                const V3 radial=add(mul(tangent,std::cos(angle)),mul(bitangent,std::sin(angle)));
+                const V3 p=add(center,mul(radial,radius));
+                mesh.vertices.push_back({p,radial,{1.0F,0.0F,0.0F,1.0F},
+                    {static_cast<float>(s)/static_cast<float>(radial_segments),static_cast<float>(cap)}});
+            }
+        }
+        for (std::uint32_t s=0; s<radial_segments; ++s) {
+            const std::uint32_t a=base+s,b=base+radial_segments+1U+s;
+            mesh.indices.insert(mesh.indices.end(),{a,a+1U,b,a+1U,b+1U,b});
+        }
+    };
+
+    for (std::size_t i=1; i<skeleton.bones.size(); ++i) {
+        const auto& bone=skeleton.bones[i];
+        const auto parent=static_cast<std::size_t>(bone.parent);
+        append_bone(positions[parent],positions[i],bone.visual_radius);
+    }
+    for (std::size_t i=0; i<skeleton.bones.size(); ++i) {
+        append_sphere(positions[i],skeleton.bones[i].visual_radius*1.12F);
+    }
+    return mesh;
+}
+
+} // namespace arut::rendering
