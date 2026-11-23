@@ -1,12 +1,12 @@
 package com.arut.engine;
 
+import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.NativeActivity;
-import android.content.DialogInterface;
+import android.content.Intent;
 import android.os.Bundle;
 
-/** Native Android profile picker for the engine's isolated development scenes. */
-public final class TestLabActivity extends NativeActivity {
+/** Java-only profile chooser; the native runtime is launched only after selection. */
+public final class TestLabActivity extends Activity {
     private static final CharSequence[] PROFILES = {
         "ECS Stress Test — 5,000 entities and renderer load",
         "Humanoid Test — mannequin and character systems",
@@ -20,24 +20,15 @@ public final class TestLabActivity extends NativeActivity {
     }
 
     private void showTestLaboratory() {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                new AlertDialog.Builder(TestLabActivity.this)
-                    .setTitle("ARUT-HARDT Test Laboratory — Select a profile")
-                    .setItems(PROFILES, new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(DialogInterface dialog, int which) {
-                            // Keep the selection path minimal: no overlay or additional
-                            // view hierarchy changes while NativeActivity starts the runtime.
-                            nativeSelectProfile(which);
-                        }
-                    })
-                    .setCancelable(false)
-                    .show();
-            }
-        });
+        new AlertDialog.Builder(this)
+            .setTitle("ARUT-HARDT Test Laboratory — Select a profile")
+            .setItems(PROFILES, (dialog, which) -> {
+                Intent intent = new Intent(TestLabActivity.this, EngineNativeActivity.class);
+                intent.putExtra(EngineNativeActivity.EXTRA_PROFILE_ID, which);
+                startActivity(intent);
+                finish();
+            })
+            .setCancelable(false)
+            .show();
     }
-
-    private static native void nativeSelectProfile(int profileId);
 }
