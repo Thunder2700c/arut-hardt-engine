@@ -64,8 +64,13 @@ bool AnimationClip::valid(std::size_t expected_joint_count) const noexcept {
             !valid_pose(key.pose, expected_joint_count)) return false;
         previous = key.time_seconds;
     }
-    return keys.front().time_seconds == 0.0F &&
-           keys.back().time_seconds <= duration_seconds;
+    if (keys.front().time_seconds != 0.0F || keys.back().time_seconds > duration_seconds) return false;
+    float previous_event = -1.0F;
+    for (const auto& event : events) {
+        if (!finite(event.time_seconds) || event.time_seconds < 0.0F || event.time_seconds >= duration_seconds || event.time_seconds < previous_event || event.name.empty()) return false;
+        previous_event = event.time_seconds;
+    }
+    return true;
 }
 
 bool AnimationClip::sample(float time_seconds, Pose& output) const noexcept {
@@ -106,15 +111,48 @@ void AnimationPlayer::set_clip(const AnimationClip* clip, bool restart) noexcept
 }
 
 bool AnimationPlayer::update(float delta_seconds, Pose& output) noexcept {
-    if (!clip_ || !clip_->valid(clip_->keys.empty()?0U:clip_->keys.front().pose.joint_count) ||
-        !finite(delta_seconds) || delta_seconds < 0.0F || !finite(playback_rate_)) return false;
-    time_seconds_ += std::min(delta_seconds, 0.25F) * playback_rate_;
-    if (looping_) {
-        time_seconds_ = std::fmod(time_seconds_, clip_->duration_seconds);
-        if (time_seconds_ < 0.0F) time_seconds_ += clip_->duration_seconds;
-    } else {
-        time_seconds_ = std::clamp(time_seconds_, 0.0F, clip_->duration_seconds);
+    std::vector<AnimationEvent> ignored;
+    return update(delta_seconds, output, ignored);
+}
+
+bool AnimationPlayer::update(float delta_seconds, Pose& output, std::vector<AnimationEvent>& output_events) noexcept {
+    if (!clip_ || !clip_->valid(clip_->keys.empty()?0U:clip_->keys.front().pose.joint_count) || !finite(delta_seconds) || delta_seconds < 0.0F || !finite(playback_rate_)) return false;
+    const float duration = clip_->duration_seconds;
+    const float previous = time_seconds_;
+    const float advance = std::min(delta_seconds, 0.25F) * playback_rate_;
+    const float unwrapped = previous + advance;
+    const float next = looping_ ? (unwrapped < 0.0F ? std::fmod(unwrapped, duration) + duration : std::fmod(unwrapped, duration)) : std::clamp(unwrapped, 0.0F, duration);
+    if (!clip_->events.empty() && advance != 0.0F) {
+        if (looping_) {
+            const double low = std::min<double>(previous, unwrapped);
+            const double high = std::max<double>(previous, unwrapped);
+            const auto first_cycle = static_cast<long long>(std::floor(low / duration)) - 1LL;
+            const auto last_cycle = static_cast<long long>(std::floor(high / duration)) + 1LL;
+            if (last_cycle - first_cycle > 4096LL) return false;
+            if (advance > 0.0F) {
+                for (long long cycle = first_cycle; cycle <= last_cycle; ++cycle) {
+                    const double base = static_cast<double>(cycle) * duration;
+                    for (const auto& event : clip_->events) {
+                        const double occurrence = base + event.time_seconds;
+                        if (occurrence > previous && occurrence <= unwrapped) output_events.push_back(event);
+                    }
+                }
+            } else {
+                for (long long cycle = last_cycle; cycle >= first_cycle; --cycle) {
+                    const double base = static_cast<double>(cycle) * duration;
+                    for (auto it = clip_->events.rbegin(); it != clip_->events.rend(); ++it) {
+                        const double occurrence = base + it->time_seconds;
+                        if (occurrence >= unwrapped && occurrence < previous) output_events.push_back(*it);
+                    }
+                }
+            }
+        } else if (advance > 0.0F) {
+            for (const auto& event : clip_->events) if (event.time_seconds > previous && event.time_seconds <= next) output_events.push_back(event);
+        } else {
+            for (auto it = clip_->events.rbegin(); it != clip_->events.rend(); ++it) if (it->time_seconds >= next && it->time_seconds < previous) output_events.push_back(*it);
+        }
     }
+    time_seconds_ = next;
     return clip_->sample(time_seconds_, output);
 }
 
