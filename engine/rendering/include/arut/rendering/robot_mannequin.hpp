@@ -10,7 +10,7 @@
 namespace arut::rendering {
 
 // Builds a deterministic, engine-owned robot mannequin from the reference rig.
-// The result is a static bind-pose mesh; it is not yet a skinned/animated mesh.
+// The result is a bind-pose mesh with four-influence joint weights.
 [[nodiscard]] inline MeshData make_robot_mannequin_mesh(
     const core::HumanoidSkeleton& skeleton = core::make_robot_mannequin_skeleton(),
     std::uint32_t radial_segments = 10U) {
@@ -45,7 +45,7 @@ namespace arut::rendering {
         positions[i] = bone.parent < 0 ? local : add(positions[static_cast<std::size_t>(bone.parent)], local);
     }
 
-    const auto append_sphere = [&](const V3& center, float radius) {
+    const auto append_sphere = [&](const V3& center, float radius, std::uint32_t joint_index) {
         constexpr std::uint32_t rings = 6U;
         const std::uint32_t base = static_cast<std::uint32_t>(mesh.vertices.size());
         for (std::uint32_t r = 0; r <= rings; ++r) {
@@ -54,8 +54,12 @@ namespace arut::rendering {
                 const float theta = 6.28318530717958647692F * static_cast<float>(s) / static_cast<float>(radial_segments);
                 const V3 n{std::sin(phi)*std::cos(theta), std::cos(phi), std::sin(phi)*std::sin(theta)};
                 const V3 p = add(center, mul(n, radius));
-                mesh.vertices.push_back({p, n, {1.0F,0.0F,0.0F,1.0F},
-                    {static_cast<float>(s)/static_cast<float>(radial_segments), static_cast<float>(r)/static_cast<float>(rings)}});
+                MeshVertex vertex{p, n, {1.0F,0.0F,0.0F,1.0F},
+                    {static_cast<float>(s)/static_cast<float>(radial_segments),
+                     static_cast<float>(r)/static_cast<float>(rings)}};
+                vertex.joints = {joint_index, 0U, 0U, 0U};
+                vertex.weights = {1.0F, 0.0F, 0.0F, 0.0F};
+                mesh.vertices.push_back(vertex);
             }
         }
         for (std::uint32_t r = 0; r < rings; ++r) for (std::uint32_t s = 0; s < radial_segments; ++s) {
@@ -64,35 +68,45 @@ namespace arut::rendering {
         }
     };
 
-    const auto append_bone = [&](const V3& start, const V3& end, float radius) {
+    const auto append_bone = [&](const V3& start, const V3& end, float radius,
+                                 std::uint32_t parent_index, std::uint32_t child_index) {
         const V3 axis = norm(sub(end, start));
         V3 tangent = norm(cross(axis, {0.0F,0.0F,1.0F}));
         if (dot(tangent,tangent) < 0.5F) tangent = norm(cross(axis,{0.0F,1.0F,0.0F}));
         const V3 bitangent = norm(cross(axis,tangent));
+        constexpr std::uint32_t longitudinal_segments = 5U;
         const std::uint32_t base = static_cast<std::uint32_t>(mesh.vertices.size());
-        for (std::uint32_t cap=0; cap<2U; ++cap) {
-            const V3 center = cap==0U ? start : end;
+        for (std::uint32_t ring=0; ring<=longitudinal_segments; ++ring) {
+            const float t = static_cast<float>(ring) /
+                            static_cast<float>(longitudinal_segments);
+            const V3 center = add(start, mul(sub(end, start), t));
             for (std::uint32_t s=0; s<=radial_segments; ++s) {
                 const float angle=6.28318530717958647692F*static_cast<float>(s)/static_cast<float>(radial_segments);
                 const V3 radial=add(mul(tangent,std::cos(angle)),mul(bitangent,std::sin(angle)));
                 const V3 p=add(center,mul(radial,radius));
-                mesh.vertices.push_back({p,radial,{1.0F,0.0F,0.0F,1.0F},
-                    {static_cast<float>(s)/static_cast<float>(radial_segments),static_cast<float>(cap)}});
+                MeshVertex vertex{p,radial,{1.0F,0.0F,0.0F,1.0F},
+                    {static_cast<float>(s)/static_cast<float>(radial_segments),t}};
+                vertex.joints = {parent_index, child_index, 0U, 0U};
+                vertex.weights = {1.0F-t, t, 0.0F, 0.0F};
+                mesh.vertices.push_back(vertex);
             }
         }
-        for (std::uint32_t s=0; s<radial_segments; ++s) {
-            const std::uint32_t a=base+s,b=base+radial_segments+1U+s;
-            mesh.indices.insert(mesh.indices.end(),{a,a+1U,b,a+1U,b+1U,b});
+        for (std::uint32_t ring=0; ring<longitudinal_segments; ++ring) {
+            for (std::uint32_t s=0; s<radial_segments; ++s) {
+                const std::uint32_t a=base+ring*(radial_segments+1U)+s;
+                const std::uint32_t b=a+radial_segments+1U;
+                mesh.indices.insert(mesh.indices.end(),{a,a+1U,b,a+1U,b+1U,b});
+            }
         }
     };
 
     for (std::size_t i=1; i<skeleton.bones.size(); ++i) {
         const auto& bone=skeleton.bones[i];
         const auto parent=static_cast<std::size_t>(bone.parent);
-        append_bone(positions[parent],positions[i],bone.visual_radius);
+        append_bone(positions[parent],positions[i],bone.visual_radius,\n                    static_cast<std::uint32_t>(parent), static_cast<std::uint32_t>(i));
     }
     for (std::size_t i=0; i<skeleton.bones.size(); ++i) {
-        append_sphere(positions[i],skeleton.bones[i].visual_radius*1.12F);
+        append_sphere(positions[i],skeleton.bones[i].visual_radius*1.12F,\n            static_cast<std::uint32_t>(i));
     }
     return mesh;
 }
