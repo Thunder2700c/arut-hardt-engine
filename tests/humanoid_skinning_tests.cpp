@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <algorithm>
 
 int main() {
     using namespace arut::core;
@@ -14,6 +15,30 @@ int main() {
     const auto skeleton = make_robot_mannequin_skeleton();
     const auto mesh = make_robot_mannequin_mesh(skeleton);
     assert(!mesh.vertices.empty() && !mesh.indices.empty());
+    // The default model must be a complete high-resolution humanoid silhouette,
+    // not the former sparse set of low-poly bone tubes and joint balls.
+    assert(mesh.vertices.size() > 5000U);
+    assert(mesh.indices.size() > 20000U);
+    std::array<float, 3> minimum{
+        std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+        std::numeric_limits<float>::max()};
+    std::array<float, 3> maximum{
+        std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(),
+        std::numeric_limits<float>::lowest()};
+    for (const auto& vertex : mesh.vertices) {
+        for (std::size_t axis = 0; axis < 3U; ++axis) {
+            assert(std::isfinite(vertex.position[axis]));
+            assert(std::isfinite(vertex.normal[axis]));
+            minimum[axis] = std::min(minimum[axis], vertex.position[axis]);
+            maximum[axis] = std::max(maximum[axis], vertex.position[axis]);
+        }
+    }
+    assert(maximum[1] - minimum[1] > 1.5F);
+    assert(maximum[0] - minimum[0] > 1.0F);
+    // A-pose arms descend from the shoulder line rather than extending flat.
+    const auto& rig = skeleton.bones;
+    assert(rig[static_cast<std::size_t>(HumanoidBone::LeftUpperArm)].rest_translation.y < 0.0F);
+    assert(rig[static_cast<std::size_t>(HumanoidBone::RightUpperArm)].rest_translation.y < 0.0F);
 
     std::size_t blended_vertices = 0U;
     for (const auto& vertex : mesh.vertices) {
