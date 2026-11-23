@@ -10,7 +10,9 @@
 
 namespace arut::animation {
 
-inline constexpr std::size_t kMaxPoseJoints = core::kHumanoidBoneCount;
+// The 20-joint mannequin is a reference gameplay rig, not a limit for imported
+// characters. Keep animation data independent from that renderer-specific rig.
+inline constexpr std::size_t kMaxPoseJoints = 128U;
 
 struct Quaternion final {
     float x{0.0F}, y{0.0F}, z{0.0F}, w{1.0F};
