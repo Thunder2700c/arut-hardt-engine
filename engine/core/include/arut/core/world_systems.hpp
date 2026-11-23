@@ -1,5 +1,7 @@
 #pragma once
 
+#include "arut/core/asset_manager.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -8,6 +10,7 @@
 #include <unordered_set>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -214,6 +217,8 @@ struct WorldCellContent final {
     WorldCell cell{};
     TerrainLod lod{TerrainLod::High};
     TerrainMesh terrain{};
+    // Immutable shared asset dependency retained for as long as this cell is resident.
+    std::shared_ptr<const AssetBytes> material_asset{};
 };
 
 struct WorldStreamingReport final {
