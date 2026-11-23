@@ -25,7 +25,7 @@ layout(set = 0, binding = 0, std140) uniform FrameData {
 } frameData;
 
 layout(set = 0, binding = 8, std140) uniform BonePalette {
-    mat4 boneMatrices[20];
+    mat4 boneMatrices[128];
 } skinningData;
 
 layout(location = 0) out vec3 outWorldPosition;
@@ -40,7 +40,7 @@ void main() {
     mat4 skin = mat4(1.0);
     if (weightSum > 0.00001) {
         weights /= weightSum;
-        uvec4 joints = min(inBoneIndices, uvec4(19u));
+        uvec4 joints = min(inBoneIndices, uvec4(127u));
         skin = skinningData.boneMatrices[joints.x] * weights.x
              + skinningData.boneMatrices[joints.y] * weights.y
              + skinningData.boneMatrices[joints.z] * weights.z
