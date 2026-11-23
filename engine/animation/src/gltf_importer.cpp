@@ -187,8 +187,17 @@ bool SkeletalAsset::valid() const noexcept {
     if(joint_count==0U||joint_count>kMaxImportedJoints||meshes.empty()||animations.empty())
         return false;
     for(std::size_t i=0;i<joint_count;++i) {
-        if(joints[i].name.empty()||joints[i].parent>=static_cast<std::int16_t>(i)||
-           joints[i].parent < -1) return false;
+        if(joints[i].name.empty()||joints[i].parent < -1||
+           (joints[i].parent>=0 &&
+            (static_cast<std::size_t>(joints[i].parent)>=joint_count ||
+             static_cast<std::size_t>(joints[i].parent)==i))) return false;
+        std::size_t ancestor=i;
+        for(std::size_t depth=0;depth<joint_count;++depth) {
+            const auto parent=joints[ancestor].parent;
+            if(parent<0) break;
+            ancestor=static_cast<std::size_t>(parent);
+            if(ancestor==i) return false;
+        }
         const auto& t=joints[i].rest_local;
         if(!finite(t.translation.x)||!finite(t.translation.y)||!finite(t.translation.z)||
            !finite(t.scale.x)||!finite(t.scale.y)||!finite(t.scale.z)) return false;
