@@ -1,8 +1,13 @@
 #include "arut/core/world_systems.hpp"
+#include "arut/core/asset_manager.hpp"
 
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 #include <stdexcept>
 
 int main() {
@@ -49,10 +54,25 @@ int main() {
     assert(world.active({1, 0}));
     assert(!world.active({-1, 0}));
 
+    class TestAssetSource final : public AssetSource {
+    public:
+        AssetBytes bytes{9U, 8U, 7U, 6U};
+        bool read(std::string_view path, AssetBytes& output) const override {
+            if (path != "materials/world.bin") return false;
+            output = bytes;
+            return true;
+        }
+    };
+    auto asset_source = std::make_shared<TestAssetSource>();
+    AssetManager cell_assets(asset_source);
+
     WorldPartition streamed_partition(128.0F);
     WorldCellStreamer streamer;
     std::size_t unloaded_cells = 0U;
-    const auto loader = [](WorldCell cell, WorldCellContent& content) {
+    const auto loader = [&cell_assets](WorldCell cell, WorldCellContent& content) {
+        const auto material = cell_assets.load("materials/world.bin");
+        if (!material) return false;
+        content.material_asset = material.bytes;
         content.cell = cell;
         content.terrain = TerrainSystem::build(128.0F, 8U);
         const float offset_x = (static_cast<float>(cell.x) + 0.5F) * 128.0F;
@@ -71,6 +91,11 @@ int main() {
     assert(first_stream.loaded == 9U && first_stream.unloaded == 0U);
     assert(first_stream.failed == 0U && first_stream.resident == 9U);
     assert(streamer.find({0, 0}) != nullptr);
+    assert(streamer.find({0, 0})->material_asset != nullptr);
+    assert(streamer.find({0, 0})->material_asset->size() == 4U);
+    assert(cell_assets.stats().misses == 1U && cell_assets.stats().hits == 8U);
+    for (const auto cell : streamed_partition.active_cells())
+        assert(streamer.find(cell)->material_asset == streamer.find({0, 0})->material_asset);
     const auto refresh_lod = [](WorldCell, WorldCellContent& content) {
         content.lod = TerrainLod::Low;
         content.terrain = TerrainSystem::build(128.0F, 4U);
@@ -81,6 +106,7 @@ int main() {
     assert(second_stream.loaded == 3U && second_stream.unloaded == 3U);
     assert(second_stream.updated == 6U);
     assert(second_stream.resident == 9U && unloaded_cells == 3U);
+    assert(cell_assets.stats().misses == 1U && cell_assets.stats().hits == 11U);
     assert(streamer.find({0, 0})->lod == TerrainLod::Low);
     assert(streamer.find({-1, 0}) == nullptr);
     assert(streamer.find({2, 0}) != nullptr);
