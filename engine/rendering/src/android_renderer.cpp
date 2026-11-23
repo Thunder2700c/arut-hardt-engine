@@ -2838,6 +2838,19 @@ bool AndroidRenderer::create_commands_and_sync() noexcept {
     return true;
 }
 
+void AndroidRenderer::set_gamepad_movement_input(float x, float y) noexcept {
+    gamepad_move_x_ = std::isfinite(x) ? std::clamp(x, -1.0F, 1.0F) : 0.0F;
+    gamepad_move_y_ = std::isfinite(y) ? std::clamp(y, -1.0F, 1.0F) : 0.0F;
+}
+
+void AndroidRenderer::clear_input() noexcept {
+    joystick_x_ = joystick_y_ = 0.0F;
+    gamepad_move_x_ = gamepad_move_y_ = 0.0F;
+    gamepad_look_x_ = gamepad_look_y_ = 0.0F;
+    joystick_pointer_ = look_pointer_ = jump_pointer_ = -1;
+    jump_pressed_ = false;
+}
+
 void AndroidRenderer::set_gamepad_look_input(float x, float y) noexcept {
     gamepad_look_x_ = std::isfinite(x) ? std::clamp(x, -1.0F, 1.0F) : 0.0F;
     gamepad_look_y_ = std::isfinite(y) ? std::clamp(y, -1.0F, 1.0F) : 0.0F;
@@ -2904,7 +2917,8 @@ void AndroidRenderer::update_stress_camera(float delta_seconds) noexcept {
     if (!mannequin_scene_enabled_) {
         constexpr float speed = 9.0F;
         for (std::size_t i = 0; i < 3U; ++i) {
-            camera_position_[i] += (forward[i] * joystick_y_ + right[i] * joystick_x_) * speed * dt;
+            camera_position_[i] += (forward[i] * (joystick_y_ + gamepad_move_y_) +
+                                    right[i] * (joystick_x_ + gamepad_move_x_)) * speed * dt;
         }
     }
     const std::array<float, 3> target{
