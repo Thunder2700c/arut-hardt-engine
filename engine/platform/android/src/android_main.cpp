@@ -185,7 +185,7 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
  std::span<const arut::core::CubeRenderInstance> stress_instances{};
  if (arut::core::test_lab_includes_stress(state.selected_profile)) {
   const auto& instances = state.cube_render_extraction_system.instances();
-  stress_instances = {instances.data(), instances.size()};
+  stress_instances = std::span<const arut::core::CubeRenderInstance>{instances.data(), instances.size()};
  }
  const bool include_mannequin =
   arut::core::test_lab_includes_humanoid(state.selected_profile);
