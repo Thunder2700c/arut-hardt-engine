@@ -45,15 +45,19 @@ namespace arut::rendering {
         positions[i] = bone.parent < 0 ? local : add(positions[static_cast<std::size_t>(bone.parent)], local);
     }
 
-    const auto append_sphere = [&](const V3& center, float radius, std::uint32_t joint_index) {
+    const auto append_ellipsoid = [&](const V3& center, const V3& radii,
+                                      std::uint32_t joint_index) {
         constexpr std::uint32_t rings = 6U;
         const std::uint32_t base = static_cast<std::uint32_t>(mesh.vertices.size());
         for (std::uint32_t r = 0; r <= rings; ++r) {
             const float phi = 3.14159265358979323846F * static_cast<float>(r) / static_cast<float>(rings);
             for (std::uint32_t s = 0; s <= radial_segments; ++s) {
                 const float theta = 6.28318530717958647692F * static_cast<float>(s) / static_cast<float>(radial_segments);
-                const V3 n{std::sin(phi)*std::cos(theta), std::cos(phi), std::sin(phi)*std::sin(theta)};
-                const V3 p = add(center, mul(n, radius));
+                const V3 sphere_normal{std::sin(phi)*std::cos(theta), std::cos(phi), std::sin(phi)*std::sin(theta)};
+                const V3 p = add(center, {sphere_normal[0]*radii[0],
+                    sphere_normal[1]*radii[1], sphere_normal[2]*radii[2]});
+                const V3 n = norm({sphere_normal[0]/radii[0],
+                    sphere_normal[1]/radii[1], sphere_normal[2]/radii[2]});
                 MeshVertex vertex{p, n, {1.0F,0.0F,0.0F,1.0F},
                     {static_cast<float>(s)/static_cast<float>(radial_segments),
                      static_cast<float>(r)/static_cast<float>(rings)}};
@@ -66,6 +70,10 @@ namespace arut::rendering {
             const std::uint32_t a = base + r*(radial_segments+1U)+s, b=a+radial_segments+1U;
             mesh.indices.insert(mesh.indices.end(), {a,a+1U,b,a+1U,b+1U,b});
         }
+    };
+    const auto append_sphere = [&](const V3& center, float radius,
+                                   std::uint32_t joint_index) {
+        append_ellipsoid(center, {radius, radius, radius}, joint_index);
     };
 
     const auto append_bone = [&](const V3& start, const V3& end, float radius,
@@ -109,6 +117,12 @@ namespace arut::rendering {
     for (std::size_t i=0; i<skeleton.bones.size(); ++i) {
         append_sphere(positions[i],skeleton.bones[i].visual_radius*1.12F,
             static_cast<std::uint32_t>(i));
+    }
+    for (const auto foot : {core::HumanoidBone::LeftFoot, core::HumanoidBone::RightFoot}) {
+        const auto index = static_cast<std::size_t>(foot);
+        const V3 foot_center = add(positions[index], {0.0F, -0.035F, -0.105F});
+        append_ellipsoid(foot_center, {0.095F, 0.055F, 0.17F},
+                         static_cast<std::uint32_t>(index));
     }
     return mesh;
 }
