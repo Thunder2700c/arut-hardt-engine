@@ -17,7 +17,7 @@ int main() {
     assert(std::abs(delta.local_translation.z - 1.0F) < 0.001F);
     assert(std::abs(delta.yaw_radians - 0.5F) < 0.001F);
 
-    core::Vec3 position{};
+    arut::core::Vec3 position{};
     float yaw = 0.0F;
     assert(apply_root_motion(delta, position, yaw));
     assert(std::abs(position.x - 2.0F) < 0.001F);
