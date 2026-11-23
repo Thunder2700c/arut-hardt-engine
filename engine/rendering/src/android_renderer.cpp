@@ -3189,10 +3189,13 @@ bool AndroidRenderer::draw_frame() noexcept {
                 arut_android_log(ANDROID_LOG_INFO, parity);
             }
             last_triangles_ = (cube_index_count_ / 3U) * completed.instance_count +
-                terrain_triangle_count_ + mannequin_index_count_ / 3U +
+                terrain_triangle_count_ +
+                ((!imported_character_enabled_ ? mannequin_index_count_ : 0U) +
+                 (imported_character_enabled_ ? imported_character_index_count_ : 0U)) / 3U +
                 (cube_index_count_ / 3U) * static_scene_instance_count_;
             last_visible_objects_ += static_scene_instance_count_;
-            if (mannequin_index_count_ != 0U) ++last_visible_objects_;
+            if (mannequin_index_count_ != 0U && !imported_character_enabled_) ++last_visible_objects_;
+            if (imported_character_enabled_ && imported_character_index_count_ != 0U) ++last_visible_objects_;
         } else {
             gpu_visibility_result_pending_ = false;
             log_error("Read completed GPU visibility count failed; retaining last profile counters", map_result);
@@ -3200,10 +3203,13 @@ bool AndroidRenderer::draw_frame() noexcept {
     } else if (!gpu_visibility_enabled_) {
         last_visible_objects_ = instance_count_;
         last_triangles_ = (cube_index_count_ / 3U) * instance_count_ +
-            terrain_triangle_count_ + mannequin_index_count_ / 3U +
+            terrain_triangle_count_ +
+            ((!imported_character_enabled_ ? mannequin_index_count_ : 0U) +
+             (imported_character_enabled_ ? imported_character_index_count_ : 0U)) / 3U +
             (cube_index_count_ / 3U) * static_scene_instance_count_;
         last_visible_objects_ = instance_count_ + static_scene_instance_count_ +
-            (mannequin_index_count_ != 0U ? 1U : 0U);
+            ((mannequin_index_count_ != 0U && !imported_character_enabled_) ? 1U : 0U) +
+            ((imported_character_enabled_ && imported_character_index_count_ != 0U) ? 1U : 0U);
     }
     if (timestamp_queries_available_ && timestamp_data_pending_) {
         std::array<std::uint64_t, 4> timestamps{};
@@ -3564,7 +3570,15 @@ void AndroidRenderer::destroy_swapchain() noexcept {
         if (mannequin_index_memory_) vkFreeMemory(device_, mannequin_index_memory_, nullptr);
         if (mannequin_instance_buffer_) vkDestroyBuffer(device_, mannequin_instance_buffer_, nullptr);
         if (mannequin_instance_memory_) vkFreeMemory(device_, mannequin_instance_memory_, nullptr);
+        if (imported_character_vertex_buffer_) vkDestroyBuffer(device_, imported_character_vertex_buffer_, nullptr);
+        if (imported_character_vertex_memory_) vkFreeMemory(device_, imported_character_vertex_memory_, nullptr);
+        if (imported_character_index_buffer_) vkDestroyBuffer(device_, imported_character_index_buffer_, nullptr);
+        if (imported_character_index_memory_) vkFreeMemory(device_, imported_character_index_memory_, nullptr);
         mannequin_vertex_buffer_ = mannequin_index_buffer_ = mannequin_instance_buffer_ = VK_NULL_HANDLE;
+        imported_character_vertex_buffer_ = imported_character_index_buffer_ = VK_NULL_HANDLE;
+        imported_character_vertex_memory_ = imported_character_index_memory_ = VK_NULL_HANDLE;
+        imported_character_index_count_ = 0U;
+        imported_character_enabled_ = false;
         mannequin_vertex_memory_ = mannequin_index_memory_ = mannequin_instance_memory_ = VK_NULL_HANDLE;
         mannequin_index_count_ = 0U;
         if (cube_vertex_buffer_) vkDestroyBuffer(device_, cube_vertex_buffer_, nullptr);
