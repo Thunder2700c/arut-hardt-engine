@@ -3029,7 +3029,14 @@ bool AndroidRenderer::load_imported_character_glb(
 
     arut::animation::SkeletalAsset asset{};
     arut::animation::GltfImportReport report{};
-    if (!arut::animation::import_glb(bytes.data(), bytes.size(), asset, report)) {
+    bool imported = false;
+    try {
+        imported = arut::animation::import_glb(bytes.data(), bytes.size(), asset, report);
+    } catch (...) {
+        log_error("GLB import failed: allocation or parser exception");
+        return false;
+    }
+    if (!imported) {
         char message[256]{};
         std::snprintf(message, sizeof(message), "GLB import failed: %s", report.message.c_str());
         log_error(message);
@@ -3068,9 +3075,14 @@ bool AndroidRenderer::set_imported_character(
     }
 
     arut::rendering::MeshData mesh{};
-    if (!arut::rendering::convert_imported_skinned_mesh(asset, asset.meshes.front(), mesh) ||
-        mesh.vertices.empty() || mesh.indices.empty()) {
-        log_error("Imported character vertex conversion failed");
+    try {
+        if (!arut::rendering::convert_imported_skinned_mesh(asset, asset.meshes.front(), mesh) ||
+            mesh.vertices.empty() || mesh.indices.empty()) {
+            log_error("Imported character vertex conversion failed");
+            return false;
+        }
+    } catch (...) {
+        log_error("Imported character vertex conversion failed: allocation exception");
         return false;
     }
 
