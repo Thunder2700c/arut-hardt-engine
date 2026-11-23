@@ -160,6 +160,7 @@ private:
     VkBuffer bone_palette_uniform_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory bone_palette_uniform_memory_{VK_NULL_HANDLE};
     float humanoid_animation_time_seconds_{0.0F};
+    std::uint64_t humanoid_animation_updates_{0U};
     VkBuffer mannequin_vertex_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory mannequin_vertex_memory_{VK_NULL_HANDLE};
     VkBuffer mannequin_index_buffer_{VK_NULL_HANDLE};
