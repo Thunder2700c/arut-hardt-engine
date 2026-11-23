@@ -34,11 +34,18 @@ struct PoseKey final {
     Pose pose{};
 };
 
+struct AnimationEvent final {
+    float time_seconds{0.0F};
+    std::string name;
+    std::string payload;
+};
+
 struct AnimationClip final {
     std::string name;
     float duration_seconds{0.0F};
     bool looping{true};
     std::vector<PoseKey> keys;
+    std::vector<AnimationEvent> events;
 
     [[nodiscard]] bool valid(std::size_t expected_joint_count) const noexcept;
     [[nodiscard]] bool sample(float time_seconds, Pose& output) const noexcept;
@@ -48,6 +55,8 @@ class AnimationPlayer final {
 public:
     void set_clip(const AnimationClip* clip, bool restart = true) noexcept;
     [[nodiscard]] bool update(float delta_seconds, Pose& output) noexcept;
+    [[nodiscard]] bool update(float delta_seconds, Pose& output,
+                              std::vector<AnimationEvent>& output_events) noexcept;
     void set_playback_rate(float rate) noexcept;
     [[nodiscard]] bool seek(float time_seconds) noexcept;
     void set_looping(bool looping) noexcept;
