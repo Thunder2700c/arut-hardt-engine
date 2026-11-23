@@ -9,6 +9,10 @@
 
 namespace arut::rendering {
 
+inline constexpr std::size_t kHumanoidShaderBoneCount = 20U;
+static_assert(core::kHumanoidBoneCount == kHumanoidShaderBoneCount,
+              "C++ humanoid rig must match the GLSL bone palette array size");
+
 struct HumanoidQuaternion final {
     float x{0.0F};
     float y{0.0F};
