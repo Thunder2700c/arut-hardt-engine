@@ -3050,10 +3050,18 @@ bool AndroidRenderer::set_imported_character(
         return false;
     }
 
-    if (imported_character_vertex_buffer_) vkDestroyBuffer(device_, imported_character_vertex_buffer_, nullptr);
-    if (imported_character_vertex_memory_) vkFreeMemory(device_, imported_character_vertex_memory_, nullptr);
-    if (imported_character_index_buffer_) vkDestroyBuffer(device_, imported_character_index_buffer_, nullptr);
-    if (imported_character_index_memory_) vkFreeMemory(device_, imported_character_index_memory_, nullptr);
+    const auto release_imported_allocation = [this](VkBuffer buffer, VkDeviceMemory memory) {
+        if (buffer != VK_NULL_HANDLE) {
+            VkMemoryRequirements requirements{};
+            vkGetBufferMemoryRequirements(device_, buffer, &requirements);
+            if (requirements.size <= tracked_gpu_memory_bytes_)
+                tracked_gpu_memory_bytes_ -= requirements.size;
+            vkDestroyBuffer(device_, buffer, nullptr);
+        }
+        if (memory != VK_NULL_HANDLE) vkFreeMemory(device_, memory, nullptr);
+    };
+    release_imported_allocation(imported_character_vertex_buffer_, imported_character_vertex_memory_);
+    release_imported_allocation(imported_character_index_buffer_, imported_character_index_memory_);
     imported_character_vertex_buffer_ = new_vertex_buffer;
     imported_character_vertex_memory_ = new_vertex_memory;
     imported_character_index_buffer_ = new_index_buffer;
