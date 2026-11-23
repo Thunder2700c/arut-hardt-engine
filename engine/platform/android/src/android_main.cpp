@@ -997,6 +997,32 @@ void run(android_app* app) {
       state.camera_geometry_obstructed = camera.geometry_obstructed;
       state.renderer.set_humanoid_state(
        model, palette, camera_target, camera.position);
+      if (state.imported_character_active) {
+       arut::animation::Pose imported_pose = state.imported_character_rest_pose;
+       if (state.imported_character_animator_ready) {
+        arut::animation::CharacterAnimationInput imported_input{};
+        imported_input.move_x = animation_input.local_move_x;
+        imported_input.move_y = animation_input.local_move_y;
+        imported_input.horizontal_speed = animation_input.horizontal_speed;
+        imported_input.vertical_speed = animation_input.vertical_speed;
+        imported_input.grounded = animation_input.grounded;
+        imported_input.sprinting = animation_input.horizontal_speed >= 3.25F;
+        imported_input.attack_light_pressed = animation_input.attack_light_pressed;
+        imported_input.attack_heavy_pressed = animation_input.attack_heavy_pressed;
+        imported_input.block_held = animation_input.block_held;
+        imported_input.dodge_pressed = animation_input.dodge_pressed;
+        std::vector<arut::animation::AnimationEvent> animation_events;
+        if (!state.imported_character_animator.update(
+             frame_delta, imported_input, imported_pose, animation_events)) {
+         state.imported_character_animator_ready = false;
+         log_warn("IMPORTED_CHARACTER animation graph failed; holding imported rest pose");
+         imported_pose = state.imported_character_rest_pose;
+        }
+       }
+       if (!state.renderer.set_imported_character_pose(
+            state.imported_character_asset, imported_pose, model))
+        log_warn("IMPORTED_CHARACTER pose upload rejected; retaining previous GPU pose");
+      }
      }
     } else {
      log_warn("HUMANOID_SKINNING pose palette generation failed.");
