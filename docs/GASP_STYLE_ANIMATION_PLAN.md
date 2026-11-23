@@ -1,6 +1,6 @@
 # ARUT-HARDT GASP-Style Animation System
 
-**Status:** Active implementation — foundational runtime, pose-search database, pose history and trajectory prediction committed; Android character integration and full GASP-style feature set remain incomplete  
+**Status:** Active implementation — foundational runtime, pose-search database, stateful clip handoff/crossfade, and live Android pose-history/trajectory feed committed; imported animation assets and full GASP-style feature set remain incomplete  
 **Language policy:** Native C++ only. No GDScript.  
 **Targets:** Android ARM64 first; desktop support must remain portable.  
 **Reference:** Unreal Engine Game Animation Sample Project (GASP), recreated as an original engine subsystem. This document describes desired behavior and architecture; it does not claim feature parity or completed implementation.
@@ -78,10 +78,10 @@ The system must work with the engine's replaceable metallic robot mannequin and 
 
 ## 4. Implementation sequence
 
-1. **4A — Runtime separation and asset contracts (in progress):** renderer-independent pose/clip runtime, sampling, quaternion interpolation and blending are implemented with host tests. Remaining: connect the Android character animator, move pose ownership out of renderer-specific code, and add graph/state-machine transitions and root-motion contracts.
+1. **4A — Runtime separation and asset contracts (in progress):** renderer-independent pose/clip runtime, sampling, quaternion interpolation and blending are implemented with host tests. Remaining: move final pose ownership out of renderer-specific code, add graph/state-machine transitions and root-motion contracts, and validate on device.
 2. **4B — Imported animation assets:** implement glTF/GLB skeletal animation import and validation; add a licensed test character/clip set.
 3. **4C — Animation graph and locomotion:** clip sampling, blending, state machine, transitions, root motion, starts/stops/turns and trajectory generation.
-4. **4D — Motion matching (foundation implemented):** pose-search schema, offline clip sampling/database generation, weighted feature scoring, tag filtering, continuity cost, pose-history ring buffer and trajectory prediction are implemented. Remaining: robust feature normalization, acceleration-aware trajectory matching, search profiling/LOD, clip playback handoff and real locomotion database validation.
+4. **4D — Motion matching (foundation implemented):** pose-search schema, offline clip sampling/database generation, weighted feature scoring, tag filtering, continuity cost, pose-history ring buffer and trajectory prediction are implemented. Remaining: robust feature normalization, search profiling/LOD, imported clip database validation, and actual Android motion-matching playback once licensed clips are imported. Stateful clip selection and crossfade handoff are implemented; Android now records live pose history and predicts three future trajectory points.
 5. **4E — IK and traversal:** foot locking, warping, look-at, hand IK, vault/mantle interaction framework.
 6. **4F — Physics animation and ragdoll:** integrate the chosen physics backend; build reusable bone-body/joint profiles, powered ragdoll and recovery.
 7. **4G — Android validation:** host tests, Android ARM64 CI, then S23 FE runtime tests with logs and visual evidence. Measure CPU time, memory, database size and frame-time impact.
