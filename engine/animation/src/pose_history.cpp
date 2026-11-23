@@ -52,17 +52,26 @@ bool TrajectoryPredictor::predict(
         const float t=times[i];
         if(!finite(t)||t<=previous_time) return false;
         previous_time=t;
-        float vx=in.world_velocity.x+in.world_acceleration.x*t;
-        float vz=in.world_velocity.z+in.world_acceleration.z*t;
-        const float speed=std::sqrt(vx*vx+vz*vz);
-        if(!finite(speed)) return false;
-        if(speed>in.maximum_speed) {
-            const float scale=in.maximum_speed/speed;
-            vx*=scale; vz*=scale;
-        }
-        const float dx=in.world_velocity.x*t+0.5F*in.world_acceleration.x*t*t;
-        const float dz=in.world_velocity.z*t+0.5F*in.world_acceleration.z*t*t;
-        const float yaw=in.facing_yaw_radians+in.angular_velocity_radians*t;
+        float vx0=in.world_velocity.x;
+        float vz0=in.world_velocity.z;
+        float vx1=vx0+in.world_acceleration.x*t;
+        float vz1=vz0+in.world_acceleration.z*t;
+        const auto clamp_speed=[&](float& vx,float& vz) noexcept {
+            const float speed=std::sqrt(vx*vx+vz*vz);
+            if(speed>in.maximum_speed) {
+                const float scale=in.maximum_speed/speed;
+                vx*=scale;
+                vz*=scale;
+            }
+        };
+        clamp_speed(vx0,vz0);
+        clamp_speed(vx1,vz1);
+        const float dx=0.5F*(vx0+vx1)*t;
+        const float dz=0.5F*(vz0+vz1)*t;
+        // Express every point in the current character frame. Future yaw is
+        // intentionally not used here: the search schema compares a single
+        // stable local coordinate frame across all three prediction horizons.
+        const float yaw=in.facing_yaw_radians;
         const float c=std::cos(yaw), sn=std::sin(yaw);
         // Convert world displacement into character-local X/Z coordinates.
         out[i]={t,{c*dx-sn*dz, in.world_velocity.y*t+0.5F*in.world_acceleration.y*t*t,
