@@ -17,6 +17,7 @@
 #include "arut/animation/pose_history.hpp"
 #include "arut/animation/character_animation.hpp"
 #include "arut/animation/gltf_importer.hpp"
+#include "arut/animation/root_motion.hpp"
 #include <android/input.h>
 #include <android/log.h>
 #include <android/native_window.h>
@@ -90,6 +91,7 @@ struct RuntimeState final {
  arut::animation::Pose imported_character_rest_pose{};
  bool imported_character_active{false};
  bool imported_character_animator_ready{false};
+ std::size_t imported_character_root_joint{arut::animation::kMaxPoseJoints};
  double animation_clock_seconds{0.0};
  float previous_facing_yaw{0.0F};
  bool has_previous_facing_yaw{false};
@@ -381,6 +383,13 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
      state.imported_character_rest_pose.joints[joint] =
       state.imported_character_asset.joints[joint].rest_local;
     state.imported_character_active = true;
+    state.imported_character_root_joint = arut::animation::kMaxPoseJoints;
+    for (std::size_t joint = 0; joint < state.imported_character_asset.joint_count; ++joint) {
+     if (state.imported_character_asset.joints[joint].parent < 0) {
+      state.imported_character_root_joint = joint;
+      break;
+     }
+    }
     state.imported_character_animator_ready =
      configure_imported_character_animator(state);
     log_info("IMPORTED_CHARACTER runtime_active=true joints=%zu clips=%zu graph_ready=%s",
@@ -1019,6 +1028,14 @@ void run(android_app* app) {
          log_warn("IMPORTED_CHARACTER animation graph failed; holding imported rest pose");
          imported_pose = state.imported_character_rest_pose;
         }
+       }
+       // This runtime uses capsule-driven movement. Remove planar root travel
+       // from imported clips so animation cannot double-translate the actor.
+       if (state.imported_character_root_joint < imported_pose.joint_count) {
+        const auto root = state.imported_character_root_joint;
+        const auto reference =
+         state.imported_character_asset.joints[root].rest_local.translation;
+        (void)arut::animation::strip_root_motion(imported_pose, root, reference);
        }
        if (!state.renderer.set_imported_character_pose(
             state.imported_character_asset, imported_pose, model))
