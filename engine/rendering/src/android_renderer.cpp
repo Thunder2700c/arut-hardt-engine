@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdio>
 #include <vector>
+#include <utility>
 #include <cstddef>
 #include <cstdint>
 #include <chrono>
@@ -2965,7 +2966,8 @@ void AndroidRenderer::update_stress_camera(float delta_seconds) noexcept {
 }
 
 bool AndroidRenderer::load_imported_character_glb(
-    const char* asset_path, const arut::rendering::Mat4& model) noexcept {
+    const char* asset_path, arut::animation::SkeletalAsset& out_asset,
+    const arut::rendering::Mat4& model) noexcept {
     if (!assets_ || !asset_path || asset_path[0] == '\0') {
         log_error("GLB load rejected: Android asset manager or path is missing");
         return false;
@@ -3019,7 +3021,13 @@ bool AndroidRenderer::load_imported_character_glb(
         log_error("GLB parsed successfully but Vulkan character installation failed");
         return false;
     }
-    arut_android_log(ANDROID_LOG_INFO, "GLB_CHARACTER_LOAD success=true initial_pose=rest");
+    try {
+        out_asset = std::move(asset);
+    } catch (...) {
+        log_error("GLB was uploaded, but returning its animation data failed");
+        return false;
+    }
+    arut_android_log(ANDROID_LOG_INFO, "GLB_CHARACTER_LOAD success=true initial_pose=rest animations_available=true");
     return true;
 }
 
