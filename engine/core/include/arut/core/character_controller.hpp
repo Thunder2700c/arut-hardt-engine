@@ -78,6 +78,7 @@ public:
         state_.facing_yaw_radians =
             std::isfinite(facing_yaw_radians) ? facing_yaw_radians : 0.0F;
         accumulator_seconds_ = 0.0F;
+        jump_queued_ = false;
     }
 
     void set_facing_yaw(float yaw_radians) noexcept {
@@ -100,11 +101,14 @@ public:
 
         accumulator_seconds_ += std::min(frame_delta_seconds,
                                          config_.maximum_catchup_seconds);
+        if (input.jump_pressed) jump_queued_ = true;
         std::uint32_t steps = 0U;
         CharacterInput step_input = input;
         while (accumulator_seconds_ >= config_.fixed_timestep &&
                steps < config_.maximum_steps_per_update) {
+            step_input.jump_pressed = jump_queued_;
             (void)fixed_step(step_input, ground_query, ground_context);
+            jump_queued_ = false;
             step_input.jump_pressed = false;
             accumulator_seconds_ -= config_.fixed_timestep;
             ++steps;
@@ -223,6 +227,7 @@ private:
     CharacterControllerConfig config_{};
     CharacterControllerState state_{};
     float accumulator_seconds_{0.0F};
+    bool jump_queued_{false};
 };
 
 } // namespace arut::core
