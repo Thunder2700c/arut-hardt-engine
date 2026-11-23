@@ -8,6 +8,7 @@
 #include "arut/rendering/environment.hpp"
 #include "arut/rendering/gpu_visibility.hpp"
 #include "arut/rendering/environment_probe.hpp"
+#include "arut/rendering/humanoid_skinning.hpp"
 #include "arut/core/cube_stress_scene.hpp"
 #include "arut/core/world_systems.hpp"
 #include <array>
@@ -36,6 +37,18 @@ public:
     bool draw_frame() noexcept;
     bool set_terrain_cells(std::span<const arut::core::TerrainMesh> terrain_meshes) noexcept;
     [[nodiscard]] std::array<float, 3> camera_position() const noexcept { return camera_position_; }
+    [[nodiscard]] float camera_yaw() const noexcept { return camera_yaw_; }
+    [[nodiscard]] std::array<float, 2> movement_input() const noexcept {
+        return {joystick_x_, joystick_y_};
+    }
+    [[nodiscard]] bool consume_jump_pressed() noexcept {
+        const bool pressed = jump_pressed_;
+        jump_pressed_ = false;
+        return pressed;
+    }
+    void set_humanoid_state(const arut::rendering::Mat4& model,
+        const arut::rendering::HumanoidSkinningPalette& palette,
+        const std::array<float, 3>& camera_target) noexcept;
     // action: 0=down, 1=move, 2=up. Coordinates are in window pixels.
     void set_touch_input(std::int32_t action, std::int32_t pointer_id,
                          float x, float y, float width, float height) noexcept;
@@ -260,6 +273,12 @@ private:
     float joystick_radius_{72.0F};
     std::int32_t joystick_pointer_{-1};
     std::int32_t look_pointer_{-1};
+    std::int32_t jump_pointer_{-1};
+    bool jump_pressed_{false};
+    bool has_external_humanoid_state_{false};
+    arut::rendering::Mat4 pending_mannequin_model_{arut::rendering::Mat4::identity()};
+    arut::rendering::HumanoidSkinningPalette pending_humanoid_palette_{};
+    std::array<float, 3> humanoid_camera_target_{0.0F, 1.0F, 0.0F};
     float look_last_x_{0.0F};
     float look_last_y_{0.0F};
     std::uint32_t cpu_expected_visible_{0};
