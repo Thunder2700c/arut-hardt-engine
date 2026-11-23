@@ -201,11 +201,30 @@ bool SkeletalAsset::valid() const noexcept {
             ancestor=static_cast<std::size_t>(parent);
         }
         const auto& t=joints[i].rest_local;
+        const auto& q=t.rotation;
+        const float q2=q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w;
         if(!finite(t.translation.x)||!finite(t.translation.y)||!finite(t.translation.z)||
-           !finite(t.scale.x)||!finite(t.scale.y)||!finite(t.scale.z)) return false;
+           !finite(t.scale.x)||!finite(t.scale.y)||!finite(t.scale.z)||
+           !finite(q.x)||!finite(q.y)||!finite(q.z)||!finite(q.w)||
+           !finite(q2)||q2<=1.0e-12F) return false;
+        for(float value:joints[i].inverse_bind_matrix) if(!finite(value)) return false;
     }
-    for(const auto& mesh:meshes)
+    for(const auto& mesh:meshes) {
         if(mesh.vertices.empty()||mesh.indices.empty()||mesh.indices.size()%3U!=0U) return false;
+        for(const auto& vertex:mesh.vertices) {
+            if(!finite(vertex.position.x)||!finite(vertex.position.y)||!finite(vertex.position.z)||
+               !finite(vertex.normal.x)||!finite(vertex.normal.y)||!finite(vertex.normal.z)||
+               !finite(vertex.uv[0])||!finite(vertex.uv[1])) return false;
+            float sum=0.0F;
+            for(std::size_t k=0;k<4U;++k) {
+                if(vertex.joints[k]>=joint_count||!finite(vertex.weights[k])||vertex.weights[k]<0.0F)
+                    return false;
+                sum+=vertex.weights[k];
+            }
+            if(!finite(sum)||std::abs(sum-1.0F)>1.0e-3F) return false;
+        }
+        for(const auto index:mesh.indices) if(index>=mesh.vertices.size()) return false;
+    }
     for(const auto& clip:animations)
         if(!clip.valid(joint_count)) return false;
     return true;
