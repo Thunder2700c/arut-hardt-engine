@@ -103,10 +103,12 @@ namespace arut::rendering {
     for (std::size_t i=1; i<skeleton.bones.size(); ++i) {
         const auto& bone=skeleton.bones[i];
         const auto parent=static_cast<std::size_t>(bone.parent);
-        append_bone(positions[parent],positions[i],bone.visual_radius,\n                    static_cast<std::uint32_t>(parent), static_cast<std::uint32_t>(i));
+        append_bone(positions[parent],positions[i],bone.visual_radius,
+                    static_cast<std::uint32_t>(parent), static_cast<std::uint32_t>(i));
     }
     for (std::size_t i=0; i<skeleton.bones.size(); ++i) {
-        append_sphere(positions[i],skeleton.bones[i].visual_radius*1.12F,\n            static_cast<std::uint32_t>(i));
+        append_sphere(positions[i],skeleton.bones[i].visual_radius*1.12F,
+            static_cast<std::uint32_t>(i));
     }
     return mesh;
 }
