@@ -105,3 +105,10 @@ The forgotten adjacent feature is the reusable vehicle/car system already listed
 - Important limitation: this is CPU animation/import/retarget capacity only. The existing Android mannequin renderer still uploads a 20-matrix palette and only renders its procedural mannequin path. Do not claim 128-joint GPU skinning or imported-character rendering yet.
 - The next major 4B block is renderer-independent skin palette generation plus Android GPU palette/buffer integration and imported mesh upload. Vulkan's documented compute-skinning design uses separate rest-vertex, joint-matrix and output-vertex buffers; this is a possible later optimization, not yet implemented. See the [Vulkan compute skinning pipeline](https://docs.vulkan.org/tutorial/latest/Advanced_glTF/Skeletal_Compute_Skinning/03_compute_skinning.html).
 - Verification: source and regression tests are committed, but no completed CI result has been observed in this session. Compile/test status remains unverified.
+## CI regression audit and corrections — 2026-11-23
+
+- Inspected the failed C++20 bootstrap run `45187790746`: compilation succeeded and the Android ARM64 native-library job succeeded; two host tests failed.
+- `arut_animation_runtime_tests` expected a 0.90-second frame delta to advance by 0.90 seconds, but the player deliberately caps one update's delta at 0.25 seconds. Corrected the expected wrapped playback time to 0.50 seconds after the preceding 0.25-second update.
+- `arut_pose_history_trajectory_tests` attempted to reject timestamp 1.0 after the newest timestamp 0.624, so the test was wrong: 1.0 is newer and valid. Changed the regression input to 0.016, an already-used stale timestamp.
+- Fix commits: `d26f3f0` playback delta-clamp expectation; `7be7f4a` stale timestamp regression.
+- Follow-up CI runs for the corrected tests were queued and still running at the time of this audit update. Do not mark the test suite green until the latest C++20 bootstrap and Android ARM64 jobs finish successfully.
