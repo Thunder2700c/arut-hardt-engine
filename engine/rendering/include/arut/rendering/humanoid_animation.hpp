@@ -10,7 +10,8 @@
 namespace arut::rendering {
 
 enum class HumanoidAnimationState : std::uint8_t {
-    Idle, Walk, Run, StrafeLeft, StrafeRight, Backward, Jump, Fall, Land
+    Idle, Walk, Run, StrafeLeft, StrafeRight, Backward, Jump, Fall, Land,
+    AttackLight, AttackHeavy, Block, Dodge, HitReact, Recover
 };
 
 struct HumanoidAnimationInput final {
@@ -19,6 +20,12 @@ struct HumanoidAnimationInput final {
     float horizontal_speed{0.0F};
     float vertical_speed{0.0F};
     bool grounded{true};
+    bool attack_light_pressed{false};
+    bool attack_heavy_pressed{false};
+    bool block_held{false};
+    bool dodge_pressed{false};
+    bool hit_reaction{false};
+    bool recover_pressed{false};
 };
 
 struct HumanoidAnimationSnapshot final {
@@ -40,6 +47,12 @@ struct HumanoidAnimationSnapshot final {
         case HumanoidAnimationState::Jump: return "jump";
         case HumanoidAnimationState::Fall: return "fall";
         case HumanoidAnimationState::Land: return "land";
+        case HumanoidAnimationState::AttackLight: return "attack_light";
+        case HumanoidAnimationState::AttackHeavy: return "attack_heavy";
+        case HumanoidAnimationState::Block: return "block";
+        case HumanoidAnimationState::Dodge: return "dodge";
+        case HumanoidAnimationState::HitReact: return "hit_react";
+        case HumanoidAnimationState::Recover: return "recover";
     }
     return "invalid";
 }
@@ -69,7 +82,31 @@ public:
         was_grounded_ = raw_input.grounded;
         has_ground_sample_ = true;
 
-        if (!raw_input.grounded) {
+        const auto begin_action = [this](HumanoidAnimationState next, float duration) {
+            state_ = next;
+            action_elapsed_ = 0.0F;
+            action_duration_ = duration;
+            action_remaining_ = duration;
+        };
+        const bool committed_action = action_remaining_ > 0.0F &&
+            state_ != HumanoidAnimationState::Block;
+        if (raw_input.hit_reaction) {
+            begin_action(HumanoidAnimationState::HitReact, 0.42F);
+        } else if (raw_input.dodge_pressed) {
+            begin_action(HumanoidAnimationState::Dodge, 0.46F);
+        } else if (raw_input.recover_pressed) {
+            begin_action(HumanoidAnimationState::Recover, 0.55F);
+        } else if (raw_input.grounded && raw_input.attack_heavy_pressed) {
+            begin_action(HumanoidAnimationState::AttackHeavy, 0.72F);
+        } else if (raw_input.grounded && raw_input.attack_light_pressed) {
+            begin_action(HumanoidAnimationState::AttackLight, 0.52F);
+        } else if (raw_input.block_held && raw_input.grounded) {
+            state_ = HumanoidAnimationState::Block;
+            action_remaining_ = 0.0F;
+        } else if (committed_action) {
+            action_elapsed_ += dt;
+            action_remaining_ = std::max(0.0F, action_duration_ - action_elapsed_);
+        } else if (!raw_input.grounded) {
             state_ = vertical_speed > 0.20F
                 ? HumanoidAnimationState::Jump : HumanoidAnimationState::Fall;
         } else if (land_time_remaining_ > 0.0F) {
@@ -87,7 +124,6 @@ public:
         } else {
             state_ = HumanoidAnimationState::Walk;
         }
-
         const float frequency = state_ == HumanoidAnimationState::Run ? 10.5F
             : (state_ == HumanoidAnimationState::Idle ? 1.2F : 7.2F);
         if (state_ != HumanoidAnimationState::Jump &&
@@ -99,6 +135,15 @@ public:
         blend_pose(dt);
         if (land_time_remaining_ > 0.0F)
             land_time_remaining_ = std::max(0.0F, land_time_remaining_ - dt);
+        if (action_remaining_ > 0.0F &&
+            state_ != HumanoidAnimationState::Block &&
+            state_ != HumanoidAnimationState::AttackLight &&
+            state_ != HumanoidAnimationState::AttackHeavy &&
+            state_ != HumanoidAnimationState::Dodge &&
+            state_ != HumanoidAnimationState::HitReact &&
+            state_ != HumanoidAnimationState::Recover) {
+            action_remaining_ = 0.0F;
+        }
 
         snapshot_.state = state_;
         snapshot_.phase_seconds = phase_seconds_;
@@ -189,6 +234,64 @@ private:
                 set_rotation(target_pose_, B::Chest, {1.0F, 0.0F, 0.0F},
                              std::clamp(-vertical_speed * 0.02F, -0.20F, 0.20F));
                 break;
+            case HumanoidAnimationState::AttackLight: {
+                const float strike = std::clamp(action_elapsed_ / 0.22F, 0.0F, 1.0F);
+                const float retract = std::clamp((action_elapsed_ - 0.28F) / 0.20F, 0.0F, 1.0F);
+                const float punch = strike * (1.0F - retract);
+                set_rotation(target_pose_, B::Chest, {0.0F, 1.0F, 0.0F}, 0.18F * punch);
+                set_rotation(target_pose_, B::Chest, {1.0F, 0.0F, 0.0F}, -0.10F * punch);
+                set_rotation(target_pose_, B::RightUpperArm, {1.0F, 0.0F, 0.0F}, -1.05F * punch);
+                set_rotation(target_pose_, B::RightLowerArm, {1.0F, 0.0F, 0.0F}, -0.28F * punch);
+                set_rotation(target_pose_, B::LeftUpperArm, {0.0F, 0.0F, 1.0F}, -0.24F);
+                break;
+            }
+            case HumanoidAnimationState::AttackHeavy: {
+                const float phase = std::clamp(action_elapsed_ / 0.72F, 0.0F, 1.0F);
+                const float windup = std::clamp(phase / 0.34F, 0.0F, 1.0F);
+                const float strike = std::clamp((phase - 0.34F) / 0.30F, 0.0F, 1.0F);
+                const float recover = std::clamp((phase - 0.70F) / 0.30F, 0.0F, 1.0F);
+                const float arm = 0.75F * windup - 1.28F * strike + 0.53F * recover;
+                set_rotation(target_pose_, B::Chest, {0.0F, 1.0F, 0.0F}, -0.28F * windup + 0.34F * strike);
+                set_rotation(target_pose_, B::Chest, {1.0F, 0.0F, 0.0F}, -0.16F * strike);
+                set_rotation(target_pose_, B::RightUpperArm, {1.0F, 0.0F, 0.0F}, arm);
+                set_rotation(target_pose_, B::RightLowerArm, {1.0F, 0.0F, 0.0F}, -0.72F * strike);
+                set_rotation(target_pose_, B::LeftUpperArm, {0.0F, 0.0F, 1.0F}, -0.38F);
+                target_pose_.local_translations[static_cast<std::size_t>(B::Pelvis)].y -= 0.055F * strike;
+                break;
+            }
+            case HumanoidAnimationState::Block:
+                set_rotation(target_pose_, B::LeftUpperArm, {0.0F, 0.0F, 1.0F}, -0.72F);
+                set_rotation(target_pose_, B::RightUpperArm, {0.0F, 0.0F, 1.0F}, 0.72F);
+                set_rotation(target_pose_, B::LeftLowerArm, {1.0F, 0.0F, 0.0F}, -0.85F);
+                set_rotation(target_pose_, B::RightLowerArm, {1.0F, 0.0F, 0.0F}, -0.85F);
+                set_rotation(target_pose_, B::Chest, {1.0F, 0.0F, 0.0F}, -0.08F);
+                break;
+            case HumanoidAnimationState::Dodge: {
+                const float phase = std::clamp(action_elapsed_ / 0.46F, 0.0F, 1.0F);
+                const float crouch = std::sin(phase * 3.14159265F);
+                set_rotation(target_pose_, B::LeftUpperLeg, {1.0F, 0.0F, 0.0F}, 0.48F * crouch);
+                set_rotation(target_pose_, B::RightUpperLeg, {1.0F, 0.0F, 0.0F}, 0.48F * crouch);
+                set_rotation(target_pose_, B::LeftLowerLeg, {1.0F, 0.0F, 0.0F}, 0.62F * crouch);
+                set_rotation(target_pose_, B::RightLowerLeg, {1.0F, 0.0F, 0.0F}, 0.62F * crouch);
+                set_rotation(target_pose_, B::Chest, {0.0F, 0.0F, 1.0F}, 0.34F * crouch);
+                target_pose_.local_translations[static_cast<std::size_t>(B::Pelvis)].y -= 0.10F * crouch;
+                break;
+            }
+            case HumanoidAnimationState::HitReact:
+                set_rotation(target_pose_, B::Chest, {1.0F, 0.0F, 0.0F}, 0.38F);
+                set_rotation(target_pose_, B::Chest, {0.0F, 0.0F, 1.0F}, 0.18F);
+                set_rotation(target_pose_, B::LeftUpperArm, {0.0F, 0.0F, 1.0F}, -0.92F);
+                set_rotation(target_pose_, B::RightUpperArm, {0.0F, 0.0F, 1.0F}, 0.92F);
+                set_rotation(target_pose_, B::LeftUpperLeg, {1.0F, 0.0F, 0.0F}, -0.16F);
+                set_rotation(target_pose_, B::RightUpperLeg, {1.0F, 0.0F, 0.0F}, -0.16F);
+                break;
+            case HumanoidAnimationState::Recover: {
+                const float amount = 1.0F - std::clamp(action_elapsed_ / 0.55F, 0.0F, 1.0F);
+                set_rotation(target_pose_, B::Chest, {1.0F, 0.0F, 0.0F}, 0.32F * amount);
+                set_rotation(target_pose_, B::LeftUpperArm, {0.0F, 0.0F, 1.0F}, -0.45F * amount);
+                set_rotation(target_pose_, B::RightUpperArm, {0.0F, 0.0F, 1.0F}, 0.45F * amount);
+                break;
+            }
             case HumanoidAnimationState::Land: {
                 const float bend = 0.62F *
                     std::clamp(land_time_remaining_ / kLandDuration, 0.0F, 1.0F);
@@ -247,6 +350,9 @@ private:
     float last_blend_alpha_{0.0F};
     bool was_grounded_{false};
     bool has_ground_sample_{false};
+    float action_elapsed_{0.0F};
+    float action_duration_{0.0F};
+    float action_remaining_{0.0F};
 };
 
 } // namespace arut::rendering
