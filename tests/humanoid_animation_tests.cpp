@@ -66,5 +66,34 @@ int main() {
     assert(animator.snapshot().blend_alpha >= 0.0F &&
            animator.snapshot().blend_alpha <= 1.0F);
     assert(humanoid_animation_state_name(HumanoidAnimationState::Backward) == "backward");
+
+    // The Android mannequin now has playable combat poses as well as locomotion.
+    input.attack_light_pressed = true;
+    animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::AttackLight);
+    input.attack_light_pressed = false;
+    for (int i = 0; i < 20; ++i) animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::AttackLight);
+    input.attack_heavy_pressed = true;
+    animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::AttackHeavy);
+    input.attack_heavy_pressed = false;
+    input.block_held = true;
+    animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::AttackHeavy);
+    input.hit_reaction = true;
+    animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::HitReact);
+    input.hit_reaction = false;
+    input.dodge_pressed = true;
+    animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::Dodge);
+    input.dodge_pressed = false;
+    for (int i = 0; i < 30; ++i) animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::Block);
+    input.block_held = false;
+    animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::Idle);
+
     return 0;
 }
