@@ -106,9 +106,12 @@ int main() {
     const auto* west_cell = streamer.find({0, 0});
     const auto* east_cell = streamer.find({1, 0});
     assert(west_cell != nullptr && east_cell != nullptr);
-    for (std::size_t row = 0; row <= 8U; ++row) {
-        const auto& west_edge = west_cell->terrain.vertices[row * 9U + 8U];
-        const auto& east_edge = east_cell->terrain.vertices[row * 9U];
+    assert(west_cell->terrain.resolution == east_cell->terrain.resolution);
+    const std::size_t seam_resolution = west_cell->terrain.resolution;
+    const std::size_t seam_side = seam_resolution + 1U;
+    for (std::size_t row = 0; row <= seam_resolution; ++row) {
+        const auto& west_edge = west_cell->terrain.vertices[row * seam_side + seam_resolution];
+        const auto& east_edge = east_cell->terrain.vertices[row * seam_side];
         assert(std::abs(west_edge.x - east_edge.x) < 0.0001F);
         assert(std::abs(west_edge.y - east_edge.y) < 0.0001F);
         assert(std::abs(west_edge.z - east_edge.z) < 0.0001F);
