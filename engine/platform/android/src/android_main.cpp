@@ -725,17 +725,22 @@ void run(android_app* app) {
     state.combat_dodge_pressed = false;
     auto pose = state.humanoid_animator.update(animation_input, frame_delta);
     const auto& animation_snapshot = state.humanoid_animator.snapshot();
-    const bool idle_or_landing =
+    const bool stable_grounded_pose =
      animation_snapshot.state == arut::rendering::HumanoidAnimationState::Idle ||
-     animation_snapshot.state == arut::rendering::HumanoidAnimationState::Land;
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::Land ||
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::AttackLight ||
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::AttackHeavy ||
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::Block ||
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::HitReact ||
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::Recover;
     const bool airborne =
      animation_snapshot.state == arut::rendering::HumanoidAnimationState::Jump ||
      animation_snapshot.state == arut::rendering::HumanoidAnimationState::Fall ||
      !character.grounded;
     const float gait_wave = std::sin(animation_snapshot.phase_seconds);
     const std::array<bool, 2> stance{
-     !airborne && (idle_or_landing || gait_wave >= 0.0F),
-     !airborne && (idle_or_landing || gait_wave < 0.0F)
+     !airborne && (stable_grounded_pose || gait_wave >= 0.0F),
+     !airborne && (stable_grounded_pose || gait_wave < 0.0F)
     };
     const float yaw_cosine = std::cos(character.facing_yaw_radians);
     const float yaw_sine = std::sin(character.facing_yaw_radians);
