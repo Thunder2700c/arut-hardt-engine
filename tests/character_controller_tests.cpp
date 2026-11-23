@@ -82,7 +82,8 @@ int main() {
         assert(controller.fixed_step(right, ground_query, &step));
     assert(std::abs(controller.state().position.x) < 1.0e-5F);
 
-    CharacterAabbObstacle wall{{1.0F, 0.0F, -20.0F},\n                                {1.4F, 3.0F, 20.0F}};
+    CharacterAabbObstacle wall{{1.0F, 0.0F, -20.0F},
+                                {1.4F, 3.0F, 20.0F}};
     controller.reset();
     CharacterInput diagonal{};
     diagonal.move_x = 1.0F;
