@@ -9,6 +9,7 @@ using namespace arut::animation;
 
 static AnimationClip make_clip(const char* name,float direction) {
     Pose a{}; a.joint_count=arut::core::kHumanoidBoneCount;
+    a.joints[0].translation.x=direction*0.2F;
     Pose b=a;
     b.joints[0].translation.x=direction;
     b.joints[1].translation.y=0.9F;
@@ -44,6 +45,24 @@ int main() {
 
     query.required_tags=4U;
     assert(!database.search(query).found);
+
+    // Stateful player starts on the forward set, then switches to the
+    // backward set with a deterministic pose crossfade.
+    std::vector<MotionClipSource> sources{{&forward,1U},{&backward,2U}};
+    MotionMatchingPlayer playback;
+    playback.set_transition_duration(0.16F);
+    query.required_tags=1U;
+    Pose played{};
+    assert(playback.update(database,sources,query,0.0F,played));
+    assert(playback.active()&&playback.active_clip_index()==0U);
+    const float old_root_x=played.joints[0].translation.x;
+    query.required_tags=2U;
+    assert(playback.update(database,sources,query,0.04F,played));
+    assert(playback.active_clip_index()==1U);
+    assert(playback.transition_alpha()>0.0F&&playback.transition_alpha()<1.0F);
+    assert(played.joints[0].translation.x<old_root_x);
+    for(int i=0;i<5;++i) assert(playback.update(database,sources,query,0.04F,played));
+    assert(playback.transition_alpha()==1.0F);
 
     auto invalid=schema;
     invalid.joints={99U};
