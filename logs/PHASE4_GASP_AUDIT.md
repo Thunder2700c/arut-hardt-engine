@@ -54,3 +54,17 @@ The forgotten adjacent feature is the reusable vehicle/car system already listed
 - Do not copy Unreal Engine source code, Blueprint graphs as serialized assets, or sample content into ARUT-HARDT.
 - Only use sample assets/Examples under the exact license that applies to those specific files. Fab-distributed Content may have separate restrictions. Prefer independently licensed mocap/GLB assets and preserve attribution/license files.
 - An Unreal-only distribution restriction does not automatically grant rights to bundle Epic-owned assets in an independent engine. A UE-only plugin can be a separate product, but its code/content still needs a compatible license and cannot be assumed reusable by ARUT-HARDT.
+
+## Runtime integration milestone — 2026-11-23
+
+- Added `AnimationPlayer::seek()` so database-selected clip times can be played without restarting from zero.
+- Added `MotionMatchingPlayer`: consumes database search results, retains active clip playback, hands off to a new selected clip, and crossfades from the previous output pose.
+- Corrected trajectory speed limiting: predicted horizontal displacement now integrates speed-clamped start/end velocities; the trajectory remains expressed in the current character-local frame for consistent search features.
+- Extended motion-matching tests to cover clip selection, clip switching, and crossfade progression.
+- Extended trajectory tests to verify that a 20 m/s input with a 5 m/s cap does not exceed the corresponding 0.8-second displacement bound.
+- Connected Android's existing procedural + foot-IK final pose to the renderer-independent 32-frame pose-history buffer.
+- Android now estimates acceleration and yaw rate from consecutive character states, predicts three future trajectory samples, and emits `ANIMATION_RUNTIME_HISTORY` diagnostics with history depth and predicted offsets.
+- Changed files: `runtime.hpp`, `runtime.cpp`, `motion_matching.hpp`, `motion_matching.cpp`, `pose_history.cpp`, `tests/motion_matching_tests.cpp`, `tests/pose_history_trajectory_tests.cpp`, `engine/platform/android/src/android_main.cpp`, and progress docs.
+- Key commits: `0d61f02` seek API; `45b4892` seek implementation; `0ef2843` motion-matching player API; `2829a82` playback/crossfade implementation; `4c57091` trajectory speed correction; `785ef72` motion-matching playback tests; `dca3197` trajectory clamp test; `dd2d505` Android live pose-history integration; `985c520` plan update.
+- Verification status: changes are committed to `main`. The CI workflow is configured to run on every push to `main`, but this session has not obtained a workflow run/job result. The commit-status endpoint returned no status entries. Therefore compile/test success is **not verified yet**.
+- Limitations: Android currently records procedural animation plus IK into pose history and predicts trajectory. It does not yet run motion matching in-game because no imported/retargeted animation clip library or built pose-search database is wired into the app. No GASP parity claim is made.
