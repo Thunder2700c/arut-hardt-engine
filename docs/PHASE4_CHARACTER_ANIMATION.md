@@ -47,6 +47,7 @@ The Android profile picker is implemented by `app/src/main/java/com/arut/engine/
 - `MeshVertex` carries four joint indices and four normalized weights. The mannequin generator blends influence from each bone's parent to child along segmented limb geometry and assigns joint spheres to their owning joint.
 - `engine/rendering/include/arut/rendering/humanoid_skinning.hpp` builds hierarchical local/global pose transforms and the inverse-bind palette. Host tests verify that the rest pose produces identity skin matrices, a chest rotation moves descendants, and invalid pose values are rejected.
 - The mobile PBR and shadow vertex shaders read the same 20-matrix UBO and apply four-influence linear blend skinning. The renderer updates a small procedural idle-breathing/arm-sway pose each frame; it is a skinning smoke animation, not the locomotion clip/blend system.
+- The Android CI job compiles the exact six SPIR-V shader assets into `app/src/main/assets/shaders/` and validates that each output is non-empty, while still stopping short of assembling an APK. The explicit Android APK workflow runs the same shader compilation before Gradle packaging.
 - `tests/character_skeleton_tests.cpp` checks the rig contract, mesh non-emptiness, triangle/index validity and finite vertex positions/normals.
 - The host CMake test links `arut_core` and `arut_rendering`. Host tests prove procedural geometry and winding. Android CI compiles the Vulkan path; only an on-device log and visual check can prove that the mannequin is actually visible.
 
