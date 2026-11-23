@@ -1,11 +1,13 @@
 #pragma once
 
 #include "arut/core/character_controller.hpp"
+#include "arut/core/character_collision.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <span>
 
 namespace arut::core {
 
@@ -14,6 +16,7 @@ struct ThirdPersonCameraConfig final {
     float minimum_distance{0.8F};
     float terrain_clearance{0.35F};
     float collision_backoff{0.12F};
+    float collision_radius{0.18F};
     std::uint32_t sweep_samples{16U};
 
     [[nodiscard]] bool valid() const noexcept {
@@ -22,6 +25,7 @@ struct ThirdPersonCameraConfig final {
             minimum_distance <= follow_distance &&
             std::isfinite(terrain_clearance) && terrain_clearance >= 0.0F &&
             std::isfinite(collision_backoff) && collision_backoff >= 0.0F &&
+            std::isfinite(collision_radius) && collision_radius >= 0.0F &&
             sweep_samples >= 2U && sweep_samples <= 128U;
     }
 };
@@ -33,13 +37,54 @@ struct ThirdPersonCameraResult final {
     bool valid{false};
 };
 
+[[nodiscard]] inline bool third_person_segment_hits_aabb(
+    const std::array<float, 3>& start,
+    const std::array<float, 3>& end,
+    const CharacterAabbObstacle& obstacle,
+    float radius,
+    float& first_hit_fraction) noexcept {
+    first_hit_fraction = 1.0F;
+    if (!obstacle.valid() || !std::isfinite(radius) || radius < 0.0F)
+        return false;
+    const std::array<float, 3> minimum{
+        obstacle.minimum.x - radius,
+        obstacle.minimum.y - radius,
+        obstacle.minimum.z - radius
+    };
+    const std::array<float, 3> maximum{
+        obstacle.maximum.x + radius,
+        obstacle.maximum.y + radius,
+        obstacle.maximum.z + radius
+    };
+    float enter = 0.0F;
+    float leave = 1.0F;
+    for (std::size_t axis = 0; axis < 3U; ++axis) {
+        const float direction = end[axis] - start[axis];
+        if (std::abs(direction) <= 1.0e-7F) {
+            if (start[axis] < minimum[axis] || start[axis] > maximum[axis])
+                return false;
+            continue;
+        }
+        float near_value = (minimum[axis] - start[axis]) / direction;
+        float far_value = (maximum[axis] - start[axis]) / direction;
+        if (near_value > far_value) std::swap(near_value, far_value);
+        enter = std::max(enter, near_value);
+        leave = std::min(leave, far_value);
+        if (enter > leave) return false;
+    }
+    if (leave < 0.0F || enter > 1.0F) return false;
+    first_hit_fraction = std::clamp(enter, 0.0F, 1.0F);
+    return true;
+}
+
 [[nodiscard]] inline ThirdPersonCameraResult solve_third_person_camera(
     const std::array<float, 3>& target,
     float yaw_radians,
     float pitch_radians,
     CharacterGroundQuery ground_query,
     void* ground_context = nullptr,
-    ThirdPersonCameraConfig config = {}) noexcept {
+    ThirdPersonCameraConfig config = {},
+    std::span<const CharacterAabbObstacle> obstacles = {}) noexcept {
     ThirdPersonCameraResult result{};
     if (!config.valid() || !std::isfinite(yaw_radians) ||
         !std::isfinite(pitch_radians) || !ground_query ||
@@ -74,12 +119,28 @@ struct ThirdPersonCameraResult final {
         }
     }
 
-    result.distance = safe_distance;
-    result.position = {
+    std::array<float, 3> camera_end{
         target[0] - forward[0] * safe_distance,
         target[1] - forward[1] * safe_distance,
         target[2] - forward[2] * safe_distance
     };
+    for (const auto& obstacle : obstacles) {
+        float hit_fraction = 1.0F;
+        if (!third_person_segment_hits_aabb(
+                target, camera_end, obstacle, config.collision_radius,
+                hit_fraction)) continue;
+        const float obstacle_distance = safe_distance * hit_fraction;
+        safe_distance = std::max(config.minimum_distance,
+            obstacle_distance - config.collision_backoff);
+        result.terrain_obstructed = result.terrain_obstructed;
+        camera_end = {
+            target[0] - forward[0] * safe_distance,
+            target[1] - forward[1] * safe_distance,
+            target[2] - forward[2] * safe_distance
+        };
+    }
+    result.distance = safe_distance;
+    result.position = camera_end;
     result.valid = std::isfinite(result.position[0]) &&
         std::isfinite(result.position[1]) && std::isfinite(result.position[2]);
     return result;
