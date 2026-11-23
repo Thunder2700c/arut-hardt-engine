@@ -1,4 +1,5 @@
 #include "arut/core/humanoid_skeleton.hpp"
+#include "arut/rendering/robot_mannequin.hpp"
 
 #include <cmath>
 #include <iostream>
@@ -25,6 +26,29 @@ int main() {
         std::cerr << "invalid forward/cyclic parent reference was accepted\n";
         return 3;
     }
-    std::cout << "Phase 4 skeleton tests passed: bones=" << skeleton.bones.size() << '\n';
+
+    const auto mannequin = arut::rendering::make_robot_mannequin_mesh(skeleton);
+    if (mannequin.vertices.empty() || mannequin.indices.empty() ||
+        mannequin.indices.size() % 3U != 0U) {
+        std::cerr << "procedural mannequin mesh is empty or not triangular\n";
+        return 4;
+    }
+    for (const auto index : mannequin.indices) {
+        if (index >= mannequin.vertices.size()) {
+            std::cerr << "procedural mannequin index is out of range\n";
+            return 5;
+        }
+    }
+    for (const auto& vertex : mannequin.vertices) {
+        for (float value : vertex.position) if (!std::isfinite(value)) return 6;
+        for (float value : vertex.normal) if (!std::isfinite(value)) return 7;
+    }
+    if (!arut::rendering::make_robot_mannequin_mesh(skeleton, 4U).indices.empty()) {
+        std::cerr << "invalid radial segment count was accepted\n";
+        return 8;
+    }
+    std::cout << "Phase 4 mannequin tests passed: bones=" << skeleton.bones.size()
+              << " vertices=" << mannequin.vertices.size()
+              << " triangles=" << mannequin.indices.size()/3U << '\n';
     return 0;
 }
