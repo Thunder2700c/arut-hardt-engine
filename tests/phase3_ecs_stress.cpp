@@ -77,7 +77,22 @@ int main() {
                     std::abs(last.position[2] - 24.0F) < 1.0e-5F,
                     log, "grid transform boundaries match the 20x10x25 layout");
 
-    extraction_system.update(world);
+    arut::core::SceneGraphSystem scene_graph_system;
+    scene_graph_system.update(world);
+    const auto first_binding = world.get<arut::core::SceneGraphBindingComponent>(
+        spawn_system.entities().front());
+    const auto first_world_transform = scene_graph_system.graph().world_transform(first_binding.node);
+    const bool scene_graph_valid =
+        scene_graph_system.bound_entity_count() == 5000U &&
+        scene_graph_system.graph().node_count() == 5000U &&
+        first_world_transform.has_value() &&
+        std::abs(first_world_transform->value[12] + 19.0F) < 1.0e-5F &&
+        std::abs(first_world_transform->value[13] + 9.0F) < 1.0e-5F &&
+        std::abs(first_world_transform->value[14] + 24.0F) < 1.0e-5F;
+    passed &= check(scene_graph_valid, log,
+                    "5,000 ECS entities synchronize to scene nodes with correct world transforms");
+
+    extraction_system.update(world, &scene_graph_system);
     const auto& instances = extraction_system.instances();
     passed &= check(extraction_system.extracted_count() == 5000U &&
                     instances.size() == 5000U,
