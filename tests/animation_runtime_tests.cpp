@@ -80,6 +80,11 @@ int main() {
     assert(fired.size()==2U && fired[0].name=="loop_marker" && fired[1].name=="footstep");
     fired.clear();
     assert(event_player.update(0.60F, sampled, fired));
+    assert(std::abs(event_player.time_seconds()-0.50F)<1.0e-5F);
+    assert(fired.empty()); // A long frame is capped at 0.25 seconds.
+    assert(event_player.update(0.25F, sampled, fired));
+    assert(fired.empty());
+    assert(event_player.update(0.10F, sampled, fired));
     assert(fired.size()==1U && fired[0].name=="impact");
     fired.clear();
     assert(event_player.update(0.25F, sampled, fired));
