@@ -49,6 +49,29 @@ bool has_instance_extension(const char* name) {
         return std::strcmp(e.extensionName, name) == 0;
     });
 }
+std::uint64_t imported_skeleton_signature(
+    const arut::animation::SkeletalAsset& asset) noexcept {
+    std::uint64_t hash = 1469598103934665603ULL;
+    const auto mix = [&hash](const void* data, std::size_t size) {
+        const auto* bytes = static_cast<const std::uint8_t*>(data);
+        for (std::size_t i = 0; i < size; ++i) {
+            hash ^= bytes[i];
+            hash *= 1099511628211ULL;
+        }
+    };
+    mix(&asset.joint_count, sizeof(asset.joint_count));
+    if (asset.joint_count > arut::animation::kMaxImportedJoints) return 0U;
+    for (std::size_t joint = 0; joint < asset.joint_count; ++joint) {
+        const auto& source = asset.joints[joint];
+        mix(&source.parent, sizeof(source.parent));
+        const std::size_t name_size = source.name.size();
+        mix(&name_size, sizeof(name_size));
+        mix(source.name.data(), name_size);
+        mix(source.inverse_bind_matrix.data(), sizeof(source.inverse_bind_matrix));
+    }
+    return hash == 0U ? 1U : hash;
+}
+
 bool has_device_extension(VkPhysicalDevice device, const char* name) {
     std::uint32_t count = 0;
     if (vkEnumerateDeviceExtensionProperties(device, nullptr, &count, nullptr) != VK_SUCCESS) return false;
@@ -3132,6 +3155,7 @@ bool AndroidRenderer::set_imported_character(
     imported_character_index_buffer_ = new_index_buffer;
     imported_character_index_memory_ = new_index_memory;
     imported_character_index_count_ = static_cast<std::uint32_t>(mesh.indices.size());
+    imported_character_skeleton_signature_ = imported_skeleton_signature(asset);
     imported_character_enabled_ = true;
 
     pending_mannequin_model_ = model;
@@ -3147,6 +3171,7 @@ bool AndroidRenderer::set_imported_character_pose(
     const arut::rendering::Mat4& model) noexcept {
     if (!ready() || !imported_character_enabled_ || !mannequin_scene_enabled_ ||
         !bone_palette_uniform_memory_ ||
+        imported_skeleton_signature(asset) != imported_character_skeleton_signature_ ||
         !std::all_of(model.value.begin(), model.value.end(),
             [](float value) { return std::isfinite(value); })) return false;
 
@@ -3677,6 +3702,7 @@ void AndroidRenderer::destroy_swapchain() noexcept {
         imported_character_vertex_buffer_ = imported_character_index_buffer_ = VK_NULL_HANDLE;
         imported_character_vertex_memory_ = imported_character_index_memory_ = VK_NULL_HANDLE;
         imported_character_index_count_ = 0U;
+        imported_character_skeleton_signature_ = 0U;
         imported_character_enabled_ = false;
         mannequin_vertex_memory_ = mannequin_index_memory_ = mannequin_instance_memory_ = VK_NULL_HANDLE;
         mannequin_index_count_ = 0U;
