@@ -17,6 +17,8 @@ When the activity pauses and when the native runtime shuts down, the app exports
 On Android versions before API 29, the fallback location is the app-specific Documents directory under Android data storage. Export failure does not delete the private log; a warning is written to logcat.
 
 The runtime stream includes:
+- NativeActivity process ID at each native runtime startup and at `APP_CMD_DESTROY`, allowing consecutive launches to be distinguished in the persistent log;
+- explicit `VkResult` reporting when waiting for the in-flight frame fence fails, rather than only the generic frame-loop warning;
 - engine version and Rust ABI version;
 - `ECS_STRESS_SCENE`: startup readiness, live entity count, spawned handle count, extracted render-instance count and `CubeSpawnSystem` source;
 - Android lifecycle, window and input events;
