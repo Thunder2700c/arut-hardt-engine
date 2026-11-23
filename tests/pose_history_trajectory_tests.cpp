@@ -24,6 +24,13 @@ int main() {
     std::array<MotionTrajectoryPoint,kMotionTrajectorySamples> trajectory{};
     assert(TrajectoryPredictor::predict(input,times,trajectory));
     assert(trajectory[2].position_offset.x>trajectory[0].position_offset.x);
+    input.world_velocity={2.0F,0.0F,0.0F};
+    input.facing_yaw_radians=1.57079632679F;
+    assert(TrajectoryPredictor::predict(input,times,trajectory));
+    assert(trajectory[2].position_offset.x>-0.001F&&
+           trajectory[2].position_offset.x<0.001F);
+    assert(trajectory[2].position_offset.z<0.0F);
+    input.facing_yaw_radians=0.0F;
     input.world_velocity={20.0F,0.0F,0.0F};
     input.maximum_speed=5.0F;
     assert(TrajectoryPredictor::predict(input,times,trajectory));
