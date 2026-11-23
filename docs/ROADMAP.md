@@ -48,13 +48,13 @@
 
 ## Phase 4 — Character and animation
 
-- [ ] Robot mannequin.
-- [ ] Locomotion.
-- [ ] Animation blending.
-- [ ] IK.
-- [ ] Character controller.
+- [x] Robot mannequin — replaceable 20-bone reference rig, procedural mesh, 128-joint skinning palette and imported GLB rendering path.
+- [x] Locomotion — idle, walk, run, strafe, backward, jump, fall and land; imported clip-state binding is available.
+- [x] Animation blending — pose blending, timed state-graph crossfades, additive layers and event tracks.
+- [x] IK — terrain-aware two-bone foot IK with planted-foot tracking and reach clamping.
+- [x] Character controller — fixed-step kinematic capsule, slope/step handling, collision queries, jump and third-person camera; Android keyboard/gamepad combat actions now drive procedural attack, guard and dodge poses.
 
-**Deliverable:** playable third-person character.
+**Deliverable:** playable third-person character. Source implementation and host/Android compile gates are complete; S23 FE APK runtime validation remains pending.
 
 ## Phase 5 — Vehicle system
 
@@ -131,7 +131,8 @@ Status is based on repository inspection, CI evidence and user-provided device l
 | Phase 1 — Native Android runtime | Substantial implementation and S23 FE runtime evidence; lifecycle repetition, surface recreation and full smoke-test gate need explicit verification. |
 | Phase 2 — Vulkan renderer | **Complete for the canonical Android deliverable on S23 FE/Xclipse 920.** All six scope items are implemented; CI passed C++/Rust/Android ARM64 builds, shader compilation and four-case Vulkan GPU-to-CPU PBR readback. User logs verify the 5,000-instance renderer, HDR/probe path, GPU culling, camera controls and repeated CPU/GPU visibility parity. Graceful CPU fallback is implemented. Second-GPU-family validation remains a non-blocking compatibility check before making a multi-vendor support claim. |
 | Phase 3 — Core world system | In progress. ECS 5,000-cube spawn/extraction passed host tests and S23 FE/Xclipse 920 runtime validation. Scene graph-to-render-extraction integration is implemented; Android ARM64 native compilation passed in run `45086500721`, with the expanded ECS/scene-graph test run still completing. Physical-device validation is pending. Asset cache/source and Android packaged-asset adapter passed CI. Terrain cell meshes now render in Vulkan main/shadow passes; camera-driven cell residency and four-tier terrain mesh LOD are implemented and passed Android ARM64 CI. Seam continuity tests passed. The latest integration still needs S23 FE validation, and world loading remains synchronous procedural generation rather than asynchronous asset streaming. Do not mark the Phase 3 deliverable complete until the complete build is tested on the S23 FE and its logs confirm terrain rendering, cell transitions, LOD changes and scene-graph extraction. |
-| Phases 4–10 | Not started; remain locked behind their preceding phase exit gates. |
+| Phase 4 — Character and animation | Source implementation is complete for the canonical deliverable. C++ build and all 21 host tests pass; Android ARM64 native compile, packaged shader compilation and Java activity compile pass. The S23 FE APK runtime test is pending. The optional imported-character path expects a licensed `Characters/hero.glb`; the procedural mannequin remains the default when absent. Phase 5 remains locked until Phase 4 is device-validated. |
+| Phases 5–10 | Not started; remain locked behind their preceding phase exit gates. |
 
 ### Current execution order
 
@@ -139,7 +140,7 @@ Status is based on repository inspection, CI evidence and user-provided device l
 2. Record second-GPU-family validation as an outstanding compatibility check; do not misrepresent it as tested.
 3. The 5,000-cube ECS gate is complete: `CubeSpawnSystem` creates the grid, ECS components produce render instances, host stress tests pass, and the S23 FE/Xclipse 920 APK log confirms runtime rendering and repeated GPU/CPU visibility parity.
 4. Continue Phase 3 integration: finish CI validation of scene-graph extraction, add/verify asset-backed cell loading if required by the deliverable, then build and device-test the complete Phase 3 APK. Preserve the rule that this APK is not built until Phase 3 implementation and CI gates are complete. Preserve the cross-GPU limitation in release notes until another device is tested.
-5. Do not start Phase 4 — Character and animation until Phase 3's navigable streamed environment is implemented and validated.
+5. Phase 4 implementation work is present ahead of the formal Phase 3 device gate. Use the next combined APK smoke test to validate Phase 3 terrain/cell/scene-graph behavior and Phase 4 mannequin movement/combat on the S23 FE; do not mark either phase complete until its own exit evidence is recorded. Keep Phase 5 locked until Phase 4 is validated.
 
 ### Validation evidence discipline
 
