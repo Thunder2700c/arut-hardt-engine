@@ -1,1 +1,1 @@
-Explicit Phase 4 Android ARM64 debug APK build trigger. This file exists only to start the APK workflow on phase-4-character-animation.
+Explicit Phase 4 Android ARM64 debug APK build trigger. Updated after fixing the Android profile picker so the list is visible.
