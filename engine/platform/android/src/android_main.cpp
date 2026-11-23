@@ -4,6 +4,7 @@
 #include "arut/core/asset_manager.hpp"
 #include "arut/core/world_systems.hpp"
 #include "arut/core/test_lab_profile.hpp"
+#include "arut/core/humanoid_skeleton.hpp"
 #include "arut/platform/android/asset_source.hpp"
 #include "arut/rendering/vulkan/android_renderer.hpp"
 #include <android/input.h>
