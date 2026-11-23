@@ -201,6 +201,7 @@ private:
     VkBuffer imported_character_index_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory imported_character_index_memory_{VK_NULL_HANDLE};
     std::uint32_t imported_character_index_count_{0U};
+    std::uint64_t imported_character_skeleton_signature_{0U};
     bool imported_character_enabled_{false};
     VkDeviceMemory mannequin_instance_memory_{VK_NULL_HANDLE};
     std::uint32_t mannequin_index_count_{0};
