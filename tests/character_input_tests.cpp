@@ -19,6 +19,7 @@ int main() {
     assert(std::abs(sample.move_x - 0.7071067F) < 1.0e-5F);
     assert(std::abs(sample.move_y - 0.7071067F) < 1.0e-5F);
 
+    input.set_key(CharacterInputKey::MoveRight, false);
     input.set_analog(-0.5F, 0.0F);
     sample = input.sample();
     assert(sample.move_x < 0.0F);
