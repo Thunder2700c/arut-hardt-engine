@@ -1,1 +1,1 @@
-Phase 4 implementation gate passed: C++ host build/tests and Android ARM64 native compile passed. Build the debug APK for S23 FE runtime validation of the combined Phase 3/4 test lab.
+Phase 4 default-character integration: fetch and validate the pinned CC0 rigged GLB, package it as Characters/hero.glb, then build the Android ARM64 debug APK for S23 FE validation.
