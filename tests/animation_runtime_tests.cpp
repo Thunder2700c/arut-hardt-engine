@@ -88,6 +88,19 @@ int main() {
     fired.clear();
     assert(event_player.update(0.10F, sampled, fired));
     assert(fired.size()==1U && fired[0].name=="loop_marker");
+    Pose additive=rest;
+    additive.joints[1].translation.x += 1.0F;
+    additive.joints[1].rotation={0.0F,0.0F,0.70710678F,0.70710678F};
+    additive.joints[1].scale={2.0F,2.0F,2.0F};
+    Pose layered{};
+    assert(apply_additive_layer(rest,additive,rest,0.5F,layered));
+    assert(std::abs(layered.joints[1].translation.x-(rest.joints[1].translation.x+0.5F))<1.0e-4F);
+    assert(std::abs(layered.joints[1].scale.x-1.5F)<1.0e-4F);
+    assert(std::abs(layered.joints[1].rotation.z-0.38268343F)<1.0e-4F);
+    Pose bad_reference=rest;
+    bad_reference.joints[1].scale.x=0.0F;
+    assert(!apply_additive_layer(rest,additive,bad_reference,0.5F,layered));
+
     auto invalid_event=clip;
     invalid_event.events={{1.0F,"invalid",""}};
     assert(!invalid_event.valid(arut::core::kHumanoidBoneCount));
@@ -96,6 +109,6 @@ int main() {
     invalid.keys[1].time_seconds=0.0F;
     assert(!invalid.valid(arut::core::kHumanoidBoneCount));
     test_large_skeleton();
-    std::cout << "ANIMATION_RUNTIME_TEST pass clip_sample=1 player_loop=1 pose_blend=1 event_tracks=1 invalid_data=1 large_rig=96\n";
+    std::cout << "ANIMATION_RUNTIME_TEST pass clip_sample=1 player_loop=1 pose_blend=1 additive_layers=1 event_tracks=1 invalid_data=1 large_rig=96\n";
     return 0;
 }
