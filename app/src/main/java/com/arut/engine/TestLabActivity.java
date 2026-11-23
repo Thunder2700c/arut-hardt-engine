@@ -7,7 +7,6 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Typeface;
-import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 import android.os.Bundle;
@@ -30,9 +29,10 @@ public final class TestLabActivity extends NativeActivity {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
+                // AlertDialog cannot reliably show a message and a list in the same
+                // content panel. Keep the picker list-only so the choices are visible.
                 new AlertDialog.Builder(TestLabActivity.this)
-                    .setTitle("ARUT-HARDT Test Laboratory")
-                    .setMessage("Choose one isolated runtime profile. Humanoid controls: touch left stick / WASD / arrows to move; drag upper-right / hold right mouse button to look; tap JUMP / press Space or gamepad A. Restart the app to choose another profile.")
+                    .setTitle("ARUT-HARDT Test Laboratory — Select a profile")
                     .setItems(PROFILES, new DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
@@ -44,12 +44,6 @@ public final class TestLabActivity extends NativeActivity {
                     .show();
             }
         });
-    }
-
-
-    private float dp(float value) {
-        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value,
-            getResources().getDisplayMetrics());
     }
 
     /** Draws touch guidance without consuming events; NativeActivity still receives touch input. */
