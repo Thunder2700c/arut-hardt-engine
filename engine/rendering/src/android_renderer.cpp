@@ -2773,7 +2773,10 @@ bool AndroidRenderer::draw_frame() noexcept {
         ? 0.016F : std::chrono::duration<float>(now - last_camera_update_).count();
     last_camera_update_ = now;
     VkResult result = vkWaitForFences(device_, 1, &in_flight_, VK_TRUE, UINT64_MAX);
-    if (result != VK_SUCCESS) return false;
+    if (result != VK_SUCCESS) {
+        log_error("vkWaitForFences before frame failed", result);
+        return false;
+    }
     update_stress_camera(delta_seconds);
     if (gpu_visibility_enabled_ && gpu_visibility_result_pending_) {
         void* mapped = nullptr;
