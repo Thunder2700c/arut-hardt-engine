@@ -91,7 +91,7 @@ int main() {
         assert(controller.fixed_step(diagonal, ground_query, &flat,
                                      wall_collision, &wall));
     assert(controller.state().position.x < wall.minimum.x);
-    assert(controller.state().position.x > wall.min_x - 0.45F);
+    assert(controller.state().position.x > wall.minimum.x - 0.45F);
     assert(controller.state().position.z < -2.0F);
 
     controller.reset();
