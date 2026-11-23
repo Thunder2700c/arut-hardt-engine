@@ -14,6 +14,7 @@
 #include "arut/rendering/humanoid_animation.hpp"
 #include "arut/rendering/humanoid_ik.hpp"
 #include "arut/rendering/humanoid_skinning.hpp"
+#include "arut/animation/pose_history.hpp"
 #include <android/input.h>
 #include <android/log.h>
 #include <android/native_window.h>
@@ -75,6 +76,12 @@ struct RuntimeState final {
  float gamepad_move_y{0.0F};
  arut::core::HumanoidSkeleton humanoid_skeleton{arut::core::make_robot_mannequin_skeleton()};
  arut::rendering::HumanoidAnimator humanoid_animator{};
+ arut::animation::PoseHistory animation_pose_history{};
+ double animation_clock_seconds{0.0};
+ float previous_facing_yaw{0.0F};
+ bool has_previous_facing_yaw{false};
+ std::array<arut::animation::MotionTrajectoryPoint, arut::animation::kMotionTrajectorySamples> predicted_trajectory{};
+ bool predicted_trajectory_valid{false};
  std::array<FootPlantState, 2> foot_plants{};
  std::array<bool, 2> foot_ik_clamped{};
  std::array<arut::core::CharacterAabbObstacle, 6> arena_obstacles{{
@@ -795,6 +802,50 @@ void run(android_app* app) {
        pose.local_rotations[foot_index], foot_target, plant.blend);
     }
 
+    // Feed the renderer-independent animation runtime with the final
+    // procedural + IK pose. This keeps a rolling history for motion matching.
+    state.animation_clock_seconds += std::max(0.00001F, frame_delta);
+    arut::animation::Pose runtime_pose{};
+    runtime_pose.joint_count = arut::core::kHumanoidBoneCount;
+    for (std::size_t joint = 0; joint < runtime_pose.joint_count; ++joint) {
+     const auto& translation = pose.local_translations[joint];
+     const auto& rotation = pose.local_rotations[joint];
+     runtime_pose.joints[joint].translation = translation;
+     runtime_pose.joints[joint].rotation = {rotation.x, rotation.y, rotation.z, rotation.w};
+    }
+    arut::core::Vec3 estimated_acceleration{};
+    float estimated_angular_velocity = 0.0F;
+    if (const auto* previous = state.animation_pose_history.latest()) {
+     const float history_delta = static_cast<float>(
+      state.animation_clock_seconds - previous->timestamp_seconds);
+     if (history_delta > 0.0001F) {
+      estimated_acceleration = {
+       (character.velocity.x - previous->root_velocity.x) / history_delta,
+       (character.velocity.y - previous->root_velocity.y) / history_delta,
+       (character.velocity.z - previous->root_velocity.z) / history_delta};
+      if (state.has_previous_facing_yaw) {
+       const float yaw_delta = character.facing_yaw_radians - state.previous_facing_yaw;
+       estimated_angular_velocity = std::atan2(std::sin(yaw_delta), std::cos(yaw_delta)) /
+                                     history_delta;
+      }
+     }
+    }
+    (void)state.animation_pose_history.push(
+     state.animation_clock_seconds, runtime_pose, character.velocity);
+    state.previous_facing_yaw = character.facing_yaw_radians;
+    state.has_previous_facing_yaw = true;
+    arut::animation::TrajectoryPredictionInput trajectory_input{};
+    trajectory_input.world_position = character.position;
+    trajectory_input.world_velocity = character.velocity;
+    trajectory_input.world_acceleration = estimated_acceleration;
+    trajectory_input.facing_yaw_radians = character.facing_yaw_radians;
+    trajectory_input.angular_velocity_radians = estimated_angular_velocity;
+    trajectory_input.maximum_speed = 8.0F;
+    constexpr std::array<float, arut::animation::kMotionTrajectorySamples> trajectory_times{
+     0.2F, 0.4F, 0.8F};
+    state.predicted_trajectory_valid = arut::animation::TrajectoryPredictor::predict(
+     trajectory_input, trajectory_times, state.predicted_trajectory);
+
     arut::rendering::HumanoidSkinningPalette palette{};
     if (arut::rendering::build_humanoid_skinning_palette(
          state.humanoid_skeleton, pose, palette)) {
@@ -880,6 +931,11 @@ void run(android_app* app) {
       character.position.x, character.position.y, character.position.z,
       character.velocity.x, character.velocity.y, character.velocity.z,
       speed, character.grounded ? "true" : "false", state.character_fixed_steps);
+     log_info("ANIMATION_RUNTIME_HISTORY frames=%zu trajectory_valid=%s p0=%.3f,%.3f,%.3f p1=%.3f,%.3f,%.3f p2=%.3f,%.3f,%.3f",
+      state.animation_pose_history.size(), state.predicted_trajectory_valid ? "true" : "false",
+      state.predicted_trajectory[0].position_offset.x, state.predicted_trajectory[0].position_offset.y, state.predicted_trajectory[0].position_offset.z,
+      state.predicted_trajectory[1].position_offset.x, state.predicted_trajectory[1].position_offset.y, state.predicted_trajectory[1].position_offset.z,
+      state.predicted_trajectory[2].position_offset.x, state.predicted_trajectory[2].position_offset.y, state.predicted_trajectory[2].position_offset.z);
      log_info("ANIMATION_STATE state=%.*s phase=%.3f blend=%.3f speed=%.3f",
       static_cast<int>(arut::rendering::humanoid_animation_state_name(animation.state).size()),
       arut::rendering::humanoid_animation_state_name(animation.state).data(),
