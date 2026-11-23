@@ -28,7 +28,8 @@ public:
 
     bool initialize(ANativeWindow* window, AAssetManager* assets,
                     std::span<const arut::core::CubeRenderInstance> ecs_instances,
-                    std::span<const arut::core::TerrainMesh> terrain_meshes) noexcept;
+                    std::span<const arut::core::TerrainMesh> terrain_meshes,
+                    bool render_mannequin = true) noexcept;
     void shutdown() noexcept;
     bool set_quality_tier(arut::rendering::RenderQualityTier tier) noexcept;
     bool set_environment_probes(std::span<const arut::rendering::EnvironmentProbeInfluence> probes) noexcept;
@@ -162,6 +163,7 @@ private:
     VkBuffer mannequin_instance_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory mannequin_instance_memory_{VK_NULL_HANDLE};
     std::uint32_t mannequin_index_count_{0};
+    bool mannequin_scene_enabled_{true};
     VkBuffer cube_vertex_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory cube_vertex_memory_{VK_NULL_HANDLE};
     VkBuffer cube_index_buffer_{VK_NULL_HANDLE};
