@@ -6,6 +6,7 @@
 #include "arut/core/test_lab_profile.hpp"
 #include "arut/core/humanoid_skeleton.hpp"
 #include "arut/core/character_controller.hpp"
+#include "arut/core/third_person_camera.hpp"
 #include "arut/platform/android/asset_source.hpp"
 #include "arut/rendering/vulkan/android_renderer.hpp"
 #include "arut/rendering/humanoid_animation.hpp"
@@ -646,7 +647,15 @@ void run(android_app* app) {
      model.value[14] = character.position.z;
      const std::array<float, 3> camera_target{
       character.position.x, character.position.y + 1.0F, character.position.z};
-     state.renderer.set_humanoid_state(model, palette, camera_target);
+     const auto camera = arut::core::solve_third_person_camera(
+      camera_target, state.renderer.camera_yaw(), state.renderer.camera_pitch(),
+      terrain_ground_query, nullptr);
+     if (!camera.valid) {
+      log_warn("THIRD_PERSON_CAMERA terrain sweep failed; retaining previous camera.");
+     } else {
+      state.renderer.set_humanoid_state(
+       model, palette, camera_target, camera.position);
+     }
     } else {
      log_warn("HUMANOID_SKINNING pose palette generation failed.");
     }
