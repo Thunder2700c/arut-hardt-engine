@@ -1,6 +1,8 @@
 #include "arut/rendering/vulkan/android_renderer.hpp"
 #include "arut/rendering/robot_mannequin.hpp"
 #include "arut/rendering/humanoid_skinning.hpp"
+#include "arut/rendering/imported_mesh.hpp"
+#include "arut/rendering/imported_skinning.hpp"
 
 #include <android/log.h>
 #include <vulkan/vulkan_android.h>
@@ -2960,6 +2962,110 @@ void AndroidRenderer::update_stress_camera(float delta_seconds) noexcept {
     std::memcpy(static_cast<std::byte*>(mapped) + 80U, forward.data(), sizeof(float) * 3U);
     static_cast<float*>(mapped)[23] = 0.0F;
     vkUnmapMemory(device_, frame_uniform_memory_);
+}
+
+bool AndroidRenderer::set_imported_character(
+    const arut::animation::SkeletalAsset& asset,
+    const arut::animation::Pose& pose,
+    const arut::rendering::Mat4& model) noexcept {
+    if (!ready() || !mannequin_scene_enabled_ || !mannequin_instance_memory_ ||
+        !bone_palette_uniform_memory_ || !asset.valid() || asset.meshes.empty() ||
+        asset.meshes.front().indices.size() > UINT32_MAX) {
+        log_error("Imported character rejected: renderer, asset, or mannequin resources are not ready");
+        return false;
+    }
+
+    arut::rendering::MeshData mesh{};
+    if (!arut::rendering::convert_imported_skinned_mesh(asset, asset.meshes.front(), mesh) ||
+        mesh.vertices.empty() || mesh.indices.empty()) {
+        log_error("Imported character vertex conversion failed");
+        return false;
+    }
+
+    arut::rendering::ImportedSkinningPalette imported_palette{};
+    if (!arut::rendering::build_imported_skinning_palette(asset, pose, imported_palette)) {
+        log_error("Imported character skinning palette build failed");
+        return false;
+    }
+    arut::rendering::HumanoidSkinningPalette gpu_palette{};
+    for (std::size_t joint = 0; joint < imported_palette.joint_count; ++joint)
+        gpu_palette.matrices[joint] = imported_palette.matrices[joint];
+    for (std::size_t joint = imported_palette.joint_count;
+         joint < gpu_palette.matrices.size(); ++joint)
+        gpu_palette.matrices[joint] = arut::rendering::Mat4::identity();
+
+    VkBuffer new_vertex_buffer = VK_NULL_HANDLE;
+    VkDeviceMemory new_vertex_memory = VK_NULL_HANDLE;
+    VkBuffer new_index_buffer = VK_NULL_HANDLE;
+    VkDeviceMemory new_index_memory = VK_NULL_HANDLE;
+    const VkDeviceSize vertex_bytes = static_cast<VkDeviceSize>(
+        mesh.vertices.size() * sizeof(arut::rendering::MeshVertex));
+    const VkDeviceSize index_bytes = static_cast<VkDeviceSize>(
+        mesh.indices.size() * sizeof(std::uint32_t));
+    if (!create_buffer(vertex_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                       new_vertex_buffer, new_vertex_memory) ||
+        !create_buffer(index_bytes, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                       new_index_buffer, new_index_memory)) {
+        if (new_vertex_buffer) vkDestroyBuffer(device_, new_vertex_buffer, nullptr);
+        if (new_vertex_memory) vkFreeMemory(device_, new_vertex_memory, nullptr);
+        if (new_index_buffer) vkDestroyBuffer(device_, new_index_buffer, nullptr);
+        if (new_index_memory) vkFreeMemory(device_, new_index_memory, nullptr);
+        log_error("Imported character GPU buffer allocation failed");
+        return false;
+    }
+
+    void* mapped = nullptr;
+    VkResult result = vkMapMemory(device_, new_vertex_memory, 0, vertex_bytes, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        vkDestroyBuffer(device_, new_vertex_buffer, nullptr);
+        vkFreeMemory(device_, new_vertex_memory, nullptr);
+        vkDestroyBuffer(device_, new_index_buffer, nullptr);
+        vkFreeMemory(device_, new_index_memory, nullptr);
+        log_error("Map imported character vertex buffer failed", result);
+        return false;
+    }
+    std::memcpy(mapped, mesh.vertices.data(), static_cast<std::size_t>(vertex_bytes));
+    vkUnmapMemory(device_, new_vertex_memory);
+
+    mapped = nullptr;
+    result = vkMapMemory(device_, new_index_memory, 0, index_bytes, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        vkDestroyBuffer(device_, new_vertex_buffer, nullptr);
+        vkFreeMemory(device_, new_vertex_memory, nullptr);
+        vkDestroyBuffer(device_, new_index_buffer, nullptr);
+        vkFreeMemory(device_, new_index_memory, nullptr);
+        log_error("Map imported character index buffer failed", result);
+        return false;
+    }
+    std::memcpy(mapped, mesh.indices.data(), static_cast<std::size_t>(index_bytes));
+    vkUnmapMemory(device_, new_index_memory);
+
+    result = vkDeviceWaitIdle(device_);
+    if (result != VK_SUCCESS) {
+        vkDestroyBuffer(device_, new_vertex_buffer, nullptr);
+        vkFreeMemory(device_, new_vertex_memory, nullptr);
+        vkDestroyBuffer(device_, new_index_buffer, nullptr);
+        vkFreeMemory(device_, new_index_memory, nullptr);
+        log_error("Wait before replacing imported character buffers failed", result);
+        return false;
+    }
+
+    if (imported_character_vertex_buffer_) vkDestroyBuffer(device_, imported_character_vertex_buffer_, nullptr);
+    if (imported_character_vertex_memory_) vkFreeMemory(device_, imported_character_vertex_memory_, nullptr);
+    if (imported_character_index_buffer_) vkDestroyBuffer(device_, imported_character_index_buffer_, nullptr);
+    if (imported_character_index_memory_) vkFreeMemory(device_, imported_character_index_memory_, nullptr);
+    imported_character_vertex_buffer_ = new_vertex_buffer;
+    imported_character_vertex_memory_ = new_vertex_memory;
+    imported_character_index_buffer_ = new_index_buffer;
+    imported_character_index_memory_ = new_index_memory;
+    imported_character_index_count_ = static_cast<std::uint32_t>(mesh.indices.size());
+    imported_character_enabled_ = true;
+
+    pending_mannequin_model_ = model;
+    pending_humanoid_palette_ = gpu_palette;
+    has_external_humanoid_state_ = true;
+    arut_android_log(ANDROID_LOG_INFO, "IMPORTED_CHARACTER uploaded=true mesh=first_skinned_mesh skinning=128_joint_palette");
+    return true;
 }
 
 void AndroidRenderer::set_humanoid_state(
