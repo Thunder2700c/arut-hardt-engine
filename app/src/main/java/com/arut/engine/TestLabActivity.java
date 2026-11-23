@@ -5,13 +5,19 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
 
-/** Java-only profile chooser; the native runtime is launched only after selection. */
+/** Selects the profile before NativeActivity starts its native engine thread. */
 public final class TestLabActivity extends Activity {
+    static {
+        System.loadLibrary("arut_android");
+    }
+
     private static final CharSequence[] PROFILES = {
         "ECS Stress Test — 5,000 entities and renderer load",
         "Humanoid Test — mannequin and character systems",
         "Combined Integration — stress scene plus humanoid"
     };
+
+    private static native void nativeSelectProfile(int profileId);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -23,8 +29,9 @@ public final class TestLabActivity extends Activity {
         new AlertDialog.Builder(this)
             .setTitle("ARUT-HARDT Test Laboratory — Select a profile")
             .setItems(PROFILES, (dialog, which) -> {
+                // This must run BEFORE NativeActivity.onCreate starts android_main.
+                nativeSelectProfile(which);
                 Intent intent = new Intent(TestLabActivity.this, EngineNativeActivity.class);
-                intent.putExtra(EngineNativeActivity.EXTRA_PROFILE_ID, which);
                 startActivity(intent);
                 finish();
             })
