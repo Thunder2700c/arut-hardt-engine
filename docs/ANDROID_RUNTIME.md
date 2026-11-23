@@ -42,3 +42,13 @@ The host stress test verifies 5,000 live ECS entities, all required components, 
 Surface-bound resources are destroyed on `APP_CMD_TERM_WINDOW` and rebuilt on `APP_CMD_INIT_WINDOW`. Swapchain out-of-date/suboptimal results trigger recreation.
 
 The Galaxy S23 FE has been used for runtime testing. This does not establish cross-vendor correctness: the Phase 2 validation gate still requires a second Android GPU family, graceful quality-fallback checks and a GPU-shader-versus-CPU-reference comparison.
+
+## Development Test Laboratory
+
+The NativeActivity subclass `com.arut.engine.TestLabActivity` displays the Android profile picker before scene startup. Select one profile:
+
+- **ECS Stress Test** creates the 5,000-entity ECS stress scene and does not submit the humanoid mannequin.
+- **Humanoid Test** skips creation of the 5,000 ECS entities and submits the procedural mannequin with the streamed terrain arena.
+- **Combined Integration** creates both as a separate combined test.
+
+The selection is passed to native C++ through a small JNI callback and stored as a stable `TestLabProfile` ID. Runtime logs include `TEST_LAB selected=...` and `TEST_LAB_RENDER_PROFILE`. Restart the app to select a different profile. The Humanoid Test currently verifies static bind-pose mesh submission only; animation, character movement, IK and humanoid touch controls are not implemented yet.
