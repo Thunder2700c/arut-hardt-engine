@@ -3172,6 +3172,7 @@ bool AndroidRenderer::set_imported_character(
 
     pending_mannequin_model_ = model;
     pending_humanoid_palette_ = gpu_palette;
+    humanoid_camera_position_ = camera_position_;
     has_external_humanoid_state_ = true;
     arut_android_log(ANDROID_LOG_INFO, "IMPORTED_CHARACTER uploaded=true mesh=first_skinned_mesh skinning=128_joint_palette");
     return true;
