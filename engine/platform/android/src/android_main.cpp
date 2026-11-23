@@ -498,8 +498,15 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
 extern "C" JNIEXPORT void JNICALL
 Java_com_arut_engine_TestLabActivity_nativeSelectProfile(
     JNIEnv*, jclass, jint profile_id) noexcept {
+ __android_log_print(ANDROID_LOG_INFO, kLogTag,
+  "TEST_LAB JNI profile_selection_callback profile_id=%d", profile_id);
  if (arut::core::valid_test_lab_profile(profile_id)) {
   g_requested_test_profile.store(profile_id, std::memory_order_release);
+  __android_log_print(ANDROID_LOG_INFO, kLogTag,
+   "TEST_LAB JNI profile_selection_accepted profile_id=%d", profile_id);
+ } else {
+  __android_log_print(ANDROID_LOG_ERROR, kLogTag,
+   "TEST_LAB JNI invalid_profile_id=%d", profile_id);
  }
 }
 extern "C" void arut_android_log(int priority, const char* message) noexcept {
