@@ -1,1 +1,1 @@
-Android ARM64 debug APK build: select native profile through JNI in the Java chooser BEFORE launching NativeActivity, so android_main never starts with the default invalid profile.
+Phase 4 Android device-test build: skip zero-sized ECS GPU visibility input allocation in humanoid-only profile; initialize humanoid controller at sampled terrain height for both humanoid and combined profiles. Preserve JNI profile selection before NativeActivity startup.
