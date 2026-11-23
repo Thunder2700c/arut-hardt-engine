@@ -84,6 +84,7 @@ struct RuntimeState final {
  bool test_arena_enabled{false};
  float camera_follow_distance{4.2F};
  bool camera_terrain_obstructed{false};
+ bool camera_geometry_obstructed{false};
  std::uint64_t character_fixed_steps{0};
  std::uint64_t lifecycle_events{0};
  std::uint64_t input_events{0};
@@ -695,14 +696,20 @@ void run(android_app* app) {
      model.value[14] = character.position.z;
      const std::array<float, 3> camera_target{
       character.position.x, character.position.y + 1.0F, character.position.z};
+     const std::span<const arut::core::CharacterAabbObstacle> camera_obstacles =
+      state.test_arena_enabled
+       ? std::span<const arut::core::CharacterAabbObstacle>{
+          state.arena_obstacles.data(), state.arena_obstacles.size()}
+       : std::span<const arut::core::CharacterAabbObstacle>{};
      const auto camera = arut::core::solve_third_person_camera(
       camera_target, state.renderer.camera_yaw(), state.renderer.camera_pitch(),
-      terrain_ground_query, nullptr);
+      terrain_ground_query, nullptr, {}, camera_obstacles);
      if (!camera.valid) {
       log_warn("THIRD_PERSON_CAMERA terrain sweep failed; retaining previous camera.");
      } else {
       state.camera_follow_distance = camera.distance;
       state.camera_terrain_obstructed = camera.terrain_obstructed;
+      state.camera_geometry_obstructed = camera.geometry_obstructed;
       state.renderer.set_humanoid_state(
        model, palette, camera_target, camera.position);
      }
@@ -769,9 +776,10 @@ void run(android_app* app) {
       state.foot_ik_clamped[0] ? "true" : "false",
       state.foot_ik_clamped[1] ? "true" : "false");
      const auto camera_position = state.renderer.camera_position();
-     log_info("THIRD_PERSON_CAMERA distance=%.3f terrain_obstructed=%s position=%.3f,%.3f,%.3f yaw=%.3f pitch=%.3f",
+     log_info("THIRD_PERSON_CAMERA distance=%.3f terrain_obstructed=%s geometry_obstructed=%s position=%.3f,%.3f,%.3f yaw=%.3f pitch=%.3f",
       state.camera_follow_distance,
       state.camera_terrain_obstructed ? "true" : "false",
+      state.camera_geometry_obstructed ? "true" : "false",
       camera_position[0], camera_position[1], camera_position[2],
       state.renderer.camera_yaw(), state.renderer.camera_pitch());
     }
