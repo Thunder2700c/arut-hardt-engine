@@ -9,6 +9,7 @@
 #include "arut/rendering/gpu_visibility.hpp"
 #include "arut/rendering/environment_probe.hpp"
 #include "arut/rendering/humanoid_skinning.hpp"
+#include "arut/animation/gltf_importer.hpp"
 #include "arut/core/cube_stress_scene.hpp"
 #include "arut/core/world_systems.hpp"
 #include <array>
@@ -37,6 +38,9 @@ public:
     bool set_environment_probes(std::span<const arut::rendering::EnvironmentProbeInfluence> probes) noexcept;
     bool draw_frame() noexcept;
     bool set_terrain_cells(std::span<const arut::core::TerrainMesh> terrain_meshes) noexcept;
+    // Uploads the first skinned mesh from an imported GLB asset and installs its initial pose.
+    bool set_imported_character(const arut::animation::SkeletalAsset& asset,
+        const arut::animation::Pose& pose, const arut::rendering::Mat4& model) noexcept;
     [[nodiscard]] std::array<float, 3> camera_position() const noexcept { return camera_position_; }
     [[nodiscard]] float camera_yaw() const noexcept { return camera_yaw_; }
     [[nodiscard]] float camera_pitch() const noexcept { return camera_pitch_; }
@@ -187,6 +191,12 @@ private:
     VkBuffer mannequin_index_buffer_{VK_NULL_HANDLE};
     VkDeviceMemory mannequin_index_memory_{VK_NULL_HANDLE};
     VkBuffer mannequin_instance_buffer_{VK_NULL_HANDLE};
+    VkBuffer imported_character_vertex_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory imported_character_vertex_memory_{VK_NULL_HANDLE};
+    VkBuffer imported_character_index_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory imported_character_index_memory_{VK_NULL_HANDLE};
+    std::uint32_t imported_character_index_count_{0U};
+    bool imported_character_enabled_{false};
     VkDeviceMemory mannequin_instance_memory_{VK_NULL_HANDLE};
     std::uint32_t mannequin_index_count_{0};
     VkBuffer static_scene_instance_buffer_{VK_NULL_HANDLE};
