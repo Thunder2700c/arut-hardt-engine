@@ -1,10 +1,33 @@
 #include "arut/core/character_controller.hpp"
 
 #include <cassert>
+#include <algorithm>
+
 #include <cmath>
 #include <cstdint>
 
 namespace {
+struct Wall final {
+    float min_x{1.0F};
+    float max_x{1.4F};
+    float min_y{0.0F};
+    float max_y{3.0F};
+    float min_z{-20.0F};
+    float max_z{20.0F};
+};
+
+bool wall_collision(const arut::core::Vec3& feet, float radius,
+                    float height, void* raw) noexcept {
+    const auto& wall = *static_cast<const Wall*>(raw);
+    const float closest_x = std::clamp(feet.x, wall.min_x, wall.max_x);
+    const float closest_z = std::clamp(feet.z, wall.min_z, wall.max_z);
+    const float dx = feet.x - closest_x;
+    const float dz = feet.z - closest_z;
+    const bool vertical_overlap =
+        feet.y < wall.max_y && feet.y + height > wall.min_y;
+    return vertical_overlap && dx*dx + dz*dz < radius*radius;
+}
+
 
 struct GroundMode final {
     enum class Kind { Flat, SteepBeyondOrigin, StepBeyondOrigin } kind{Kind::Flat};
@@ -72,6 +95,18 @@ int main() {
     for (int i = 0; i < 10; ++i)
         assert(controller.fixed_step(right, ground_query, &step));
     assert(std::abs(controller.state().position.x) < 1.0e-5F);
+
+    Wall wall{};
+    controller.reset();
+    CharacterInput diagonal{};
+    diagonal.move_x = 1.0F;
+    diagonal.move_y = 1.0F;
+    for (int i = 0; i < 120; ++i)
+        assert(controller.fixed_step(diagonal, ground_query, &flat,
+                                     wall_collision, &wall));
+    assert(controller.state().position.x < wall.min_x);
+    assert(controller.state().position.x > wall.min_x - 0.45F);
+    assert(controller.state().position.z < -2.0F);
 
     controller.reset();
     const auto steps = controller.update(forward, 0.16F, ground_query, &flat);
