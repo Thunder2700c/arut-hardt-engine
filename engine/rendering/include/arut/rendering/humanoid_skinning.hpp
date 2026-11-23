@@ -141,5 +141,7 @@ struct HumanoidSkinningPalette final {
 
 static_assert(sizeof(HumanoidSkinningPalette) ==
               sizeof(Mat4) * kHumanoidShaderBoneCount);
+// Vulkan guarantees at least 16 KiB for maxUniformBufferRange; this palette is 8 KiB.
+static_assert(sizeof(HumanoidSkinningPalette) <= 16U * 1024U);
 
 } // namespace arut::rendering
