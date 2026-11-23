@@ -1,5 +1,6 @@
 #include "arut/rendering/vulkan/android_renderer.hpp"
 #include "arut/rendering/robot_mannequin.hpp"
+#include "arut/rendering/humanoid_skinning.hpp"
 
 #include <android/log.h>
 #include <vulkan/vulkan_android.h>
@@ -1070,12 +1071,14 @@ bool AndroidRenderer::create_shadow_pipeline() noexcept {
         {0, sizeof(arut::rendering::MeshVertex), VK_VERTEX_INPUT_RATE_VERTEX},
         {1, sizeof(arut::rendering::Mat4), VK_VERTEX_INPUT_RATE_INSTANCE}
     }};
-    const std::array<VkVertexInputAttributeDescription, 5> attributes{{
+    const std::array<VkVertexInputAttributeDescription, 7> attributes{{
         {0, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, position))},
         {4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0},
         {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16},
         {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32},
-        {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48}
+        {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48},
+        {8, 0, VK_FORMAT_R32G32B32A32_UINT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, joints))},
+        {9, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, weights))}
     }};
     VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     vertex_input.vertexBindingDescriptionCount = static_cast<std::uint32_t>(bindings.size());
@@ -2443,7 +2446,7 @@ bool AndroidRenderer::create_pbr_pipeline() noexcept {
     result = vkCreateShaderModule(device_, &module_info, nullptr, &fragment_module);
     if (result != VK_SUCCESS) { vkDestroyShaderModule(device_, vertex_module, nullptr); log_error("Create PBR fragment shader module failed", result); return false; }
 
-    const std::array<VkDescriptorSetLayoutBinding, 8> frame_bindings{{
+    const std::array<VkDescriptorSetLayoutBinding, 9> frame_bindings{{
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
@@ -2451,7 +2454,8 @@ bool AndroidRenderer::create_pbr_pipeline() noexcept {
         {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
-        {7, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}
+        {7, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+        {8, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr}
     }};
     VkDescriptorSetLayoutCreateInfo set_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     set_info.bindingCount = static_cast<std::uint32_t>(frame_bindings.size());
@@ -2491,7 +2495,7 @@ bool AndroidRenderer::create_pbr_pipeline() noexcept {
         {0, sizeof(arut::rendering::MeshVertex), VK_VERTEX_INPUT_RATE_VERTEX},
         {1, sizeof(arut::rendering::Mat4), VK_VERTEX_INPUT_RATE_INSTANCE}
     }};
-    const std::array<VkVertexInputAttributeDescription, 8> attributes{{
+    const std::array<VkVertexInputAttributeDescription, 10> attributes{{
         {0, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, position))},
         {1, 0, VK_FORMAT_R32G32B32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, normal))},
         {2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, tangent))},
@@ -2499,7 +2503,9 @@ bool AndroidRenderer::create_pbr_pipeline() noexcept {
         {4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0},
         {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16},
         {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32},
-        {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48}
+        {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48},
+        {8, 0, VK_FORMAT_R32G32B32A32_UINT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, joints))},
+        {9, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<std::uint32_t>(offsetof(arut::rendering::MeshVertex, weights))}
     }};
     VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     vertex_input.vertexBindingDescriptionCount = static_cast<std::uint32_t>(bindings.size());
