@@ -25,6 +25,8 @@ public:
     [[nodiscard]] bool transition_to(std::uint32_t state_id,
                                      float blend_seconds) noexcept;
     [[nodiscard]] bool update(float delta_seconds, Pose& output) noexcept;
+    [[nodiscard]] bool update(float delta_seconds, Pose& output,
+                              std::vector<AnimationEvent>& output_events);
     [[nodiscard]] std::uint32_t current_state() const noexcept { return current_state_id_; }
     [[nodiscard]] bool transitioning() const noexcept { return transition_active_; }
     void reset() noexcept;
