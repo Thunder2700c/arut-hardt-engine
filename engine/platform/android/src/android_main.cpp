@@ -362,6 +362,37 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
   static_cast<int>(arut::core::test_lab_profile_name(state.selected_profile).size()),
   arut::core::test_lab_profile_name(state.selected_profile).data(),
   stress_instances.size(), include_mannequin ? "true" : "false");
+
+ state.imported_character_active = false;
+ state.imported_character_animator_ready = false;
+ if (include_mannequin && app->activity && app->activity->assetManager) {
+  AAsset* probe = AAssetManager_open(app->activity->assetManager,
+                                     "Characters/hero.glb", AASSET_MODE_STREAMING);
+  if (probe) {
+   AAsset_close(probe);
+   const auto identity = arut::rendering::Mat4::identity();
+   if (state.renderer.load_imported_character_glb(
+        "Characters/hero.glb", state.imported_character_asset, identity)) {
+    state.imported_character_rest_pose = {};
+    state.imported_character_rest_pose.joint_count =
+     state.imported_character_asset.joint_count;
+    for (std::size_t joint = 0; joint < state.imported_character_asset.joint_count; ++joint)
+     state.imported_character_rest_pose.joints[joint] =
+      state.imported_character_asset.joints[joint].rest_local;
+    state.imported_character_active = true;
+    state.imported_character_animator_ready =
+     configure_imported_character_animator(state);
+    log_info("IMPORTED_CHARACTER runtime_active=true joints=%zu clips=%zu graph_ready=%s",
+     state.imported_character_asset.joint_count,
+     state.imported_character_asset.animations.size(),
+     state.imported_character_animator_ready ? "true" : "false");
+   } else {
+    log_warn("IMPORTED_CHARACTER packaged GLB was found but could not be installed");
+   }
+  } else {
+   log_info("IMPORTED_CHARACTER optional asset absent; using procedural robot mannequin");
+  }
+ }
  return true;
 }
 
