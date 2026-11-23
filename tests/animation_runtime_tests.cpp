@@ -16,6 +16,7 @@ static AnimationClip make_clip() {
     clip.duration_seconds=1.0F;
     clip.looping=true;
     clip.keys={{0.0F,a},{1.0F,b}};
+    clip.events={{0.05F,"loop_marker","wrap"},{0.2F,"footstep","left"},{0.8F,"impact","heavy"}};
     return clip;
 }
 
@@ -72,10 +73,29 @@ int main() {
     assert(std::abs(blended.joints[1].translation.y-
         (rest.joints[1].translation.y+0.25F))<1.0e-4F);
 
+    std::vector<AnimationEvent> fired;
+    AnimationPlayer event_player;
+    event_player.set_clip(&clip);
+    assert(event_player.update(0.25F, sampled, fired));
+    assert(fired.size()==2U && fired[0].name=="loop_marker" && fired[1].name=="footstep");
+    fired.clear();
+    assert(event_player.update(0.60F, sampled, fired));
+    assert(fired.size()==1U && fired[0].name=="impact");
+    fired.clear();
+    assert(event_player.update(0.25F, sampled, fired));
+    assert(fired.size()==1U && fired[0].name=="loop_marker");
+    event_player.set_playback_rate(-1.0F);
+    fired.clear();
+    assert(event_player.update(0.10F, sampled, fired));
+    assert(fired.size()==1U && fired[0].name=="loop_marker");
+    auto invalid_event=clip;
+    invalid_event.events={{1.0F,"invalid",""}};
+    assert(!invalid_event.valid(arut::core::kHumanoidBoneCount));
+
     auto invalid=clip;
     invalid.keys[1].time_seconds=0.0F;
     assert(!invalid.valid(arut::core::kHumanoidBoneCount));
     test_large_skeleton();
-    std::cout << "ANIMATION_RUNTIME_TEST pass clip_sample=1 player_loop=1 pose_blend=1 invalid_data=1 large_rig=96\n";
+    std::cout << "ANIMATION_RUNTIME_TEST pass clip_sample=1 player_loop=1 pose_blend=1 event_tracks=1 invalid_data=1 large_rig=96\n";
     return 0;
 }
