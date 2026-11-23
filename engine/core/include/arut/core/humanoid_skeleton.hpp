@@ -69,14 +69,16 @@ struct HumanoidSkeleton final {
     set(B::Chest, 2, {0, 0.24F, 0}, 0.22F);
     set(B::Neck, 3, {0, 0.22F, 0}, 0.07F);
     set(B::Head, 4, {0, 0.16F, 0}, 0.13F);
-    set(B::LeftClavicle, 3, {-0.18F, 0.15F, 0}, 0.075F);
-    set(B::LeftUpperArm, 6, {-0.18F, -0.02F, 0}, 0.085F);
-    set(B::LeftLowerArm, 7, {-0.27F, 0, 0}, 0.065F);
-    set(B::LeftHand, 8, {-0.23F, 0, 0}, 0.055F);
-    set(B::RightClavicle, 3, {0.18F, 0.15F, 0}, 0.075F);
-    set(B::RightUpperArm, 10, {0.18F, -0.02F, 0}, 0.085F);
-    set(B::RightLowerArm, 11, {0.27F, 0, 0}, 0.065F);
-    set(B::RightHand, 12, {0.23F, 0, 0}, 0.055F);
+    // Relaxed A-pose: arms angle down from the shoulders instead of the
+    // old horizontal T-pose, leaving room for locomotion and combat poses.
+    set(B::LeftClavicle, 3, {-0.15F, 0.12F, 0}, 0.075F);
+    set(B::LeftUpperArm, 6, {-0.20F, -0.10F, 0}, 0.095F);
+    set(B::LeftLowerArm, 7, {-0.22F, -0.17F, 0}, 0.075F);
+    set(B::LeftHand, 8, {-0.15F, -0.11F, 0}, 0.055F);
+    set(B::RightClavicle, 3, {0.15F, 0.12F, 0}, 0.075F);
+    set(B::RightUpperArm, 10, {0.20F, -0.10F, 0}, 0.095F);
+    set(B::RightLowerArm, 11, {0.22F, -0.17F, 0}, 0.075F);
+    set(B::RightHand, 12, {0.15F, -0.11F, 0}, 0.055F);
     set(B::LeftUpperLeg, 1, {-0.11F, -0.08F, 0}, 0.105F);
     set(B::LeftLowerLeg, 14, {0, -0.43F, 0}, 0.075F);
     set(B::LeftFoot, 15, {0, -0.42F, -0.10F}, 0.075F);
