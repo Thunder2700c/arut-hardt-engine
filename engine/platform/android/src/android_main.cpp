@@ -649,6 +649,13 @@ void run(android_app* app) {
   if (ident >= 0 && source) source->process(app, source);
   if (ident == ALOOPER_POLL_ERROR) log_warn("Android looper returned an error.");
   if (state.resumed && state.has_window && state.focused && state.renderer.ready()) {
+   if (!arut::core::test_lab_includes_humanoid(state.selected_profile)) {
+    state.character_input_router.set_analog(0.0F, 0.0F);
+    const auto keyboard = state.character_input_router.sample();
+    state.renderer.set_gamepad_movement_input(
+     std::clamp(keyboard.move_x + state.gamepad_move_x, -1.0F, 1.0F),
+     std::clamp(keyboard.move_y + state.gamepad_move_y, -1.0F, 1.0F));
+   }
    if (arut::core::test_lab_includes_humanoid(state.selected_profile)) {
     const float frame_delta = std::chrono::duration<float>(
      std::chrono::steady_clock::now() - frame_start).count();
