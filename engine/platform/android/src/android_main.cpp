@@ -72,8 +72,12 @@ std::uint32_t cell_lod_resolution(arut::core::TerrainLod lod) noexcept {
  }
  return 4U;
 }
-bool build_cell_content(RuntimeState& state, arut::core::WorldCell cell,
- float camera_x, float camera_z, arut::core::WorldCellContent& content) {
+bool build_cell_content(RuntimeState& state, arut::core::AssetManager& assets,
+ arut::core::WorldCell cell, float camera_x, float camera_z,
+ arut::core::WorldCellContent& content) {
+ const auto material = assets.load("textures/demo_base_color.png");
+ if (!material) return false;
+ content.material_asset = material.bytes;
  content.cell = cell;
  content.lod = select_cell_lod(state, cell, camera_x, camera_z);
  const float size = state.world_partition.cell_size();
@@ -323,8 +327,8 @@ void run(android_app* app) {
  try {
   const auto streaming = state.world_streamer.update(
    state.world_partition, 0.0F, 0.0F, 2U,
-   [&state](arut::core::WorldCell cell, arut::core::WorldCellContent& content) {
-    return build_cell_content(state, cell, 0.0F, 0.0F, content);
+   [&state, &asset_manager](arut::core::WorldCell cell, arut::core::WorldCellContent& content) {
+    return build_cell_content(state, asset_manager, cell, 0.0F, 0.0F, content);
    });
   state.terrain_cells = state.world_streamer.collect_terrain_meshes(state.world_partition);
   std::size_t terrain_vertices = 0U, terrain_indices = 0U;
@@ -334,9 +338,17 @@ void run(android_app* app) {
   }
   log_info("TERRAIN_CELLS generated=true cells=%zu vertices=%zu indices=%zu",
    state.terrain_cells.size(), terrain_vertices, terrain_indices);
+  std::size_t cells_with_material = 0U;
+  for (const auto cell : state.world_partition.active_cells()) {
+   const auto* payload = state.world_streamer.find(cell);
+   if (payload && payload->material_asset) ++cells_with_material;
+  }
+  const auto cache = asset_manager.stats();
   log_info("WORLD_STREAMING active_cells=%zu resident_cells=%zu loaded=%zu unloaded=%zu failed=%zu cell_size=%.1f",
    state.world_partition.active_count(), streaming.resident, streaming.loaded,
    streaming.unloaded, streaming.failed, state.world_partition.cell_size());
+  log_info("WORLD_STREAMING_ASSETS cells_with_material=%zu cache_entries=%zu cache_hits=%" PRIu64 " cache_misses=%" PRIu64 " cached_bytes=%zu",
+   cells_with_material, cache.entries, cache.hits, cache.misses, cache.bytes);
  } catch (const std::exception& error) {
   log_warn("Phase 3 world-system initialization failed: %s", error.what());
  }
@@ -396,13 +408,13 @@ void run(android_app* app) {
     const auto camera = state.renderer.camera_position();
     const auto streaming = state.world_streamer.update(
      state.world_partition, camera[0], camera[2], 2U,
-     [&state, camera](arut::core::WorldCell cell, arut::core::WorldCellContent& content) {
-      return build_cell_content(state, cell, camera[0], camera[2], content);
+     [&state, &asset_manager, camera](arut::core::WorldCell cell, arut::core::WorldCellContent& content) {
+      return build_cell_content(state, asset_manager, cell, camera[0], camera[2], content);
      }, {},
-     [&state, camera](arut::core::WorldCell cell, arut::core::WorldCellContent& content) {
+     [&state, &asset_manager, camera](arut::core::WorldCell cell, arut::core::WorldCellContent& content) {
       const auto lod = select_cell_lod(state, cell, camera[0], camera[2]);
       if (lod == content.lod) return false;
-      return build_cell_content(state, cell, camera[0], camera[2], content);
+      return build_cell_content(state, asset_manager, cell, camera[0], camera[2], content);
      });
     if (streaming.loaded > 0U || streaming.unloaded > 0U || streaming.updated > 0U)
      state.terrain_cells_dirty = true;
