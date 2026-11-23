@@ -94,3 +94,14 @@ The forgotten adjacent feature is the reusable vehicle/car system already listed
 - Added the retargeter to `arut_animation` and registered its host test.
 - This is a first retargeting layer, not a production retargeting solution: it currently uses normalized names/aliases and per-bone local translation length ratios. It does not yet solve arbitrary hierarchy mismatches, twist-bone distribution, IK retargeting, or retarget profiles authored in editor tooling.
 - Key commits: retarget API `500678d`; implementation `a0ca336`; tests `f16779d`; CMake integration `f02c463`; roadmap update `da365b7`.
+
+## Expanded skeleton runtime milestone — 2026-11-23
+
+- Raised the renderer-independent `Pose` capacity from the mannequin's 20 joints to 128. The 20-bone mannequin remains the reference rig; it no longer defines the CPU animation runtime's maximum.
+- GLB import and retarget rig/map capacities inherit the 128-joint runtime limit. Parent indices remain signed 16-bit and skin vertex joint indices remain unsigned 16-bit, so 128 is within the existing data representation.
+- Added a 96-joint animation regression test covering clip validation, sampling and pose blending.
+- Added a 96-joint retarget regression test covering complete name mapping and pose transfer.
+- Commits: pose capacity `c69e736`; importer capacity `cd43c83`; large-rig animation test `9706d17`; large-rig retarget test `775d6bb`.
+- Important limitation: this is CPU animation/import/retarget capacity only. The existing Android mannequin renderer still uploads a 20-matrix palette and only renders its procedural mannequin path. Do not claim 128-joint GPU skinning or imported-character rendering yet.
+- The next major 4B block is renderer-independent skin palette generation plus Android GPU palette/buffer integration and imported mesh upload. Vulkan's documented compute-skinning design uses separate rest-vertex, joint-matrix and output-vertex buffers; this is a possible later optimization, not yet implemented. See the [Vulkan compute skinning pipeline](https://docs.vulkan.org/tutorial/latest/Advanced_glTF/Skeletal_Compute_Skinning/03_compute_skinning.html).
+- Verification: source and regression tests are committed, but no completed CI result has been observed in this session. Compile/test status remains unverified.
