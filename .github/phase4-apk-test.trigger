@@ -1,1 +1,1 @@
-Phase 4 Android device-test build: skip zero-sized ECS GPU visibility input allocation in humanoid-only profile; initialize humanoid controller at sampled terrain height for both humanoid and combined profiles. Preserve JNI profile selection before NativeActivity startup.
+Phase 4 implementation gate passed: C++ host build/tests and Android ARM64 native compile passed. Build the debug APK for S23 FE runtime validation of the combined Phase 3/4 test lab.
