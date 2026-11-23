@@ -24,6 +24,10 @@ int main() {
     std::array<MotionTrajectoryPoint,kMotionTrajectorySamples> trajectory{};
     assert(TrajectoryPredictor::predict(input,times,trajectory));
     assert(trajectory[2].position_offset.x>trajectory[0].position_offset.x);
+    input.world_velocity={20.0F,0.0F,0.0F};
+    input.maximum_speed=5.0F;
+    assert(TrajectoryPredictor::predict(input,times,trajectory));
+    assert(trajectory[2].position_offset.x<=4.001F);
     input.maximum_speed=0.0F;
     assert(!TrajectoryPredictor::predict(input,times,trajectory));
     std::cout<<"POSE_HISTORY_TRAJECTORY_TEST pass ring_capacity=32 trajectory_samples=3\n";
