@@ -25,3 +25,13 @@ The forgotten adjacent feature is the reusable vehicle/car system already listed
 
 - Added docs/GASP_STYLE_ANIMATION_PLAN.md as the architecture and implementation baseline.
 - No runtime feature is claimed complete by this planning commit.
+
+## 4A implementation slice committed
+
+- Added `engine/animation/include/arut/animation/runtime.hpp`: renderer-independent pose, transform, quaternion, keyframe clip, animation player, pose blend API.
+- Added `engine/animation/src/runtime.cpp`: clip validation, keyframe sampling, quaternion spherical interpolation, playback-rate/looping behavior and pose blending.
+- Added `tests/animation_runtime_tests.cpp`: clip sampling, playback wrap, blend interpolation and invalid-key ordering checks.
+- Updated root `CMakeLists.txt`: builds `arut_animation`, links it into Android native target, and registers host test.
+- Commits: `b077670` API; `33e2b58` implementation; `3bbdc1b` tests; `f9c701e` CMake integration.
+- Verification status at log update: source committed to main; CI result not yet observed. Android device behavior not tested.
+- Remaining 4A work: bridge existing Android character animator to this runtime, move pose ownership out of renderer-specific code, add deterministic transition graph/state-machine and root-motion contracts. This is a first implementation slice, not 4A completion.
