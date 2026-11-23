@@ -79,3 +79,10 @@ The Android profile picker is implemented by `app/src/main/java/com/arut/engine/
 - The reference humanoid uses +Y up and -Z forward. Foot rest offsets, controller forward movement, mannequin geometry and third-person camera convention must stay consistent with this axis.
 - Host tests verify the rest pose produces near-zero hip/knee correction, adjusted targets bend the leg, slope normals orient the foot, unreachable targets clamp, and invalid inputs are rejected.
 - The current IK is a heightfield foot-placement system, not general-purpose full-body IK. It does not yet solve foot collision against arbitrary props, dynamic bodies, ledges or overhangs, and it has not yet been visually validated on the S23 FE.
+
+
+## Default packaged character asset
+
+The Android humanoid profile now packages a default rigged GLB as `Characters/hero.glb` before Gradle assembles the APK. The pinned source is KinemIQ's 35-animation CC0 release (66-bone humanoid skeleton plus mannequin); the asset-fetch script verifies the release archive SHA-256 and validates the extracted GLB v2 header/length. The runtime already probes this path and installs the imported character through the Vulkan skinned-mesh path. When installation succeeds, the imported character draw suppresses the procedural mannequin draw. User-provided GLB skins remain optional replacements.
+
+The binary is fetched at build time rather than committed as a Git binary. This keeps the source repository small while ensuring the APK contains the model. The source pack's published CC0 terms permit redistribution and modification. The current importer/render path still has known limits: first skinned mesh only, one skin, no imported PBR texture/material binding, and animation playback only for clips supported by the importer and runtime. The Android build log must show the asset-fetch step succeeding; an APK build alone does not prove visual correctness on a physical device.
