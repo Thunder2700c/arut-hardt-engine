@@ -1,6 +1,7 @@
 #pragma once
 
 #include "arut/core/ecs.hpp"
+#include "arut/core/scene_graph_ecs.hpp"
 
 #include <array>
 #include <cmath>
@@ -65,6 +66,19 @@ public:
                         entities_.push_back(entity);
                         world.emplace<CubeTransformComponent>(
                             entity, CubeTransformComponent{{x, y, z}, scale, yaw});
+                        SceneLocalTransformComponent scene_transform{};
+                        scene_transform.value = TransformMatrix::identity();
+                        const float cosine = std::cos(yaw);
+                        const float sine = std::sin(yaw);
+                        scene_transform.value.value[0] = cosine * scale;
+                        scene_transform.value.value[2] = -sine * scale;
+                        scene_transform.value.value[5] = scale;
+                        scene_transform.value.value[8] = sine * scale;
+                        scene_transform.value.value[10] = cosine * scale;
+                        scene_transform.value.value[12] = x;
+                        scene_transform.value.value[13] = y;
+                        scene_transform.value.value[14] = z;
+                        world.emplace<SceneLocalTransformComponent>(entity, scene_transform);
                         world.emplace<CubeMeshComponent>(
                             entity, CubeMeshComponent{0U, 0U});
                         world.emplace<CubeBoundsComponent>(
@@ -99,26 +113,39 @@ private:
 
 class CubeRenderExtractionSystem final : public System {
 public:
-    void update(World& world) override {
+    void update(World& world) override { update(world, nullptr); }
+
+    void update(World& world, const SceneGraphSystem* scene_graph) {
         instances_.clear();
         instances_.reserve(world.entity_count());
         extracted_count_ = world.each<CubeTransformComponent, CubeMeshComponent,
                                        CubeBoundsComponent>(
-            [this](Entity, const CubeTransformComponent& transform,
+            [this, &world, scene_graph](Entity entity, const CubeTransformComponent& transform,
                    const CubeMeshComponent&, const CubeBoundsComponent& bounds) {
                 constexpr float identity_diagonal = 1.0F;
                 CubeRenderInstance instance{};
                 const float cosine = std::cos(transform.yaw);
                 const float sine = std::sin(transform.yaw);
-                instance.model[0] = cosine * transform.scale;
-                instance.model[2] = -sine * transform.scale;
-                instance.model[5] = transform.scale;
-                instance.model[8] = sine * transform.scale;
-                instance.model[10] = cosine * transform.scale;
-                instance.model[15] = identity_diagonal;
-                instance.model[12] = transform.position[0];
-                instance.model[13] = transform.position[1];
-                instance.model[14] = transform.position[2];
+                bool used_scene_graph = false;
+                if (scene_graph && world.has<SceneGraphBindingComponent>(entity)) {
+                    const auto binding = world.get<SceneGraphBindingComponent>(entity);
+                    const auto world_transform = scene_graph->graph().world_transform(binding.node);
+                    if (world_transform) {
+                        instance.model = world_transform->value;
+                        used_scene_graph = true;
+                    }
+                }
+                if (!used_scene_graph) {
+                    instance.model[0] = cosine * transform.scale;
+                    instance.model[2] = -sine * transform.scale;
+                    instance.model[5] = transform.scale;
+                    instance.model[8] = sine * transform.scale;
+                    instance.model[10] = cosine * transform.scale;
+                    instance.model[15] = identity_diagonal;
+                    instance.model[12] = transform.position[0];
+                    instance.model[13] = transform.position[1];
+                    instance.model[14] = transform.position[2];
+                }
                 instance.bounds = {transform.position[0], transform.position[1],
                                    transform.position[2], bounds.radius};
                 instances_.push_back(instance);
