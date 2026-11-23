@@ -32,7 +32,7 @@ public final class TestLabActivity extends NativeActivity {
             public void run() {
                 new AlertDialog.Builder(TestLabActivity.this)
                     .setTitle("ARUT-HARDT Test Laboratory")
-                    .setMessage("Choose one isolated runtime profile. Humanoid controls: left stick to move, drag on the right to look, tap the lower-right area to jump. Restart the app to choose another profile.")
+                    .setMessage("Choose one isolated runtime profile. Humanoid controls: touch left stick / WASD / arrows to move; drag upper-right / hold right mouse button to look; tap JUMP / press Space or gamepad A. Restart the app to choose another profile.")
                     .setItems(PROFILES, new DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
@@ -90,6 +90,8 @@ public final class TestLabActivity extends NativeActivity {
 
                 text(canvas, "DRAG TO LOOK", width * 0.78f, height * 0.16f,
                     12.0f * density);
+                text(canvas, "WASD / ARROWS  •  SPACE", width * 0.50f,
+                    30.0f * density, 11.0f * density);
                 if (humanoid) {
                     final float jumpX = width * 0.87f;
                     final float jumpY = height * 0.82f;
