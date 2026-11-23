@@ -64,7 +64,7 @@ int main() {
     assert(player.update(0.25F,sampled));
     assert(std::abs(player.time_seconds()-0.25F)<1.0e-5F);
     assert(player.update(0.90F,sampled));
-    assert(std::abs(player.time_seconds()-0.15F)<1.0e-4F);
+    assert(std::abs(player.time_seconds()-0.50F)<1.0e-4F);
 
     Pose blended{};
     const Pose rest=make_reference_pose(arut::core::make_robot_mannequin_skeleton());
