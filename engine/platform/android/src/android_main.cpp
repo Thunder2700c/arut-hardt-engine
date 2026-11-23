@@ -495,13 +495,13 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
    case AKEYCODE_SPACE: case AKEYCODE_BUTTON_A:
     state->character_input_router.set_key(Key::Jump, pressed); break;
    case AKEYCODE_J: case AKEYCODE_BUTTON_B:
-    state->combat_attack_light_pressed = pressed; break;
+    if (pressed) state->combat_attack_light_pressed = true; break;
    case AKEYCODE_K: case AKEYCODE_BUTTON_X:
-    state->combat_attack_heavy_pressed = pressed; break;
+    if (pressed) state->combat_attack_heavy_pressed = true; break;
    case AKEYCODE_L: case AKEYCODE_BUTTON_Y:
     state->combat_block_held = pressed; break;
    case AKEYCODE_I: case AKEYCODE_BUTTON_R1:
-    state->combat_dodge_pressed = pressed; break;
+    if (pressed) state->combat_dodge_pressed = true; break;
    default: handled = false; break;
   }
   if (handled) {
