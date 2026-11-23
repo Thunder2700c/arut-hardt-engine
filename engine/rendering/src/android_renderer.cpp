@@ -1933,12 +1933,15 @@ bool AndroidRenderer::create_mannequin_geometry() noexcept {
     vkUnmapMemory(device_, mannequin_index_memory_);
 
     arut::rendering::Mat4 model = arut::rendering::Mat4::identity();
-    constexpr float scale = 3.5F;
+    constexpr float scale = 1.0F;
     model.value[0] = scale;
     model.value[5] = scale;
     model.value[10] = scale;
-    model.value[13] = 3.3F;
-    model.value[14] = -26.0F;
+    // Keep the mannequin near the camera in humanoid-only mode. In combined
+    // mode move it clear of the stress grid's centre without changing rig scale.
+    model.value[12] = visibility_source_instance_count_ == 0U ? 0.0F : 5.0F;
+    model.value[13] = 0.0F;
+    model.value[14] = visibility_source_instance_count_ == 0U ? 0.0F : -4.0F;
     if (!create_buffer(sizeof(model), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                        mannequin_instance_buffer_, mannequin_instance_memory_)) return false;
     mapped = nullptr;
@@ -1981,8 +1984,9 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
     // Instance transforms and bounds are supplied by the ECS render-extraction system.
     // The renderer only uploads/culls/draws this immutable input; it never creates entities.
     visibility_source_instance_count_ = static_cast<std::uint32_t>(visibility_instances_.size());
-    if (visibility_source_instance_count_ != arut::core::CubeSpawnSystem::target_count) {
-        log_error("Stress scene input invalid: expected 5000 ECS-owned cube instances");
+    if (visibility_source_instance_count_ != 0U &&
+        visibility_source_instance_count_ != arut::core::CubeSpawnSystem::target_count) {
+        log_error("Stress scene input invalid: expected zero or 5000 ECS-owned cube instances");
         return false;
     }
     const std::array<float, 3> camera = mannequin_scene_enabled_
