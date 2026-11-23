@@ -12,7 +12,15 @@ struct MeshVertex final {
     std::array<float, 3> normal{0.0F, 0.0F, 1.0F};
     std::array<float, 4> tangent{1.0F, 0.0F, 0.0F, 1.0F};
     std::array<float, 2> uv{};
+    // Four influences support smooth blending across procedural limb segments.
+    // A zero total weight means the vertex is rigid and bypasses skinning.
+    std::array<std::uint32_t, 4> joints{};
+    std::array<float, 4> weights{};
 };
+
+static_assert(sizeof(MeshVertex) == 80U);
+static_assert(offsetof(MeshVertex, joints) == 48U);
+static_assert(offsetof(MeshVertex, weights) == 64U);
 
 struct MeshData final {
     std::vector<MeshVertex> vertices;
