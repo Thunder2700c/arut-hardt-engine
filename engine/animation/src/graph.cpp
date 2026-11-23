@@ -81,6 +81,28 @@ bool AnimationStateMachine::update(float delta_seconds, Pose& output) noexcept {
     return true;
 }
 
+bool AnimationStateMachine::update(float delta_seconds, Pose& output,
+                                   std::vector<AnimationEvent>& output_events) {
+    if (!started_ || !std::isfinite(delta_seconds) || delta_seconds < 0.0F) return false;
+    if (!transition_active_) {
+        if (!player_.update(delta_seconds, output, output_events)) return false;
+        last_pose_ = output;
+        return true;
+    }
+    Pose target_pose{};
+    if (!target_player_.update(delta_seconds, target_pose, output_events)) return false;
+    blend_elapsed_ = std::min(blend_duration_, blend_elapsed_ + delta_seconds);
+    const float alpha = blend_duration_ > 0.0F ? blend_elapsed_ / blend_duration_ : 1.0F;
+    if (!blend_poses(transition_source_, target_pose, alpha, output)) return false;
+    last_pose_ = output;
+    if (alpha >= 1.0F) {
+        player_ = target_player_;
+        current_state_id_ = target_state_id_;
+        target_state_id_ = 0U;
+        transition_active_ = false;
+    }
+    return true;
+}
 void AnimationStateMachine::reset() noexcept {
     player_ = AnimationPlayer{};
     target_player_ = AnimationPlayer{};
