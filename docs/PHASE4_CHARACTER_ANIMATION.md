@@ -1,6 +1,6 @@
 # Phase 4 — Character and animation
 
-**Status:** In progress. The rig, procedural bind-pose mesh generator, Vulkan static-mesh submission path and isolated Android Test Laboratory profiles are implemented. Skeletal deformation, movement and animation are still pending; physical-device visibility has not yet been verified.
+**Status:** In progress. The rig, weighted mannequin mesh, CPU pose/inverse-bind palette builder, Vulkan GPU skinning path and isolated Android Test Laboratory profiles are implemented. A small procedural idle pose exercises deformation. Locomotion, blending, controller physics and IK are still pending; physical-device visibility and deformation have not yet been verified.
 
 ## Canonical scope
 
@@ -43,7 +43,10 @@ The Android profile picker is implemented by `app/src/main/java/com/arut/engine/
 ## Implemented: rig and procedural bind-pose mesh foundation
 
 - `engine/core/include/arut/core/humanoid_skeleton.hpp` defines a 20-joint humanoid hierarchy with validated parent ordering, finite rest translations and positive visual radii.
-- `engine/rendering/include/arut/rendering/robot_mannequin.hpp` builds a deterministic triangle mesh from bone segments and joint spheres, with outward-facing triangle winding for back-face culling.\n- `engine/rendering/src/android_renderer.cpp` uploads the mesh and its instance transform to Vulkan buffers, submits it in the main and shadow passes, and emits a `HUMANOID_RENDERER` readiness log. This is static bind-pose drawing only; no bone palette or GPU skinning exists yet.
+- `engine/rendering/include/arut/rendering/robot_mannequin.hpp` builds a deterministic triangle mesh from bone segments and joint spheres, with outward-facing triangle winding for back-face culling.\n- `engine/rendering/src/android_renderer.cpp` uploads the mesh and its instance transform to Vulkan buffers, submits it in the main and shadow passes, and emits a `HUMANOID_RENDERER` readiness log.
+- `MeshVertex` carries four joint indices and four normalized weights. The mannequin generator blends influence from each bone's parent to child along segmented limb geometry and assigns joint spheres to their owning joint.
+- `engine/rendering/include/arut/rendering/humanoid_skinning.hpp` builds hierarchical local/global pose transforms and the inverse-bind palette. Host tests verify that the rest pose produces identity skin matrices, a chest rotation moves descendants, and invalid pose values are rejected.
+- The mobile PBR and shadow vertex shaders read the same 20-matrix UBO and apply four-influence linear blend skinning. The renderer updates a small procedural idle-breathing/arm-sway pose each frame; it is a skinning smoke animation, not the locomotion clip/blend system.
 - `tests/character_skeleton_tests.cpp` checks the rig contract, mesh non-emptiness, triangle/index validity and finite vertex positions/normals.
 - The host CMake test links `arut_core` and `arut_rendering`. Host tests prove procedural geometry and winding. Android CI compiles the Vulkan path; only an on-device log and visual check can prove that the mannequin is actually visible.
 
