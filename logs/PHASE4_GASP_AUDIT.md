@@ -84,3 +84,13 @@ The forgotten adjacent feature is the reusable vehicle/car system already listed
 - Key commits: cgltf vendor `1841189`; importer contract `82311cc`; importer implementation `8bc2e36`; validation fix `04ab9d3`; CMake integration `44d90de`; generated GLB test `809a1b1`; validation hardening `f3e9e7e`; roadmap `487b12b`.
 - Known limitations: importer currently supports only one skin, at most 20 joints, triangle primitives, four influences, TRS-authored joints, and embedded GLB buffers. It does not yet import PBR materials/textures, external .gltf files, meshopt/Draco-compressed geometry, morph targets, or non-skin scene content. Imported mesh data is not yet uploaded through the Android renderer; the next step is retargeting and renderer asset integration.
 - Verification: the CI workflow is configured for push to main and now includes the new importer test through CMake. No completed workflow job result was available in this session, so compilation and test pass remain unverified.
+
+## Skeleton retargeting foundation — 2026-11-23
+
+- Added `engine/animation/include/arut/animation/retarget.hpp` and `engine/animation/src/retarget.cpp`.
+- Added source/target rig views, normalized bone-name matching, common humanoid aliases (Hips/Pelvis, LeftArm/LeftUpperArm, ForeArm/LowerArm, UpLeg/UpperLeg), unmatched-bone reporting, per-bone translation scaling, rest-pose-relative quaternion correction and scale-ratio transfer.
+- Added a bridge for the engine's 20-bone reference mannequin rig.
+- Added `tests/retarget_tests.cpp`, covering a Mixamo-style source rig mapped to a differently proportioned target rig, including rotation and scale transfer.
+- Added the retargeter to `arut_animation` and registered its host test.
+- This is a first retargeting layer, not a production retargeting solution: it currently uses normalized names/aliases and per-bone local translation length ratios. It does not yet solve arbitrary hierarchy mismatches, twist-bone distribution, IK retargeting, or retarget profiles authored in editor tooling.
+- Key commits: retarget API `500678d`; implementation `a0ca336`; tests `f16779d`; CMake integration `f02c463`; roadmap update `da365b7`.
