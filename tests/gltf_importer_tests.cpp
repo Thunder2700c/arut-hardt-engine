@@ -55,13 +55,17 @@ std::vector<std::uint8_t> make_glb() {
     const std::size_t tr=bin.size();
     for(float v:{0.F,0.F,0.F, 0.F,0.25F,0.F}) f32(bin,v);
     const std::size_t tr_len=bin.size()-tr;
+    const std::size_t sc=bin.size();
+    for(float v:{0.F,0.F,0.F, 1.F,1.F,1.F, 0.F,0.F,0.F,
+                 0.F,0.F,0.F, 2.F,2.F,2.F, 0.F,0.F,0.F}) f32(bin,v);
+    const std::size_t sc_len=bin.size()-sc;
     pad4(bin);
 
     std::string json="{";
     json+="\"asset\":{\"version\":\"2.0\",\"generator\":\"ARUT test\"},";
     json+="\"buffers\":[{\"byteLength\":"+std::to_string(bin.size())+"}],";
     json+="\"bufferViews\":["+view(p,p_len)+","+view(j,j_len)+","+view(w,w_len)+","+
-        view(ix,ix_len)+","+view(ib,ib_len)+","+view(tm,tm_len)+","+view(tr,tr_len)+"],";
+        view(ix,ix_len)+","+view(ib,ib_len)+","+view(tm,tm_len)+","+view(tr,tr_len)+","+view(sc,sc_len)+"],";
     json+="\"accessors\":[";
     json+="{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"},";
     json+="{\"bufferView\":1,\"componentType\":5121,\"count\":3,\"type\":\"VEC4\"},";
@@ -69,11 +73,13 @@ std::vector<std::uint8_t> make_glb() {
     json+="{\"bufferView\":3,\"componentType\":5123,\"count\":3,\"type\":\"SCALAR\"},";
     json+="{\"bufferView\":4,\"componentType\":5126,\"count\":1,\"type\":\"MAT4\"},";
     json+="{\"bufferView\":5,\"componentType\":5126,\"count\":2,\"type\":\"SCALAR\"},";
-    json+="{\"bufferView\":6,\"componentType\":5126,\"count\":2,\"type\":\"VEC3\"}],";
+    json+="{\"bufferView\":6,\"componentType\":5126,\"count\":2,\"type\":\"VEC3\"},";
+    json+="{\"bufferView\":7,\"componentType\":5126,\"count\":6,\"type\":\"VEC3\"}],";
     json+="\"meshes\":[{\"name\":\"TestMesh\",\"primitives\":[{\"attributes\":{\"POSITION\":0,\"JOINTS_0\":1,\"WEIGHTS_0\":2},\"indices\":3}]}],";
     json+="\"nodes\":[{\"name\":\"MeshNode\",\"mesh\":0,\"skin\":0},{\"name\":\"Root\"}],";
     json+="\"skins\":[{\"joints\":[1],\"inverseBindMatrices\":4}],";
-    json+="\"animations\":[{\"name\":\"Idle\",\"samplers\":[{\"input\":5,\"output\":6,\"interpolation\":\"LINEAR\"}],\"channels\":[{\"sampler\":0,\"target\":{\"node\":1,\"path\":\"translation\"}}]}],";
+    json+="\"animations\":[{\"name\":\"Idle\",\"samplers\":[{\"input\":5,\"output\":6,\"interpolation\":\"LINEAR\"}],\"channels\":[{\"sampler\":0,\"target\":{\"node\":1,\"path\":\"translation\"}}]},";
+    json+="{\"name\":\"ScalePulse\",\"samplers\":[{\"input\":5,\"output\":7,\"interpolation\":\"CUBICSPLINE\"}],\"channels\":[{\"sampler\":0,\"target\":{\"node\":1,\"path\":\"scale\"}}]}],";
     json+="\"scenes\":[{\"nodes\":[0,1]}],\"scene\":0}";
     while(json.size()%4U) json.push_back(' ');
     std::vector<std::uint8_t> glb;
@@ -98,12 +104,14 @@ int main() {
     assert(asset.meshes.size()==1U);
     assert(asset.meshes[0].vertices.size()==3U);
     assert(asset.meshes[0].indices.size()==3U);
-    assert(asset.animations.size()==1U);
+    assert(asset.animations.size()==2U);
     assert(asset.animations[0].name=="Idle");
     arut::animation::Pose sampled{};
     assert(asset.animations[0].sample(1.0F,sampled));
     assert(sampled.joint_count==1U);
     assert(sampled.joints[0].translation.y>0.24F);
+    assert(asset.animations[1].sample(0.5F,sampled));
+    assert(sampled.joints[0].scale.x>1.49F&&sampled.joints[0].scale.x<1.51F);
     assert(report.imported_vertices==3U);
     const std::uint8_t invalid[4]{};
     assert(!arut::animation::import_glb(invalid,sizeof(invalid),asset,report));
