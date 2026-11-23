@@ -257,7 +257,7 @@ void handle_app_command(android_app* app, std::int32_t command) {
    if (app->window) log_info("Configuration changed: %dx%d", ANativeWindow_getWidth(app->window), ANativeWindow_getHeight(app->window));
    break;
   case APP_CMD_LOW_MEMORY: log_warn("Android low-memory callback received."); break;
-  case APP_CMD_DESTROY: log_info("Lifecycle DESTROY"); break;
+  case APP_CMD_DESTROY: log_info("Lifecycle DESTROY pid=%d destroyRequested=%d", static_cast<int>(getpid()), app->destroyRequested); break;
   default: break;
  }
 }
@@ -308,8 +308,9 @@ void run(android_app* app) {
  app->onAppCmd = handle_app_command;
  app->onInputEvent = handle_input;
  const auto v = arut::core::version();
- log_info("%.*s %u.%u.%u starting (NativeActivity).",
-  static_cast<int>(arut::core::name().size()), arut::core::name().data(), v.major, v.minor, v.patch);
+ log_info("%.*s %u.%u.%u starting (NativeActivity) pid=%d.",
+  static_cast<int>(arut::core::name().size()), arut::core::name().data(), v.major, v.minor, v.patch,
+  static_cast<int>(getpid()));
  log_info("Rust systems ABI version: 0x%06x", arut_tasks_abi_version());
  auto asset_source = std::make_shared<arut::platform::android::AndroidAssetSource>(
   app->activity ? app->activity->assetManager : nullptr);
