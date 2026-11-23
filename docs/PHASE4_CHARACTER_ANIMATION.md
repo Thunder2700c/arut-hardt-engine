@@ -1,6 +1,6 @@
 # Phase 4 — Character and animation
 
-**Status:** In progress. The rig, weighted mannequin mesh, CPU pose/inverse-bind palette builder, Vulkan GPU skinning path and isolated Android Test Laboratory profiles are implemented. A small procedural idle pose exercises deformation. Locomotion, blending, controller physics and IK are still pending; physical-device visibility and deformation have not yet been verified.
+**Status:** In progress. The rig, weighted mannequin mesh, CPU pose/inverse-bind palette builder, Vulkan GPU skinning path, isolated Android Test Laboratory profiles, fixed-step terrain controller, procedural locomotion blending and terrain-aware two-bone foot IK are implemented. Physical-device movement, animation, foot contact and visual quality remain unverified.
 
 ## Canonical scope
 
@@ -67,3 +67,11 @@ The Android profile picker is implemented by `app/src/main/java/com/arut/engine/
 - Ground contact is queried through a small callback so terrain and other world implementations can supply height and normal samples. The current implementation handles heightfield grounding and slope/step rejection; it does **not** yet collide the capsule against arbitrary walls, props or dynamic rigid bodies.
 - `engine/rendering/include/arut/rendering/humanoid_animation.hpp` provides Idle, Walk, Run, StrafeLeft, StrafeRight, Backward, Jump, Fall and Land states. The current poses are procedural and blended smoothly; they are not imported motion-capture clips.
 - Host tests cover acceleration/deceleration, jump/landing, steep-slope and step-up rejection, fixed-step catch-up limits, animation state selection and pose blending.
+
+## Terrain-aware foot IK
+
+- `engine/rendering/include/arut/rendering/humanoid_ik.hpp` implements an analytic two-bone leg solve using the upper-leg length and the lower-leg's metre-based rest offset. It returns hip/knee angles plus terrain pitch and roll, clamps targets to the reachable range, and blends rotations without quaternion sign flips.
+- The Android Humanoid profile captures a world-space foot anchor at the start of each stance phase, samples the terrain height/normal at that fixed point, and solves the leg toward that anchor. During swing or airborne states, the animator retains its procedural gait pose. IK logs report each foot's planted state and reach clamping.
+- The reference humanoid uses +Y up and -Z forward. Foot rest offsets, controller forward movement, mannequin geometry and third-person camera convention must stay consistent with this axis.
+- Host tests verify the rest pose produces near-zero hip/knee correction, adjusted targets bend the leg, slope normals orient the foot, unreachable targets clamp, and invalid inputs are rejected.
+- The current IK is a heightfield foot-placement system, not general-purpose full-body IK. It does not yet solve foot collision against arbitrary props, dynamic bodies, ledges or overhangs, and it has not yet been visually validated on the S23 FE.
