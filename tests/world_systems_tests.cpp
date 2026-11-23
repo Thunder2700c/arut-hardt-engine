@@ -70,9 +70,17 @@ int main() {
     assert(first_stream.loaded == 9U && first_stream.unloaded == 0U);
     assert(first_stream.failed == 0U && first_stream.resident == 9U);
     assert(streamer.find({0, 0}) != nullptr);
-    const auto second_stream = streamer.update(streamed_partition, 128.0F, 0.0F, 1U, loader, unloader);
+    const auto refresh_lod = [](WorldCell, WorldCellContent& content) {
+        content.lod = TerrainLod::Low;
+        content.terrain = TerrainSystem::build(128.0F, 4U);
+        return true;
+    };
+    const auto second_stream = streamer.update(
+        streamed_partition, 128.0F, 0.0F, 1U, loader, unloader, refresh_lod);
     assert(second_stream.loaded == 3U && second_stream.unloaded == 3U);
+    assert(second_stream.updated == 6U);
     assert(second_stream.resident == 9U && unloaded_cells == 3U);
+    assert(streamer.find({0, 0})->lod == TerrainLod::Low);
     assert(streamer.find({-1, 0}) == nullptr);
     assert(streamer.find({2, 0}) != nullptr);
 
