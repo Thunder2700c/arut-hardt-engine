@@ -2990,9 +2990,14 @@ bool AndroidRenderer::load_imported_character_glb(
         log_error("GLB load failed: could not allocate file buffer");
         return false;
     }
-    const int read = AAsset_read(file, bytes.data(), bytes.size());
+    std::size_t bytes_read = 0U;
+    while (bytes_read < bytes.size()) {
+        const int chunk = AAsset_read(file, bytes.data() + bytes_read, bytes.size() - bytes_read);
+        if (chunk <= 0) break;
+        bytes_read += static_cast<std::size_t>(chunk);
+    }
     AAsset_close(file);
-    if (read != length) {
+    if (bytes_read != bytes.size()) {
         log_error("GLB load failed: packaged asset read was incomplete");
         return false;
     }
@@ -3125,6 +3130,32 @@ bool AndroidRenderer::set_imported_character(
     pending_humanoid_palette_ = gpu_palette;
     has_external_humanoid_state_ = true;
     arut_android_log(ANDROID_LOG_INFO, "IMPORTED_CHARACTER uploaded=true mesh=first_skinned_mesh skinning=128_joint_palette");
+    return true;
+}
+
+bool AndroidRenderer::set_imported_character_pose(
+    const arut::animation::SkeletalAsset& asset,
+    const arut::animation::Pose& pose,
+    const arut::rendering::Mat4& model) noexcept {
+    if (!ready() || !imported_character_enabled_ || !mannequin_scene_enabled_ ||
+        !bone_palette_uniform_memory_ ||
+        !std::all_of(model.value.begin(), model.value.end(),
+            [](float value) { return std::isfinite(value); })) return false;
+
+    arut::rendering::ImportedSkinningPalette imported_palette{};
+    if (!arut::rendering::build_imported_skinning_palette(asset, pose, imported_palette))
+        return false;
+
+    arut::rendering::HumanoidSkinningPalette gpu_palette{};
+    for (std::size_t joint = 0; joint < imported_palette.joint_count; ++joint)
+        gpu_palette.matrices[joint] = imported_palette.matrices[joint];
+    for (std::size_t joint = imported_palette.joint_count;
+         joint < gpu_palette.matrices.size(); ++joint)
+        gpu_palette.matrices[joint] = arut::rendering::Mat4::identity();
+
+    pending_mannequin_model_ = model;
+    pending_humanoid_palette_ = gpu_palette;
+    has_external_humanoid_state_ = true;
     return true;
 }
 
