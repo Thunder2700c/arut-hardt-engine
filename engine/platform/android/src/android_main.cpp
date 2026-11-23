@@ -71,6 +71,8 @@ struct RuntimeState final {
  arut::core::CharacterController character_controller{};
  arut::core::CharacterInputRouter character_input_router{};
  bool mouse_look_active{false};
+ float gamepad_move_x{0.0F};
+ float gamepad_move_y{0.0F};
  arut::core::HumanoidSkeleton humanoid_skeleton{arut::core::make_robot_mannequin_skeleton()};
  arut::rendering::HumanoidAnimator humanoid_animator{};
  std::array<FootPlantState, 2> foot_plants{};
@@ -346,6 +348,8 @@ void handle_app_command(android_app* app, std::int32_t command) {
    state->resumed = false;
    state->character_input_router.clear();
    state->mouse_look_active = false;
+   state->gamepad_move_x = state->gamepad_move_y = 0.0F;
+   state->renderer.set_gamepad_look_input(0.0F, 0.0F);
    log_info("Lifecycle PAUSE");
    if (export_runtime_log(app)) __android_log_print(ANDROID_LOG_INFO, kLogTag, "Runtime log exported to Downloads/ARUT-HARDT/ARUT-HARDT-runtime.log");
    else __android_log_print(ANDROID_LOG_WARN, kLogTag, "Runtime log export failed; private app log retained.");
@@ -372,6 +376,8 @@ void handle_app_command(android_app* app, std::int32_t command) {
    state->focused = false;
    state->character_input_router.clear();
    state->mouse_look_active = false;
+   state->gamepad_move_x = state->gamepad_move_y = 0.0F;
+   state->renderer.set_gamepad_look_input(0.0F, 0.0F);
    log_info("Focus lost"); break;
   case APP_CMD_CONFIG_CHANGED:
    if (app->window) log_info("Configuration changed: %dx%d", ANativeWindow_getWidth(app->window), ANativeWindow_getHeight(app->window));
@@ -389,6 +395,23 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
   const auto raw_action = AMotionEvent_getAction(event);
   const auto action = raw_action & AMOTION_EVENT_ACTION_MASK;
   const std::int32_t source = AInputEvent_getSource(event);
+  if ((source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK) {
+   const auto deadzone = [](float value) noexcept {
+    if (!std::isfinite(value) || std::abs(value) <= 0.15F) return 0.0F;
+    const float scaled = (std::abs(value) - 0.15F) / 0.85F;
+    return std::copysign(std::clamp(scaled, 0.0F, 1.0F), value);
+   };
+   state->gamepad_move_x = deadzone(
+    AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_X, 0U));
+   state->gamepad_move_y = -deadzone(
+    AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_Y, 0U));
+   const float look_x = deadzone(
+    AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_Z, 0U));
+   const float look_y = deadzone(
+    AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_RZ, 0U));
+   state->renderer.set_gamepad_look_input(look_x, look_y);
+   return 1;
+  }
   if ((source & AINPUT_SOURCE_MOUSE) == AINPUT_SOURCE_MOUSE) {
    if (!app->window) return 0;
    const float width = static_cast<float>(ANativeWindow_getWidth(app->window));
@@ -628,7 +651,9 @@ void run(android_app* app) {
     const float frame_delta = std::chrono::duration<float>(
      std::chrono::steady_clock::now() - frame_start).count();
     const auto movement = state.renderer.movement_input();
-    state.character_input_router.set_analog(movement[0], movement[1]);
+    state.character_input_router.set_analog(
+     std::clamp(movement[0] + state.gamepad_move_x, -1.0F, 1.0F),
+     std::clamp(movement[1] + state.gamepad_move_y, -1.0F, 1.0F));
     arut::core::CharacterInput character_input =
      state.character_input_router.sample();
     character_input.jump_pressed =
