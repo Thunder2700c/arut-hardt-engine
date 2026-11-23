@@ -1989,13 +1989,15 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         log_error("Stress scene input invalid: expected zero or 5000 ECS-owned cube instances");
         return false;
     }
-    const std::array<float, 3> camera = mannequin_scene_enabled_
+    const bool humanoid_only =
+        mannequin_scene_enabled_ && visibility_source_instance_count_ == 0U;
+    const std::array<float, 3> camera = humanoid_only
         ? std::array<float, 3>{0.0F, 1.1F, 7.0F}
         : std::array<float, 3>{0.0F, 0.0F, 18.0F};
     camera_position_ = camera;
     camera_yaw_ = -1.570796327F;
     camera_pitch_ = 0.0F;
-    const std::array<float, 3> camera_target = mannequin_scene_enabled_
+    const std::array<float, 3> camera_target = humanoid_only
         ? std::array<float, 3>{0.0F, 1.1F, 6.0F}
         : std::array<float, 3>{0.0F, 0.0F, 17.0F};
     const auto view = arut::rendering::look_at_rh(camera, camera_target, {0.0F, 1.0F, 0.0F});
