@@ -5,8 +5,11 @@
 #include "arut/core/world_systems.hpp"
 #include "arut/core/test_lab_profile.hpp"
 #include "arut/core/humanoid_skeleton.hpp"
+#include "arut/core/character_controller.hpp"
 #include "arut/platform/android/asset_source.hpp"
 #include "arut/rendering/vulkan/android_renderer.hpp"
+#include "arut/rendering/humanoid_animation.hpp"
+#include "arut/rendering/humanoid_skinning.hpp"
 #include <android/input.h>
 #include <android/log.h>
 #include <android/native_window.h>
@@ -54,9 +57,32 @@ struct RuntimeState final {
  arut::core::TestLabProfile selected_profile{arut::core::TestLabProfile::EcsStress};
  bool terrain_cells_dirty{false};
  arut::rendering::vulkan::AndroidRenderer renderer{};
+ arut::core::CharacterController character_controller{};
+ arut::core::HumanoidSkeleton humanoid_skeleton{arut::core::make_robot_mannequin_skeleton()};
+ arut::rendering::HumanoidAnimator humanoid_animator{};
+ std::uint64_t character_fixed_steps{0};
  std::uint64_t lifecycle_events{0};
  std::uint64_t input_events{0};
 };
+arut::core::CharacterGroundSample terrain_ground_query(
+ float x, float z, void*) noexcept {
+ arut::core::CharacterGroundSample sample{};
+ const float height = arut::core::TerrainSystem::height(x, z);
+ constexpr float epsilon = 0.1F;
+ const float dx = (arut::core::TerrainSystem::height(x + epsilon, z) -
+                   arut::core::TerrainSystem::height(x - epsilon, z)) /
+                  (2.0F * epsilon);
+ const float dz = (arut::core::TerrainSystem::height(x, z + epsilon) -
+                   arut::core::TerrainSystem::height(x, z - epsilon)) /
+                  (2.0F * epsilon);
+ const float inverse = 1.0F / std::sqrt(dx * dx + 1.0F + dz * dz);
+ if (!std::isfinite(height) || !std::isfinite(inverse)) return sample;
+ sample.height = height;
+ sample.normal = {-dx * inverse, inverse, -dz * inverse};
+ sample.valid = true;
+ return sample;
+}
+
 std::uint64_t cell_lod_id(arut::core::WorldCell cell) noexcept {
  return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(cell.x)) << 32U) |
         static_cast<std::uint32_t>(cell.z);
@@ -472,6 +498,51 @@ void run(android_app* app) {
   if (ident >= 0 && source) source->process(app, source);
   if (ident == ALOOPER_POLL_ERROR) log_warn("Android looper returned an error.");
   if (state.resumed && state.has_window && state.focused && state.renderer.ready()) {
+   if (arut::core::test_lab_includes_humanoid(state.selected_profile)) {
+    const float frame_delta = std::chrono::duration<float>(
+     std::chrono::steady_clock::now() - frame_start).count();
+    const auto movement = state.renderer.movement_input();
+    arut::core::CharacterInput character_input{};
+    character_input.move_x = movement[0];
+    character_input.move_y = movement[1];
+    character_input.jump_pressed = state.renderer.consume_jump_pressed();
+    constexpr float half_turn = 1.570796327F;
+    state.character_controller.set_facing_yaw(state.renderer.camera_yaw() + half_turn);
+    state.character_fixed_steps += state.character_controller.update(
+     character_input, frame_delta, terrain_ground_query, nullptr);
+
+    const auto& character = state.character_controller.state();
+    const float horizontal_speed = std::sqrt(
+     character.velocity.x * character.velocity.x +
+     character.velocity.z * character.velocity.z);
+    arut::rendering::HumanoidAnimationInput animation_input{};
+    animation_input.local_move_x = movement[0];
+    animation_input.local_move_y = movement[1];
+    animation_input.horizontal_speed = horizontal_speed;
+    animation_input.vertical_speed = character.velocity.y;
+    animation_input.grounded = character.grounded;
+    const auto& pose = state.humanoid_animator.update(animation_input, frame_delta);
+
+    arut::rendering::HumanoidSkinningPalette palette{};
+    if (arut::rendering::build_humanoid_skinning_palette(
+         state.humanoid_skeleton, pose, palette)) {
+     arut::rendering::Mat4 model = arut::rendering::Mat4::identity();
+     const float cosine = std::cos(character.facing_yaw_radians);
+     const float sine = std::sin(character.facing_yaw_radians);
+     model.value[0] = cosine;
+     model.value[2] = sine;
+     model.value[8] = -sine;
+     model.value[10] = cosine;
+     model.value[12] = character.position.x;
+     model.value[13] = character.position.y;
+     model.value[14] = character.position.z;
+     const std::array<float, 3> camera_target{
+      character.position.x, character.position.y + 1.0F, character.position.z};
+     state.renderer.set_humanoid_state(model, palette, camera_target);
+    } else {
+     log_warn("HUMANOID_SKINNING pose palette generation failed.");
+    }
+   }
    if (!state.renderer.draw_frame()) log_warn("Vulkan frame submission/presentation failed.");
    else {
     const double elapsed = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frame_start).count();
@@ -512,6 +583,20 @@ void run(android_app* app) {
     frame_ms_total / static_cast<double>(frame_count), frame_ms_max, frame_count);
    else log_info("PERF window=%.2fs renderer_idle=true", metrics_seconds);
    if (state.renderer.ready()) {
+    if (arut::core::test_lab_includes_humanoid(state.selected_profile)) {
+     const auto& character = state.character_controller.state();
+     const auto& animation = state.humanoid_animator.snapshot();
+     const float speed = std::sqrt(character.velocity.x * character.velocity.x +
+                                   character.velocity.z * character.velocity.z);
+     log_info("CHARACTER_CONTROLLER position=%.3f,%.3f,%.3f velocity=%.3f,%.3f,%.3f speed=%.3f grounded=%s fixed_steps=%" PRIu64,
+      character.position.x, character.position.y, character.position.z,
+      character.velocity.x, character.velocity.y, character.velocity.z,
+      speed, character.grounded ? "true" : "false", state.character_fixed_steps);
+     log_info("ANIMATION_STATE state=%.*s phase=%.3f blend=%.3f speed=%.3f",
+      static_cast<int>(arut::rendering::humanoid_animation_state_name(animation.state).size()),
+      arut::rendering::humanoid_animation_state_name(animation.state).data(),
+      animation.phase_seconds, animation.blend_alpha, animation.horizontal_speed);
+    }
     const auto render = state.renderer.profile_snapshot();
     log_info("RENDER_PROFILE cpu_frame_ms=%.3f gpu_frame_ms=%.3f visibility_pass_ms=%.3f shadow_pass_ms=%.3f main_pass_ms=%.3f gpu_memory_bytes=%" PRIu64 " gpu_memory_usage_bytes=%" PRIu64 " gpu_memory_budget_bytes=%" PRIu64 " budget=%s gpu_visibility=%s gpu_timestamps=%s draw_calls=%u visible_objects=%u triangles=%u",
      render.cpu_frame_ms, render.gpu_frame_ms, render.visibility_pass_ms, render.shadow_pass_ms, render.main_pass_ms,
