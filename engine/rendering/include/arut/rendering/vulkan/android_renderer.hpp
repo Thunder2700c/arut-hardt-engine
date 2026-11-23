@@ -43,6 +43,8 @@ public:
         const arut::animation::Pose& pose, const arut::rendering::Mat4& model) noexcept;
     bool load_imported_character_glb(const char* asset_path,
         const arut::rendering::Mat4& model) noexcept;
+    bool set_imported_character_pose(const arut::animation::SkeletalAsset& asset,
+        const arut::animation::Pose& pose, const arut::rendering::Mat4& model) noexcept;
     [[nodiscard]] std::array<float, 3> camera_position() const noexcept { return camera_position_; }
     [[nodiscard]] float camera_yaw() const noexcept { return camera_yaw_; }
     [[nodiscard]] float camera_pitch() const noexcept { return camera_pitch_; }
