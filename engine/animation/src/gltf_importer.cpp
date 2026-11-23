@@ -254,7 +254,7 @@ bool import_glb(const void* bytes, std::size_t byte_count,
     }
     const cgltf_skin& skin=data->skins[0];
     if(skin.joints_count==0U||skin.joints_count>kMaxImportedJoints) {
-        report.message="Skin joint count exceeds the current 20-joint runtime limit"; return false;
+        report.message="Skin joint count exceeds the current 128-joint runtime limit"; return false;
     }
     output.joint_count=skin.joints_count;
     std::unordered_map<const cgltf_node*,std::size_t> joint_map;
