@@ -51,4 +51,8 @@ The NativeActivity subclass `com.arut.engine.TestLabActivity` displays the Andro
 - **Humanoid Test** skips creation of the 5,000 ECS entities and submits the procedural mannequin with the streamed terrain arena.
 - **Combined Integration** creates both as a separate combined test.
 
-The selection is passed to native C++ through a small JNI callback and stored as a stable `TestLabProfile` ID. Runtime logs include `TEST_LAB selected=...` and `TEST_LAB_RENDER_PROFILE`. Restart the app to select a different profile. The Humanoid Test currently verifies static bind-pose mesh submission only; animation, character movement, IK and humanoid touch controls are not implemented yet.
+The selection is passed to native C++ through a small JNI callback and stored as a stable `TestLabProfile` ID. Runtime logs include `TEST_LAB selected=...` and `TEST_LAB_RENDER_PROFILE`. Restart the app to select a different profile.
+
+In the Humanoid Test, use the left-side touch stick to move, drag in the upper-right area to orbit the follow camera, and tap the lower-right area to jump. The runtime feeds fixed-step terrain-grounded movement into procedural Idle/Walk/Run/Strafe/Backward/Jump/Fall/Land poses, performs stance-phase two-bone terrain foot placement, then uploads the model transform and bone palette for Vulkan skinning. Logs include `CHARACTER_CONTROLLER`, `ANIMATION_STATE`, and `HUMANOID_IK`.
+
+The current controller is heightfield/terrain based: it handles grounding, slope limits and step-up limits, but not capsule collision against arbitrary walls, props or dynamic rigid bodies. Camera collision and desktop keyboard/mouse controls are not implemented. Visual and touch verification on the S23 FE remains outstanding.
