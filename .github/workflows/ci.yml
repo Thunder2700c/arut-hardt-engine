@@ -22,7 +22,7 @@ jobs:
       - name: Build
         run: cmake --build --preset dev --parallel 2
       - name: Test
-        run: ctest --preset dev --output-on-failure | tee build/dev/ctest.log
+        run: set -o pipefail && ctest --preset dev --output-on-failure | tee build/dev/ctest.log
       - name: Upload Phase 3 ECS stress-test logs
         if: always()
         uses: actions/upload-artifact@v4
