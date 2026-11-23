@@ -81,6 +81,7 @@ struct RuntimeState final {
   {{-3.5F,-2.0F,-5.5F},{-2.0F,0.7F,-4.0F}}
  }};
  std::array<arut::rendering::Mat4, 6> arena_render_instances{};
+ bool test_arena_enabled{false};
  float camera_follow_distance{4.2F};
  bool camera_terrain_obstructed{false};
  std::uint64_t character_fixed_steps{0};
@@ -109,7 +110,7 @@ arut::core::CharacterGroundSample terrain_ground_query(
 bool test_arena_collision_query(
  const arut::core::Vec3& feet, float radius, float height, void* context) noexcept {
  const auto* state = static_cast<const RuntimeState*>(context);
- if (!state) return false;
+ if (!state || !state->test_arena_enabled) return false;
  return arut::core::character_capsule_overlaps_obstacles(
   feet, radius, height,
   std::span<const arut::core::CharacterAabbObstacle>{
@@ -263,7 +264,7 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
  const bool include_mannequin =
   arut::core::test_lab_includes_humanoid(state.selected_profile);
  std::span<const arut::rendering::Mat4> arena_instances{};
- if (state.selected_profile == arut::core::TestLabProfile::Humanoid) {
+ if (arut::core::test_lab_includes_humanoid(state.selected_profile)) {
   arena_instances = {state.arena_render_instances.data(), state.arena_render_instances.size()};
  }
  if (!state.renderer.initialize(app->window, app->activity->assetManager,
@@ -448,7 +449,8 @@ void run(android_app* app) {
   return;
  }
  state.selected_profile = static_cast<arut::core::TestLabProfile>(selected_id);
- if (state.selected_profile == arut::core::TestLabProfile::Humanoid) {
+ if (arut::core::test_lab_includes_humanoid(state.selected_profile)) {
+  state.test_arena_enabled = true;
   build_test_arena_geometry(state);
   log_info("TEST_ARENA_COLLISION enabled=true obstacles=%zu",
    state.arena_obstacles.size());
