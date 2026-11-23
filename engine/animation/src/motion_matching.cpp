@@ -155,4 +155,73 @@ MotionMatchResult MotionMatchingDatabase::search(const MotionMatchQuery& query) 
     return best;
 }
 
+void MotionMatchingPlayer::reset() noexcept {
+    player_.set_clip(nullptr);
+    previous_output_ = {};
+    last_output_ = {};
+    active_clip_index_ = std::numeric_limits<std::uint32_t>::max();
+    transition_elapsed_ = 0.0F;
+    active_ = false;
+    has_last_output_ = false;
+}
+
+void MotionMatchingPlayer::set_transition_duration(float seconds) noexcept {
+    if (finite(seconds)) transition_duration_ = std::clamp(seconds, 0.0F, 2.0F);
+}
+
+float MotionMatchingPlayer::transition_alpha() const noexcept {
+    if (!active_ || transition_duration_ <= 1.0e-5F) return 1.0F;
+    return std::clamp(transition_elapsed_ / transition_duration_, 0.0F, 1.0F);
+}
+
+bool MotionMatchingPlayer::update(
+    const MotionMatchingDatabase& database,
+    const std::vector<MotionClipSource>& clips,
+    MotionMatchQuery query,
+    float delta_seconds,
+    Pose& output) {
+    if (!finite(delta_seconds) || delta_seconds < 0.0F || clips.empty()) return false;
+
+    if (active_) {
+        query.previous_clip_index = active_clip_index_;
+        query.previous_time_seconds = player_.time_seconds();
+    }
+    const MotionMatchResult match = database.search(query);
+    if (match.found && match.clip_index < clips.size() && clips[match.clip_index].clip) {
+        const bool should_start = !active_;
+        const bool should_switch = active_ && match.clip_index != active_clip_index_;
+        if (should_start || should_switch) {
+            if (has_last_output_ && transition_duration_ > 1.0e-5F) {
+                previous_output_ = last_output_;
+                transition_elapsed_ = 0.0F;
+            } else {
+                transition_elapsed_ = transition_duration_;
+            }
+            active_clip_index_ = match.clip_index;
+            player_.set_clip(clips[match.clip_index].clip, true);
+            if (!player_.seek(match.time_seconds)) {
+                reset();
+                return false;
+            }
+            active_ = true;
+        }
+    }
+
+    if (!active_) return false;
+    Pose sampled{};
+    if (!player_.update(delta_seconds, sampled)) return false;
+
+    if (transition_elapsed_ < transition_duration_) {
+        transition_elapsed_ = std::min(transition_duration_,
+                                       transition_elapsed_ + delta_seconds);
+        if (!blend_poses(previous_output_, sampled, transition_alpha(), output))
+            output = sampled;
+    } else {
+        output = sampled;
+    }
+    last_output_ = output;
+    has_last_output_ = true;
+    return true;
+}
+
 } // namespace arut::animation
