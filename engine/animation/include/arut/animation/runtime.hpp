@@ -73,6 +73,11 @@ private:
 [[nodiscard]] bool blend_poses(
     const Pose& from, const Pose& to, float alpha, Pose& output) noexcept;
 
+// Applies a local-space additive pose delta measured relative to reference_pose.
+[[nodiscard]] bool apply_additive_layer(
+    const Pose& base_pose, const Pose& layer_pose, const Pose& reference_pose,
+    float weight, Pose& output) noexcept;
+
 [[nodiscard]] Pose make_reference_pose(const core::HumanoidSkeleton& skeleton) noexcept;
 
 } // namespace arut::animation
