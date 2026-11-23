@@ -212,6 +212,7 @@ private:
 
 struct WorldCellContent final {
     WorldCell cell{};
+    TerrainLod lod{TerrainLod::High};
     TerrainMesh terrain{};
 };
 
@@ -219,6 +220,7 @@ struct WorldStreamingReport final {
     std::size_t loaded{0};
     std::size_t unloaded{0};
     std::size_t failed{0};
+    std::size_t updated{0};
     std::size_t resident{0};
 };
 
@@ -228,16 +230,31 @@ class WorldCellStreamer final {
 public:
     using Loader = std::function<bool(WorldCell, WorldCellContent&)>;
     using Unloader = std::function<void(WorldCell, WorldCellContent&)>;
+    using Refresher = std::function<bool(WorldCell, WorldCellContent&)>;
 
     [[nodiscard]] WorldStreamingReport update(
         WorldPartition& partition, float center_x, float center_z,
-        std::uint32_t radius, const Loader& loader, const Unloader& unloader = {}) {
+        std::uint32_t radius, const Loader& loader, const Unloader& unloader = {},
+        const Refresher& refresher = {}) {
         if (!loader) throw std::invalid_argument("world cell loader is required");
         (void)partition.update_streaming(center_x, center_z, radius);
         const auto active = partition.active_cells();
         WorldStreamingReport report{};
         for (const auto cell : active) {
-            if (resident_.contains(cell)) continue;
+            const auto existing = resident_.find(cell);
+            if (existing != resident_.end()) {
+                if (refresher) {
+                    try {
+                        if (refresher(cell, existing->second)) {
+                            if (existing->second.cell == cell && existing->second.terrain.valid())
+                                ++report.updated;
+                            else
+                                ++report.failed;
+                        }
+                    } catch (...) { ++report.failed; }
+                }
+                continue;
+            }
             WorldCellContent content{};
             content.cell = cell;
             bool loaded = false;
