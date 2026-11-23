@@ -1,1 +1,1 @@
-phase3-ecs-5000-cubes-apk-build-after-host-test-pass-2026-11-23
+phase3-acceptance-apk-build-authorized-after-full-ci-pass-2026-11-23
