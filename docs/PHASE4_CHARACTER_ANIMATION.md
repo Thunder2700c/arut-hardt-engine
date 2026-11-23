@@ -1,6 +1,6 @@
 # Phase 4 — Character and animation
 
-**Status:** In progress. The rig, procedural bind-pose mesh generator and Vulkan static-mesh submission path are implemented. Skeletal deformation and animation are still pending; physical-device visibility has not yet been verified.
+**Status:** In progress. The rig, procedural bind-pose mesh generator, Vulkan static-mesh submission path and isolated Android Test Laboratory profiles are implemented. Skeletal deformation, movement and animation are still pending; physical-device visibility has not yet been verified.
 
 ## Canonical scope
 
@@ -20,6 +20,16 @@
 4. **4.4 — Locomotion and blending:** in-place idle/walk/run/strafe/backward/jump/fall/land clips, state machine and smooth directional blend.
 5. **4.5 — IK:** two-bone leg solving and terrain-aware foot placement/orientation.
 6. **4.6 — Third-person integration:** follow/orbit camera, camera collision, Android touch controls, desktop keyboard/mouse controls, test arena and runtime diagnostics.
+
+## Android Test Laboratory profiles
+
+The Android launcher now presents three explicit runtime choices:
+
+- `ecs_stress` — constructs and renders the 5,000-entity ECS stress scene without the humanoid mannequin.
+- `humanoid` — skips ECS stress-entity creation and renders the mannequin with the streamed terrain test arena.
+- `combined` — runs both systems together as a separate integration profile.
+
+The Android profile picker is implemented by `app/src/main/java/com/arut/engine/TestLabActivity.java`. Stable profile IDs and inclusion rules live in `engine/core/include/arut/core/test_lab_profile.hpp`, with host tests in `tests/test_lab_profile_tests.cpp`. The native log records the selected profile and the renderer's stress/mannequin switches. Selecting the humanoid profile must not be mistaken for skeletal animation: it currently renders a static bind pose.
 
 ## Technical constraints
 
