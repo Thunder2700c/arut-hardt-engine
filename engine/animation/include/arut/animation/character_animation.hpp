@@ -68,6 +68,7 @@ private:
     [[nodiscard]] bool enter(CharacterAnimationState next, float blend_seconds) noexcept;
 
     CharacterAnimationSet clips_{};
+    std::array<AnimationClip, kCharacterAnimationStateCount> owned_clips_{};
     AnimationStateMachine graph_{};
     CharacterAnimationState state_{CharacterAnimationState::Idle};
     float state_elapsed_{0.0F};
