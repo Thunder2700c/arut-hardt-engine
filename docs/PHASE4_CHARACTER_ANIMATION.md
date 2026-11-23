@@ -30,9 +30,12 @@
 - Animation runtime/import dependencies must be license-audited and built for Android ARM64 before adoption.
 - Do not claim skeletal rendering, IK, physics collision or playable controls until implemented and tested.
 
-## First slice: humanoid skeleton contract
+## Implemented: rig and procedural bind-pose mesh foundation
 
-The humanoid_skeleton.hpp header defines a 20-joint humanoid hierarchy with validated parent ordering, finite rest translations and positive visual radii. The character_skeleton_tests.cpp test checks the built-in rig and rejects invalid parent references. The CMake test is host-only and does not imply Android rendering support.
+- `engine/core/include/arut/core/humanoid_skeleton.hpp` defines a 20-joint humanoid hierarchy with validated parent ordering, finite rest translations and positive visual radii.
+- `engine/rendering/include/arut/rendering/robot_mannequin.hpp` builds a deterministic triangle mesh from bone segments and joint spheres.
+- `tests/character_skeleton_tests.cpp` checks the rig contract, mesh non-emptiness, triangle/index validity and finite vertex positions/normals.
+- The host CMake test links `arut_core` and `arut_rendering`. This proves procedural geometry generation only; it does not imply Vulkan submission, skeletal deformation, or Android visibility.
 
 ## Exit criteria
 
