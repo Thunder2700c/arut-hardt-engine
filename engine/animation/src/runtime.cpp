@@ -118,6 +118,16 @@ void AnimationPlayer::set_playback_rate(float rate) noexcept {
     if (finite(rate)) playback_rate_ = std::clamp(rate, -4.0F, 4.0F);
 }
 
+bool AnimationPlayer::seek(float time_seconds) noexcept {
+    if (!clip_ || !finite(time_seconds) ||
+        !clip_->valid(clip_->keys.empty() ? 0U : clip_->keys.front().pose.joint_count))
+        return false;
+    time_seconds_ = looping_ ? std::fmod(time_seconds, clip_->duration_seconds)
+                             : std::clamp(time_seconds, 0.0F, clip_->duration_seconds);
+    if (time_seconds_ < 0.0F) time_seconds_ += clip_->duration_seconds;
+    return true;
+}
+
 void AnimationPlayer::set_looping(bool looping) noexcept { looping_ = looping; }
 
 bool blend_poses(const Pose& from, const Pose& to, float alpha, Pose& output) noexcept {
