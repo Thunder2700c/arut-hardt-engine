@@ -2743,8 +2743,12 @@ bool AndroidRenderer::create_pbr_descriptors() noexcept {
     if (result != VK_SUCCESS || !mapped) { log_error("Map frame uniform buffer failed", result); return false; }
     std::memcpy(mapped, &frame_upload, sizeof(FrameData)); vkUnmapMemory(device_, frame_uniform_memory_);
 
-    const MaterialData material{{1.0F, 1.0F, 1.0F, 1.0F}, {0.0F, 0.0F, 0.0F, 0.25F},
-                                {0.68F, 1.0F, 1.0F, 0.5F}, {7U, 0U, 0U, 0U}};
+    const // Built-in mannequin uses a clean neutral metallic material. Do not bind
+    // the demo UV-checker texture to the default character: imported skins
+    // may opt into their own glTF material path, but the built-in mesh must
+    // look finished without any external asset.
+    MaterialData material{{0.43F, 0.49F, 0.57F, 1.0F}, {0.0F, 0.0F, 0.0F, 0.38F},
+                          {0.34F, 1.0F, 1.0F, 0.5F}, {0U, 0U, 0U, 0U}};
     mapped = nullptr;
     result = vkMapMemory(device_, material_uniform_memory_, 0, sizeof(MaterialData), 0, &mapped);
     if (result != VK_SUCCESS || !mapped) { log_error("Map material uniform buffer failed", result); return false; }
