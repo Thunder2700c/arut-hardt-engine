@@ -2066,7 +2066,9 @@ bool AndroidRenderer::create_pbr_geometry() noexcept {
         visibility_frustum_planes_[plane_index * 4U + 3U] = plane.distance;
     }
     const VkDeviceSize input_bytes = visibility_instances_.size() * sizeof(arut::rendering::GpuVisibilityInstance);
-    if (compute_queue_supported_) {
+    // Humanoid-only profiles intentionally have no ECS visibility input.
+    // Avoid a zero-byte Vulkan allocation and preserve queue capability state.
+    if (compute_queue_supported_ && visibility_source_instance_count_ != 0U) {
         if (!create_buffer(input_bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                            visibility_input_buffer_, visibility_input_memory_)) {
             compute_queue_supported_ = false;
