@@ -118,7 +118,7 @@ namespace arut::rendering {
         append_sphere(positions[i],skeleton.bones[i].visual_radius*1.12F,
             static_cast<std::uint32_t>(i));
     }
-    for (const auto foot : {core::HumanoidBone::LeftFoot, core::HumanoidBone::RightFoot}) {
+    constexpr std::array<core::HumanoidBone, 2> foot_bones{\n        core::HumanoidBone::LeftFoot, core::HumanoidBone::RightFoot};\n    for (const auto foot : foot_bones) {
         const auto index = static_cast<std::size_t>(foot);
         const V3 foot_center = add(positions[index], {0.0F, -0.035F, -0.105F});
         append_ellipsoid(foot_center, {0.095F, 0.055F, 0.17F},
