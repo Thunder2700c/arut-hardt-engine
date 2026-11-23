@@ -33,6 +33,7 @@ int main() {
     auto pose = make_rest_humanoid_pose(skeleton);
     HumanoidSkinningPalette rest_palette{};
     assert(build_humanoid_skinning_palette(skeleton, pose, rest_palette));
+    assert(rest_palette.matrices.size() == 128U);
     for (const auto& matrix : rest_palette.matrices) {
         for (std::size_t i = 0; i < 16U; ++i) {
             const float expected = Mat4::identity().value[i];
