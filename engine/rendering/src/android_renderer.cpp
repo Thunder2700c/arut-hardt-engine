@@ -63,9 +63,22 @@ bool AndroidRenderer::initialize(
     ANativeWindow* window, AAssetManager* assets,
     std::span<const arut::core::CubeRenderInstance> ecs_instances,
     std::span<const arut::core::TerrainMesh> terrain_meshes,
-    bool render_mannequin) noexcept {
+    bool render_mannequin,
+    std::span<const arut::rendering::Mat4> static_scene_instances) noexcept {
     shutdown();
     mannequin_scene_enabled_ = render_mannequin;
+    try {
+        static_scene_instances_.assign(static_scene_instances.begin(), static_scene_instances.end());
+    } catch (...) {
+        log_error("Static test-scene instance allocation failed");
+        shutdown();
+        return false;
+    }
+    if (static_scene_instances_.size() > UINT32_MAX) {
+        log_error("Static test-scene instance count exceeds Vulkan draw limit");
+        shutdown();
+        return false;
+    }
     has_external_humanoid_state_ = false;
     jump_pointer_ = -1;
     jump_pressed_ = false;
@@ -158,7 +171,7 @@ bool AndroidRenderer::create_frame_resources() noexcept {
            create_triangle_geometry() && create_triangle_pipeline() &&
            create_pbr_geometry() &&
            (!mannequin_scene_enabled_ || create_mannequin_geometry()) &&
-           create_terrain_geometry() && create_gpu_visibility_resources() &&
+           create_static_scene_geometry() && create_terrain_geometry() && create_gpu_visibility_resources() &&
            create_fallback_texture() &&
            create_environment_cubemap() && create_environment_probe_cubemaps() &&
            create_brdf_lut() &&
@@ -1904,6 +1917,30 @@ bool AndroidRenderer::create_triangle_pipeline() noexcept {
 }
 
 
+bool AndroidRenderer::create_static_scene_geometry() noexcept {
+    static_scene_instance_count_ =
+        static_cast<std::uint32_t>(static_scene_instances_.size());
+    if (static_scene_instance_count_ == 0U) return true;
+    const VkDeviceSize bytes =
+        static_cast<VkDeviceSize>(static_scene_instances_.size() * sizeof(arut::rendering::Mat4));
+    if (!create_buffer(bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                       static_scene_instance_buffer_, static_scene_instance_memory_)) return false;
+    void* mapped = nullptr;
+    const VkResult result = vkMapMemory(device_, static_scene_instance_memory_,
+        0, bytes, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped) {
+        log_error("Map static test-scene instance buffer failed", result);
+        return false;
+    }
+    std::memcpy(mapped, static_scene_instances_.data(), static_cast<std::size_t>(bytes));
+    vkUnmapMemory(device_, static_scene_instance_memory_);
+    char message[160]{};
+    std::snprintf(message, sizeof(message),
+        "TEST_ARENA_RENDER_INSTANCES ready=true count=%u", static_scene_instance_count_);
+    arut_android_log(ANDROID_LOG_INFO, message);
+    return true;
+}
+
 bool AndroidRenderer::create_mannequin_geometry() noexcept {
     const auto mesh = arut::rendering::make_robot_mannequin_mesh();
     if (mesh.vertices.empty() || mesh.indices.empty() ||
@@ -3022,7 +3059,9 @@ bool AndroidRenderer::draw_frame() noexcept {
                 arut_android_log(ANDROID_LOG_INFO, parity);
             }
             last_triangles_ = (cube_index_count_ / 3U) * completed.instance_count +
-                terrain_triangle_count_ + mannequin_index_count_ / 3U;
+                terrain_triangle_count_ + mannequin_index_count_ / 3U +
+                (cube_index_count_ / 3U) * static_scene_instance_count_;
+            last_visible_objects_ += static_scene_instance_count_;
             if (mannequin_index_count_ != 0U) ++last_visible_objects_;
         } else {
             gpu_visibility_result_pending_ = false;
@@ -3031,8 +3070,10 @@ bool AndroidRenderer::draw_frame() noexcept {
     } else if (!gpu_visibility_enabled_) {
         last_visible_objects_ = instance_count_;
         last_triangles_ = (cube_index_count_ / 3U) * instance_count_ +
-            terrain_triangle_count_ + mannequin_index_count_ / 3U;
-        last_visible_objects_ = instance_count_ + (mannequin_index_count_ != 0U ? 1U : 0U);
+            terrain_triangle_count_ + mannequin_index_count_ / 3U +
+            (cube_index_count_ / 3U) * static_scene_instance_count_;
+        last_visible_objects_ = instance_count_ + static_scene_instance_count_ +
+            (mannequin_index_count_ != 0U ? 1U : 0U);
     }
     if (timestamp_queries_available_ && timestamp_data_pending_) {
         std::array<std::uint64_t, 4> timestamps{};
@@ -3125,6 +3166,17 @@ bool AndroidRenderer::draw_frame() noexcept {
                     0, VK_INDEX_TYPE_UINT32);
                 vkCmdDrawIndexed(command_buffers_[image_index], mannequin_index_count_, 1, 0, 0, 0);
             }
+            if (static_scene_instance_count_ != 0U) {
+                const std::array<VkBuffer, 2> static_buffers{
+                    cube_vertex_buffer_, static_scene_instance_buffer_};
+                const std::array<VkDeviceSize, 2> static_offsets{0, 0};
+                vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 2,
+                    static_buffers.data(), static_offsets.data());
+                vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_,
+                    0, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(command_buffers_[image_index], cube_index_count_,
+                    static_scene_instance_count_, 0, 0, 0);
+            }
             for (const auto& terrain : terrain_gpu_meshes_) {
                 const std::array<VkBuffer, 2> terrain_buffers{terrain.vertex_buffer, terrain.instance_buffer};
                 const std::array<VkDeviceSize, 2> terrain_offsets{0, 0};
@@ -3183,6 +3235,17 @@ bool AndroidRenderer::draw_frame() noexcept {
             0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexed(command_buffers_[image_index], mannequin_index_count_, 1, 0, 0, 0);
     }
+    if (static_scene_instance_count_ != 0U) {
+        const std::array<VkBuffer, 2> static_buffers{
+            cube_vertex_buffer_, static_scene_instance_buffer_};
+        const std::array<VkDeviceSize, 2> static_offsets{0, 0};
+        vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 2,
+            static_buffers.data(), static_offsets.data());
+        vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_,
+            0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(command_buffers_[image_index], cube_index_count_,
+            static_scene_instance_count_, 0, 0, 0);
+    }
     for (const auto& terrain : terrain_gpu_meshes_) {
         const std::array<VkBuffer, 2> terrain_buffers{terrain.vertex_buffer, terrain.instance_buffer};
         const std::array<VkDeviceSize, 2> terrain_offsets{0, 0};
@@ -3236,7 +3299,9 @@ bool AndroidRenderer::draw_frame() noexcept {
     }
     const auto terrain_draws = static_cast<std::uint32_t>(terrain_gpu_meshes_.size());
     const std::uint32_t mannequin_draws = mannequin_index_count_ != 0U ? 1U : 0U;
-    const std::uint32_t scene_draws = terrain_draws + 1U + mannequin_draws;
+    const std::uint32_t static_scene_draws = static_scene_instance_count_ != 0U ? 1U : 0U;
+    const std::uint32_t scene_draws =
+        terrain_draws + 1U + mannequin_draws + static_scene_draws;
     last_draw_calls_ = (shadow_enabled_ ? shadow_cascade_count_ * scene_draws : 0U) + scene_draws;
     VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     present.waitSemaphoreCount = 1;
@@ -3335,6 +3400,11 @@ void AndroidRenderer::destroy_swapchain() noexcept {
             if (terrain.allocation_bytes <= tracked_gpu_memory_bytes_)
                 tracked_gpu_memory_bytes_ -= terrain.allocation_bytes;
         }
+        if (static_scene_instance_buffer_) vkDestroyBuffer(device_, static_scene_instance_buffer_, nullptr);
+        if (static_scene_instance_memory_) vkFreeMemory(device_, static_scene_instance_memory_, nullptr);
+        static_scene_instance_buffer_ = VK_NULL_HANDLE;
+        static_scene_instance_memory_ = VK_NULL_HANDLE;
+        static_scene_instance_count_ = 0U;
         if (mannequin_vertex_buffer_) vkDestroyBuffer(device_, mannequin_vertex_buffer_, nullptr);
         if (mannequin_vertex_memory_) vkFreeMemory(device_, mannequin_vertex_memory_, nullptr);
         if (mannequin_index_buffer_) vkDestroyBuffer(device_, mannequin_index_buffer_, nullptr);
