@@ -1,6 +1,6 @@
 # ARUT-HARDT GASP-Style Animation System
 
-**Status:** Active implementation — runtime, pose-search/playback foundations, Android pose-history feed, and initial cgltf-backed GLB skeletal mesh/clip importer committed; retargeting, material import, runtime integration and full GASP-style feature set remain incomplete  
+**Status:** Active implementation — runtime, pose-search/playback foundations, Android pose-history feed, initial cgltf-backed GLB skeletal mesh/clip importer, and name-based rest-pose retargeting foundations committed; material import, runtime renderer integration, combat graph and full GASP-style feature set remain incomplete  
 **Language policy:** Native C++ only. No GDScript.  
 **Targets:** Android ARM64 first; desktop support must remain portable.  
 **Reference:** Unreal Engine Game Animation Sample Project (GASP), recreated as an original engine subsystem. This document describes desired behavior and architecture; it does not claim feature parity or completed implementation.
@@ -28,14 +28,14 @@ The system must work with the engine's replaceable metallic robot mannequin and 
 - Import glTF 2.0 / GLB skeletal meshes, skins, joint hierarchies, inverse bind matrices, vertex weights, animation samplers/channels, PBR materials and textures. Initial importer now reads embedded GLB 2.0, one skin (up to the current 20-joint pose limit), triangle primitives, four joint/weight influences, inverse bind matrices, and translation/rotation/scale animation channels. PBR material/texture import, external .gltf URI resolution, matrix-authored joint transforms and compressed geometry remain future work.
 - Preserve source skeleton hierarchy and stable bone names/indices.
 - Validate malformed assets, unsupported interpolation modes, invalid weights, missing joints and out-of-range accessors.
-- Support skeleton profiles and retarget maps so different character proportions can use compatible animation libraries.
+- Support skeleton profiles and retarget maps so different character proportions can use compatible animation libraries. Initial name/alias matching and rest-pose-relative rotation, translation-scale and scale retargeting are implemented for rigs within the current 20-joint pose capacity.
 - Keep the existing procedural mannequin as a fallback/test asset until imported assets are fully supported.
 
 ### 3.2 Animation runtime
 
 - Animation clips with duration, sample rate, tracks, interpolation and root-motion metadata.
 - Pose representation independent of the renderer.
-- Animation graph primitives: clip player, blend, additive layer, state machine, transition, animation event and output pose.
+- Animation graph primitives: clip player, blend, additive layer, state machine, transition, animation event and output pose. The combat layer will add attack chains, blocks, dodges, hit reactions, recoveries, root-motion windows and authored cancel/combo windows.
 - Inertialized/smooth transitions to avoid visible pose pops.
 - Root-motion extraction and controlled application, with an explicit choice between animation-driven and capsule-driven movement.
 - Thread-safe evaluation with immutable asset data and per-character runtime state.
@@ -79,8 +79,8 @@ The system must work with the engine's replaceable metallic robot mannequin and 
 ## 4. Implementation sequence
 
 1. **4A — Runtime separation and asset contracts (in progress):** renderer-independent pose/clip runtime, sampling, quaternion interpolation and blending are implemented with host tests. Remaining: move final pose ownership out of renderer-specific code, add graph/state-machine transitions and root-motion contracts, and validate on device.
-2. **4B — Imported animation assets (initial importer implemented):** cgltf 1.15 is vendored under MIT; GLB memory import creates a skeletal hierarchy, inverse bind matrices, skinned triangle vertex/index data and animation clips with LINEAR, STEP and CUBICSPLINE sampling. A generated GLB host test is registered. Remaining: broaden beyond 20 joints, support multiple skins and matrix transforms, import materials/textures, test real licensed assets, and connect imported meshes to renderer upload.
-3. **4C — Animation graph and locomotion:** clip sampling, blending, state machine, transitions, root motion, starts/stops/turns and trajectory generation.
+2. **4B — Imported animation assets (initial importer + retargeting foundation implemented):** cgltf 1.15 is vendored under MIT; GLB memory import creates a skeletal hierarchy, inverse bind matrices, skinned triangle vertex/index data and animation clips with LINEAR, STEP and CUBICSPLINE sampling. Name/alias-based retarget maps and rest-pose-relative retargeting are implemented with host tests. Remaining: broaden beyond 20 joints, support multiple skins and matrix transforms, import materials/textures, test real licensed assets, and connect imported meshes to renderer upload.
+3. **4C — Animation graph, locomotion and combat:** clip sampling, blending, state machine, transitions, root motion, starts/stops/turns and trajectory generation; then layered martial-arts combat (attacks, blocks, dodges, hit reactions, recoveries and combo/cancel windows). This is where Shadow Fight 3-inspired movement and combat animation gets integrated after mannequin, importer and retargeting.
 4. **4D — Motion matching (foundation implemented):** pose-search schema, offline clip sampling/database generation, weighted feature scoring, tag filtering, continuity cost, pose-history ring buffer and trajectory prediction are implemented. Remaining: robust feature normalization, search profiling/LOD, imported clip database validation, and actual Android motion-matching playback once licensed clips are imported. Stateful clip selection and crossfade handoff are implemented; Android now records live pose history and predicts three future trajectory points.
 5. **4E — IK and traversal:** foot locking, warping, look-at, hand IK, vault/mantle interaction framework.
 6. **4F — Physics animation and ragdoll:** integrate the chosen physics backend; build reusable bone-body/joint profiles, powered ragdoll and recovery.
