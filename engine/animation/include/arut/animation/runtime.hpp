@@ -56,7 +56,7 @@ public:
     void set_clip(const AnimationClip* clip, bool restart = true) noexcept;
     [[nodiscard]] bool update(float delta_seconds, Pose& output) noexcept;
     [[nodiscard]] bool update(float delta_seconds, Pose& output,
-                              std::vector<AnimationEvent>& output_events) noexcept;
+                              std::vector<AnimationEvent>& output_events);
     void set_playback_rate(float rate) noexcept;
     [[nodiscard]] bool seek(float time_seconds) noexcept;
     void set_looping(bool looping) noexcept;
