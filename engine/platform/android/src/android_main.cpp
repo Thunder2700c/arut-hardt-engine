@@ -43,12 +43,48 @@ struct RuntimeState final {
  arut::core::LodSystem lod_system{};
  arut::core::WorldPartition world_partition{128.0F};
  arut::core::WorldCellStreamer world_streamer{};
+ arut::core::LodSystem cell_lod_system{};
  bool ecs_scene_ready{false};
  bool terrain_cells_dirty{false};
  arut::rendering::vulkan::AndroidRenderer renderer{};
  std::uint64_t lifecycle_events{0};
  std::uint64_t input_events{0};
 };
+std::uint64_t cell_lod_id(arut::core::WorldCell cell) noexcept {
+ return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(cell.x)) << 32U) |
+        static_cast<std::uint32_t>(cell.z);
+}
+arut::core::TerrainLod select_cell_lod(RuntimeState& state,
+ arut::core::WorldCell cell, float camera_x, float camera_z) {
+ const float size = state.world_partition.cell_size();
+ const float center_x = (static_cast<float>(cell.x) + 0.5F) * size;
+ const float center_z = (static_cast<float>(cell.z) + 0.5F) * size;
+ const float dx = center_x - camera_x, dz = center_z - camera_z;
+ return state.cell_lod_system.select(cell_lod_id(cell), std::sqrt(dx * dx + dz * dz));
+}
+std::uint32_t cell_lod_resolution(arut::core::TerrainLod lod) noexcept {
+ switch (lod) {
+  case arut::core::TerrainLod::High: return 32U;
+  case arut::core::TerrainLod::Medium: return 16U;
+  case arut::core::TerrainLod::Low: return 8U;
+  case arut::core::TerrainLod::Impostor: return 4U;
+ }
+ return 4U;
+}
+bool build_cell_content(RuntimeState& state, arut::core::WorldCell cell,
+ float camera_x, float camera_z, arut::core::WorldCellContent& content) {
+ content.cell = cell;
+ content.lod = select_cell_lod(state, cell, camera_x, camera_z);
+ const float size = state.world_partition.cell_size();
+ content.terrain = arut::core::TerrainSystem::build(size, cell_lod_resolution(content.lod));
+ const float offset_x = static_cast<float>(cell.x) * size;
+ const float offset_z = static_cast<float>(cell.z) * size;
+ for (auto& vertex : content.terrain.vertices) {
+  vertex.x += offset_x;
+  vertex.z += offset_z;
+ }
+ return content.terrain.valid();
+}
 std::mutex g_log_mutex;
 FILE* g_log_file = nullptr;
 char g_log_path[1024]{};
@@ -276,15 +312,7 @@ void run(android_app* app) {
   const auto streaming = state.world_streamer.update(
    state.world_partition, 0.0F, 0.0F, 2U,
    [&state](arut::core::WorldCell cell, arut::core::WorldCellContent& content) {
-    content.cell = cell;
-    content.terrain = arut::core::TerrainSystem::build(state.world_partition.cell_size(), 16U);
-    const float offset_x = static_cast<float>(cell.x) * state.world_partition.cell_size();
-    const float offset_z = static_cast<float>(cell.z) * state.world_partition.cell_size();
-    for (auto& vertex : content.terrain.vertices) {
-     vertex.x += offset_x;
-     vertex.z += offset_z;
-    }
-    return content.terrain.valid();
+    return build_cell_content(state, cell, 0.0F, 0.0F, content);
    });
   state.terrain_cells = state.world_streamer.collect_terrain_meshes(state.world_partition);
   std::size_t terrain_vertices = 0U, terrain_indices = 0U;
@@ -353,18 +381,15 @@ void run(android_app* app) {
     const auto camera = state.renderer.camera_position();
     const auto streaming = state.world_streamer.update(
      state.world_partition, camera[0], camera[2], 2U,
-     [&state](arut::core::WorldCell cell, arut::core::WorldCellContent& content) {
-      content.cell = cell;
-      content.terrain = arut::core::TerrainSystem::build(state.world_partition.cell_size(), 16U);
-      const float offset_x = static_cast<float>(cell.x) * state.world_partition.cell_size();
-      const float offset_z = static_cast<float>(cell.z) * state.world_partition.cell_size();
-      for (auto& vertex : content.terrain.vertices) {
-       vertex.x += offset_x;
-       vertex.z += offset_z;
-      }
-      return content.terrain.valid();
+     [&state, camera](arut::core::WorldCell cell, arut::core::WorldCellContent& content) {
+      return build_cell_content(state, cell, camera[0], camera[2], content);
+     }, {},
+     [&state, camera](arut::core::WorldCell cell, arut::core::WorldCellContent& content) {
+      const auto lod = select_cell_lod(state, cell, camera[0], camera[2]);
+      if (lod == content.lod) return false;
+      return build_cell_content(state, cell, camera[0], camera[2], content);
      });
-    if (streaming.loaded > 0U || streaming.unloaded > 0U)
+    if (streaming.loaded > 0U || streaming.unloaded > 0U || streaming.updated > 0U)
      state.terrain_cells_dirty = true;
     if (state.terrain_cells_dirty) {
      auto updated_cells = state.world_streamer.collect_terrain_meshes(state.world_partition);
