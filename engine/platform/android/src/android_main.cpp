@@ -71,6 +71,8 @@ struct RuntimeState final {
  arut::rendering::HumanoidAnimator humanoid_animator{};
  std::array<FootPlantState, 2> foot_plants{};
  std::array<bool, 2> foot_ik_clamped{};
+ float camera_follow_distance{4.2F};
+ bool camera_terrain_obstructed{false};
  std::uint64_t character_fixed_steps{0};
  std::uint64_t lifecycle_events{0};
  std::uint64_t input_events{0};
@@ -653,6 +655,8 @@ void run(android_app* app) {
      if (!camera.valid) {
       log_warn("THIRD_PERSON_CAMERA terrain sweep failed; retaining previous camera.");
      } else {
+      state.camera_follow_distance = camera.distance;
+      state.camera_terrain_obstructed = camera.terrain_obstructed;
       state.renderer.set_humanoid_state(
        model, palette, camera_target, camera.position);
      }
@@ -718,6 +722,12 @@ void run(android_app* app) {
       state.foot_plants[1].active ? "true" : "false",
       state.foot_ik_clamped[0] ? "true" : "false",
       state.foot_ik_clamped[1] ? "true" : "false");
+     const auto camera_position = state.renderer.camera_position();
+     log_info("THIRD_PERSON_CAMERA distance=%.3f terrain_obstructed=%s position=%.3f,%.3f,%.3f yaw=%.3f pitch=%.3f",
+      state.camera_follow_distance,
+      state.camera_terrain_obstructed ? "true" : "false",
+      camera_position[0], camera_position[1], camera_position[2],
+      state.renderer.camera_yaw(), state.renderer.camera_pitch());
     }
     const auto render = state.renderer.profile_snapshot();
     log_info("RENDER_PROFILE cpu_frame_ms=%.3f gpu_frame_ms=%.3f visibility_pass_ms=%.3f shadow_pass_ms=%.3f main_pass_ms=%.3f gpu_memory_bytes=%" PRIu64 " gpu_memory_usage_bytes=%" PRIu64 " gpu_memory_budget_bytes=%" PRIu64 " budget=%s gpu_visibility=%s gpu_timestamps=%s draw_calls=%u visible_objects=%u triangles=%u",
