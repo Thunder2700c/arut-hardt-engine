@@ -48,13 +48,17 @@
 
 ## Phase 4 — Character and animation
 
-- [x] Robot mannequin — replaceable 20-bone reference rig, procedural mesh, 128-joint skinning palette and imported GLB rendering path.
-- [x] Locomotion — idle, walk, run, strafe, backward, jump, fall and land; imported clip-state binding is available.
-- [x] Animation blending — pose blending, timed state-graph crossfades, additive layers and event tracks.
-- [x] IK — terrain-aware two-bone foot IK with planted-foot tracking and reach clamping.
-- [x] Character controller — fixed-step kinematic capsule, slope/step handling, collision queries, jump and third-person camera; Android keyboard/gamepad combat actions now drive procedural attack, guard and dodge poses.
+Phase 4 is not complete until the built-in default character, combat animation, motion matching, IK/traversal, ragdoll and device validation all meet their acceptance criteria. Imported GLB skins are optional replacements; they are not a dependency for the default character.
 
-**Deliverable:** playable third-person character. Source implementation and host/Android compile gates are complete; S23 FE APK runtime validation remains pending.
+- [ ] **4A — Built-in procedural mannequin:** 128-joint palette and rig foundation exist. The default model is being upgraded to a smooth anatomical A-pose mannequin with its own neutral metallic material. Visual acceptance on S23 FE is pending; it must look presentable without a GLB.
+- [ ] **4B — GLB and rendering pipeline:** skinned mesh/joint/weight/inverse-bind/animation import and Vulkan upload/draw foundations exist. Multiple skins, mesh primitives, material/texture import and broader GLB coverage remain incomplete.
+- [ ] **4C — Locomotion and combat animation:** locomotion states, graph crossfades, additive poses and event tracks exist. Authored start/stop/turn-in-place, martial-arts punches/kicks, blocks, dodges, hit reactions, combo/cancel timing and polished transitions remain incomplete.
+- [ ] **4D — Motion matching:** pose-search schema, trajectory features and continuity-cost foundation exist. A production animation database, runtime candidate search/selection, trajectory-driven locomotion and responsive fallback integration remain incomplete.
+- [ ] **4E — IK and traversal:** terrain-aware two-bone foot IK exists. Stable foot locking, hand IK, vaulting, climbing, mantling and motion warping remain incomplete.
+- [ ] **4F — Ragdoll and physical reactions:** not implemented as a complete system. Requires a stable articulated physics rig, constraints, partial/full ragdoll blending, hit impulse response and get-up/recovery.
+- [ ] **4G — Device validation:** an earlier APK launched on S23 FE, but that build showed the old mannequin and demo checker texture. The improved default model/material must be rebuilt and tested on device for appearance, controls, sustained FPS, memory, thermal behaviour and lifecycle stability.
+
+**Deliverable:** a polished, playable third-person humanoid using the built-in procedural mannequin by default, with optional imported character replacement. Phase 5 remains locked until all Phase 4 gates pass.
 
 ## Phase 5 — Vehicle system
 
