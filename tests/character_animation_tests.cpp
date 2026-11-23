@@ -24,10 +24,10 @@ int main() {
     auto idle = make_clip("idle", 0.0F);
     auto walk = make_clip("walk", 2.0F);
     auto run = make_clip("run", 4.0F);
-    auto attack = make_clip("attack", 6.0F, false);
+    auto attack = make_clip("attack", 6.0F, true);
     auto dodge = make_clip("dodge", 8.0F, false);
     auto hit = make_clip("hit", 10.0F, false);
-    auto heavy = make_clip("heavy", 12.0F, false);
+    auto heavy = make_clip("heavy", 12.0F, true);
     auto strafe = make_clip("strafe", 14.0F);
     auto jump = make_clip("jump", 16.0F);
     auto fall = make_clip("fall", 18.0F);
@@ -55,6 +55,7 @@ int main() {
 
     CharacterAnimationController controller;
     assert(controller.configure(set));
+    assert(attack.looping && heavy.looping); // Controller owns non-looping action copies.
     assert(controller.start());
     Pose pose{};
     std::vector<AnimationEvent> events;
