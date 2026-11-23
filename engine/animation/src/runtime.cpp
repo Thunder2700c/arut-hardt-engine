@@ -126,6 +126,7 @@ bool AnimationPlayer::update(float delta_seconds, Pose& output, std::vector<Anim
         if (looping_) {
             const double low = std::min<double>(previous, unwrapped);
             const double high = std::max<double>(previous, unwrapped);
+            if (high / duration > 4096.0) return false;
             const auto first_cycle = static_cast<long long>(std::floor(low / duration)) - 1LL;
             const auto last_cycle = static_cast<long long>(std::floor(high / duration)) + 1LL;
             if (last_cycle - first_cycle > 4096LL) return false;
