@@ -60,7 +60,7 @@ namespace arut::rendering {
         }
         for (std::uint32_t r = 0; r < rings; ++r) for (std::uint32_t s = 0; s < radial_segments; ++s) {
             const std::uint32_t a = base + r*(radial_segments+1U)+s, b=a+radial_segments+1U;
-            mesh.indices.insert(mesh.indices.end(), {a,b,a+1U,a+1U,b,b+1U});
+            mesh.indices.insert(mesh.indices.end(), {a,a+1U,b,a+1U,b+1U,b});
         }
     };
 
