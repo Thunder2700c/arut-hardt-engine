@@ -96,6 +96,21 @@ jobs:
         run: cargo build --workspace --locked --release --target aarch64-linux-android
       - name: Configure Android ARM64 native target
         run: cmake --preset android-arm64
+      - name: Install Android shader compiler
+        run: sudo apt-get update && sudo apt-get install -y glslang-tools
+      - name: Compile packaged Android SPIR-V assets (no APK)
+        run: |
+          mkdir -p app/src/main/assets/shaders
+          glslangValidator -V --target-env vulkan1.0 -o app/src/main/assets/shaders/first_triangle.vert.spv engine/rendering/shaders/first_triangle.vert
+          glslangValidator -V --target-env vulkan1.0 -o app/src/main/assets/shaders/first_triangle.frag.spv engine/rendering/shaders/first_triangle.frag
+          glslangValidator -V --target-env vulkan1.0 -o app/src/main/assets/shaders/mobile_pbr_forward.vert.spv engine/rendering/shaders/mobile_pbr_forward.vert
+          glslangValidator -V --target-env vulkan1.0 -o app/src/main/assets/shaders/mobile_pbr_forward.frag.spv engine/rendering/shaders/mobile_pbr_forward.frag
+          glslangValidator -V --target-env vulkan1.0 -o app/src/main/assets/shaders/mobile_shadow_depth.vert.spv engine/rendering/shaders/mobile_shadow_depth.vert
+          glslangValidator -V --target-env vulkan1.0 -o app/src/main/assets/shaders/visibility_cull.comp.spv engine/rendering/shaders/visibility_cull.comp
+          for shader in app/src/main/assets/shaders/*.spv; do
+            test -s "$shader"
+            printf 'PACKAGED_SHADER %s bytes=%s\\n' "$shader" "$(stat -c %s "$shader")"
+          done
       - name: Compile Android native library (no APK)
         run: cmake --build --preset android-arm64 --parallel 2
       - uses: actions/setup-java@v4
