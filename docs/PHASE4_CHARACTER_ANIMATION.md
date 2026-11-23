@@ -1,6 +1,6 @@
 # Phase 4 — Character and animation
 
-**Status:** In progress. The rig contract and procedural bind-pose mesh generator are implemented. Renderer integration and animation are still pending; this is not yet a rendered or playable character.
+**Status:** In progress. The rig, procedural bind-pose mesh generator and Vulkan static-mesh submission path are implemented. Skeletal deformation and animation are still pending; physical-device visibility has not yet been verified.
 
 ## Canonical scope
 
@@ -15,7 +15,7 @@
 ## Implementation slices
 
 1. **4.1 — Rig foundation:** define a stable humanoid bone order, parent hierarchy, metre-based rest translations and per-joint visual radii. Keep the rig procedural and engine-owned so no licensed character asset is required.
-2. **4.2 — Mannequin rendering:** connect the generated bind-pose mesh to the Vulkan draw path, then add GPU skinning/bone palette support and validate on Android.
+2. **4.2 — Mannequin rendering:** connect the generated bind-pose mesh to the Vulkan draw path, add GPU skinning/bone palette support, and validate visibility on Android.
 3. **4.3 — Character movement:** fixed-step controller, capsule collision, gravity, grounded state, slope handling, jump and movement acceleration/deceleration.
 4. **4.4 — Locomotion and blending:** in-place idle/walk/run/strafe/backward/jump/fall/land clips, state machine and smooth directional blend.
 5. **4.5 — IK:** two-bone leg solving and terrain-aware foot placement/orientation.
@@ -33,9 +33,9 @@
 ## Implemented: rig and procedural bind-pose mesh foundation
 
 - `engine/core/include/arut/core/humanoid_skeleton.hpp` defines a 20-joint humanoid hierarchy with validated parent ordering, finite rest translations and positive visual radii.
-- `engine/rendering/include/arut/rendering/robot_mannequin.hpp` builds a deterministic triangle mesh from bone segments and joint spheres.
+- `engine/rendering/include/arut/rendering/robot_mannequin.hpp` builds a deterministic triangle mesh from bone segments and joint spheres, with outward-facing triangle winding for back-face culling.\n- `engine/rendering/src/android_renderer.cpp` uploads the mesh and its instance transform to Vulkan buffers, submits it in the main and shadow passes, and emits a `HUMANOID_RENDERER` readiness log. This is static bind-pose drawing only; no bone palette or GPU skinning exists yet.
 - `tests/character_skeleton_tests.cpp` checks the rig contract, mesh non-emptiness, triangle/index validity and finite vertex positions/normals.
-- The host CMake test links `arut_core` and `arut_rendering`. This proves procedural geometry generation only; it does not imply Vulkan submission, skeletal deformation, or Android visibility.
+- The host CMake test links `arut_core` and `arut_rendering`. Host tests prove procedural geometry and winding. Android CI compiles the Vulkan path; only an on-device log and visual check can prove that the mannequin is actually visible.
 
 ## Exit criteria
 
