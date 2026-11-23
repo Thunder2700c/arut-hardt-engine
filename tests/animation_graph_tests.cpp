@@ -17,6 +17,7 @@ static AnimationClip make_clip(const char* name, float x) {
     b.joints[0].translation.x = x + 1.0F;
     clip.keys.push_back({0.0F, a});
     clip.keys.push_back({1.0F, b});
+    clip.events.push_back({0.1F, "notify", name});
     return clip;
 }
 
@@ -31,14 +32,18 @@ int main() {
     assert(graph.start(1U));
 
     Pose pose{};
-    assert(graph.update(0.2F, pose));
+    std::vector<AnimationEvent> events;
+    assert(graph.update(0.2F, pose, events));
+    assert(events.size() == 1U && events[0].payload == "idle");
     assert(pose.joint_count == 2U);
     assert(pose.joints[0].translation.x > 0.19F &&
            pose.joints[0].translation.x < 0.21F);
 
     assert(graph.transition_to(2U, 0.4F));
     assert(graph.transitioning());
-    assert(graph.update(0.2F, pose));
+    events.clear();
+    assert(graph.update(0.2F, pose, events));
+    assert(events.size() == 1U && events[0].payload == "attack");
     assert(pose.joints[0].translation.x > 5.0F &&
            pose.joints[0].translation.x < 6.0F);
     assert(graph.update(0.2F, pose));
@@ -51,5 +56,5 @@ int main() {
     assert(!graph.transitioning());
     graph.reset();
     assert(!graph.update(0.1F, pose));
-    std::cout << "ANIMATION_GRAPH_TEST pass states=2 crossfade=0.4s\n";
+    std::cout << "ANIMATION_GRAPH_TEST pass states=2 crossfade=0.4s event_routing=1\n";
 }
