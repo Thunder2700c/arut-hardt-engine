@@ -2904,11 +2904,13 @@ void AndroidRenderer::update_stress_camera(float delta_seconds) noexcept {
 void AndroidRenderer::set_humanoid_state(
     const arut::rendering::Mat4& model,
     const arut::rendering::HumanoidSkinningPalette& palette,
-    const std::array<float, 3>& camera_target) noexcept {
+    const std::array<float, 3>& camera_target,
+    const std::array<float, 3>& camera_position) noexcept {
     if (!mannequin_scene_enabled_) return;
     pending_mannequin_model_ = model;
     pending_humanoid_palette_ = palette;
     humanoid_camera_target_ = camera_target;
+    humanoid_camera_position_ = camera_position;
     has_external_humanoid_state_ = true;
 }
 
@@ -2935,15 +2937,7 @@ void AndroidRenderer::update_humanoid_animation(float delta_seconds) noexcept {
         std::memcpy(mapped, &pending_humanoid_palette_, sizeof(pending_humanoid_palette_));
         vkUnmapMemory(device_, bone_palette_uniform_memory_);
 
-        const float cosine_pitch = std::cos(camera_pitch_);
-        const std::array<float, 3> forward{
-            std::cos(camera_yaw_) * cosine_pitch,
-            std::sin(camera_pitch_),
-            std::sin(camera_yaw_) * cosine_pitch
-        };
-        constexpr float follow_distance = 4.2F;
-        for (std::size_t axis = 0; axis < 3U; ++axis)
-            camera_position_[axis] = humanoid_camera_target_[axis] - forward[axis] * follow_distance;
+        camera_position_ = humanoid_camera_position_;
         return;
     }
     humanoid_animation_time_seconds_ += std::clamp(delta_seconds, 0.0F, 0.05F);
