@@ -81,4 +81,30 @@ private:
     std::size_t feature_count_{0U};
 };
 
+class MotionMatchingPlayer final {
+public:
+    [[nodiscard]] bool update(
+        const MotionMatchingDatabase& database,
+        const std::vector<MotionClipSource>& clips,
+        MotionMatchQuery query,
+        float delta_seconds,
+        Pose& output);
+
+    void reset() noexcept;
+    void set_transition_duration(float seconds) noexcept;
+    [[nodiscard]] bool active() const noexcept { return active_; }
+    [[nodiscard]] std::uint32_t active_clip_index() const noexcept { return active_clip_index_; }
+    [[nodiscard]] float transition_alpha() const noexcept;
+
+private:
+    AnimationPlayer player_{};
+    Pose previous_output_{};
+    Pose last_output_{};
+    std::uint32_t active_clip_index_{std::numeric_limits<std::uint32_t>::max()};
+    float transition_elapsed_{0.0F};
+    float transition_duration_{0.16F};
+    bool active_{false};
+    bool has_last_output_{false};
+};
+
 } // namespace arut::animation
