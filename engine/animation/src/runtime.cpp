@@ -111,11 +111,18 @@ void AnimationPlayer::set_clip(const AnimationClip* clip, bool restart) noexcept
 }
 
 bool AnimationPlayer::update(float delta_seconds, Pose& output) noexcept {
-    std::vector<AnimationEvent> ignored;
-    return update(delta_seconds, output, ignored);
+    if (!clip_ || !clip_->valid(clip_->keys.empty()?0U:clip_->keys.front().pose.joint_count) || !finite(delta_seconds) || delta_seconds < 0.0F || !finite(playback_rate_)) return false;
+    time_seconds_ += std::min(delta_seconds, 0.25F) * playback_rate_;
+    if (looping_) {
+        time_seconds_ = std::fmod(time_seconds_, clip_->duration_seconds);
+        if (time_seconds_ < 0.0F) time_seconds_ += clip_->duration_seconds;
+    } else {
+        time_seconds_ = std::clamp(time_seconds_, 0.0F, clip_->duration_seconds);
+    }
+    return clip_->sample(time_seconds_, output);
 }
 
-bool AnimationPlayer::update(float delta_seconds, Pose& output, std::vector<AnimationEvent>& output_events) noexcept {
+bool AnimationPlayer::update(float delta_seconds, Pose& output, std::vector<AnimationEvent>& output_events) {
     if (!clip_ || !clip_->valid(clip_->keys.empty()?0U:clip_->keys.front().pose.joint_count) || !finite(delta_seconds) || delta_seconds < 0.0F || !finite(playback_rate_)) return false;
     const float duration = clip_->duration_seconds;
     const float previous = time_seconds_;
