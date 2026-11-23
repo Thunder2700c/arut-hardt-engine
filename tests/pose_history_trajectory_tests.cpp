@@ -15,7 +15,7 @@ int main() {
     assert(history.latest()->pose.joints[0].translation.x==39.0F);
     assert(history.previous(1U)->pose.joints[0].translation.x==38.0F);
     assert(history.previous(32U)==nullptr);
-    assert(!history.push(1.0,p,{0.0F,0.0F,0.0F}));
+    assert(!history.push(0.016,p,{0.0F,0.0F,0.0F}));
 
     TrajectoryPredictionInput input{};
     input.world_velocity={2.0F,0.0F,0.0F};
