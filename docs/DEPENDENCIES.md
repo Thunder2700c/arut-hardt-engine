@@ -1,6 +1,6 @@
 # Dependency Evaluation
 
-**Status:** Candidates only. Nothing listed below is integrated by this document.
+**Status:** cgltf 1.15 is now vendored and linked for the initial GLB skeletal animation importer. Other entries remain candidates unless noted in their owning subsystem docs.
 
 Before adoption, record exact version/commit, license, transitive dependencies, Android ARM64 support, binary size, maintenance state, build procedure, and benchmark results on target devices.
 
@@ -15,7 +15,7 @@ Before adoption, record exact version/commit, license, transitive dependencies, 
 | Audio | miniaudio | Evaluate Android output, spatial audio and license |
 | Asset processing | meshoptimizer | Evaluate pipeline and attribution |
 | Texture containers | KTX-Software | Confirm KTX2/BasisU path and device support |
-| glTF import | fastgltf or cgltf | Compare parser safety, extension coverage and license |
+| glTF import | cgltf 1.15 | Integrated for embedded GLB 2.0 skeletal meshes/skins/animation clips; MIT; external .gltf URIs and meshopt/Draco compression are not enabled |
 | Editor UI | Dear ImGui or custom UI | Desktop authoring first; keep editor separate from runtime |
 
 Prefer permissive licenses where capabilities are comparable. Preserve exact notices for shipped dependencies. Avoid copying proprietary engine code, assets, or shaders. A dependency is not integrated until the build links it and tests exercise it.
