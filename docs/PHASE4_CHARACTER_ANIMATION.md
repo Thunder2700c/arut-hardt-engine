@@ -63,8 +63,9 @@ The Android profile picker is implemented by `app/src/main/java/com/arut/engine/
 
 ## Locomotion foundation
 
-- `engine/core/include/arut/core/character_controller.hpp` provides a fixed-timestep kinematic controller with a metre-based capsule profile, horizontal acceleration/deceleration, jump impulse, gravity, walkable-slope checks, maximum step-up height and bounded catch-up steps.
-- Ground contact is queried through a small callback so terrain and other world implementations can supply height and normal samples. The current implementation handles heightfield grounding and slope/step rejection; it does **not** yet collide the capsule against arbitrary walls, props or dynamic rigid bodies.
+- `engine/core/include/arut/core/character_controller.hpp` provides a fixed-timestep kinematic controller with a metre-based capsule profile, horizontal acceleration/deceleration, jump buffering, gravity, walkable-slope checks, maximum step-up height and bounded catch-up steps.
+- Ground contact is queried through a terrain callback. An optional capsule-overlap callback can supply obstacle tests; the controller performs horizontal axis-separated sliding when a proposed move is blocked. Host tests exercise diagonal movement against a wall.
+- The Android Humanoid scene currently supplies terrain grounding only and does not yet register a world-obstacle provider. Arbitrary props, dynamic rigid bodies and full collision-world integration remain unfinished.
 - `engine/rendering/include/arut/rendering/humanoid_animation.hpp` provides Idle, Walk, Run, StrafeLeft, StrafeRight, Backward, Jump, Fall and Land states. The current poses are procedural and blended smoothly; they are not imported motion-capture clips.
 - Host tests cover acceleration/deceleration, jump/landing, steep-slope and step-up rejection, fixed-step catch-up limits, animation state selection and pose blending.
 
