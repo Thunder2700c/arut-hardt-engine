@@ -74,14 +74,7 @@ int main() {
         if (!material) return false;
         content.material_asset = material.bytes;
         content.cell = cell;
-        content.terrain = TerrainSystem::build(128.0F, 8U);
-        const float offset_x = (static_cast<float>(cell.x) + 0.5F) * 128.0F;
-        const float offset_z = (static_cast<float>(cell.z) + 0.5F) * 128.0F;
-        for (auto& vertex : content.terrain.vertices) {
-            vertex.x += offset_x;
-            vertex.z += offset_z;
-            vertex.y = TerrainSystem::height(vertex.x, vertex.z);
-        }
+        content.terrain = TerrainSystem::build_cell(cell.x, cell.z, 128.0F, 8U);
         return true;
     };
     const auto unloader = [&unloaded_cells](WorldCell, WorldCellContent&) {
@@ -96,9 +89,9 @@ int main() {
     assert(cell_assets.stats().misses == 1U && cell_assets.stats().hits == 8U);
     for (const auto cell : streamed_partition.active_cells())
         assert(streamer.find(cell)->material_asset == streamer.find({0, 0})->material_asset);
-    const auto refresh_lod = [](WorldCell, WorldCellContent& content) {
+    const auto refresh_lod = [](WorldCell cell, WorldCellContent& content) {
         content.lod = TerrainLod::Low;
-        content.terrain = TerrainSystem::build(128.0F, 4U);
+        content.terrain = TerrainSystem::build_cell(cell.x, cell.z, 128.0F, 4U);
         return true;
     };
     const auto second_stream = streamer.update(
