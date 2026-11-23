@@ -42,6 +42,7 @@ public:
     bool set_imported_character(const arut::animation::SkeletalAsset& asset,
         const arut::animation::Pose& pose, const arut::rendering::Mat4& model) noexcept;
     bool load_imported_character_glb(const char* asset_path,
+        arut::animation::SkeletalAsset& out_asset,
         const arut::rendering::Mat4& model) noexcept;
     bool set_imported_character_pose(const arut::animation::SkeletalAsset& asset,
         const arut::animation::Pose& pose, const arut::rendering::Mat4& model) noexcept;
