@@ -115,5 +115,5 @@ int main() {
     assert(report.imported_vertices==3U);
     const std::uint8_t invalid[4]{};
     assert(!arut::animation::import_glb(invalid,sizeof(invalid),asset,report));
-    std::cout<<"GLTF_IMPORTER_TEST pass joints=1 vertices=3 clips=1\n";
+    std::cout<<"GLTF_IMPORTER_TEST pass joints=1 vertices=3 clips=2 linear+cubic\n";
 }
