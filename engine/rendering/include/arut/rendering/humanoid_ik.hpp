@@ -86,6 +86,26 @@ struct HumanoidLegIkResult final {
     return result;
 }
 
+[[nodiscard]] inline HumanoidQuaternion multiply_humanoid_quaternions(
+    const HumanoidQuaternion& a, const HumanoidQuaternion& b) noexcept {
+    HumanoidQuaternion result{
+        a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y,
+        a.w*b.y - a.x*b.z + a.y*b.w + a.z*b.x,
+        a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w,
+        a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z
+    };
+    const float length_squared = result.x*result.x + result.y*result.y +
+        result.z*result.z + result.w*result.w;
+    if (!std::isfinite(length_squared) || length_squared <= 1.0e-12F)
+        return {};
+    const float inverse = 1.0F / std::sqrt(length_squared);
+    result.x *= inverse;
+    result.y *= inverse;
+    result.z *= inverse;
+    result.w *= inverse;
+    return result;
+}
+
 [[nodiscard]] inline HumanoidQuaternion blend_humanoid_rotation(
     const HumanoidQuaternion& from, const HumanoidQuaternion& to,
     float weight) noexcept {
