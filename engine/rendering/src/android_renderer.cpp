@@ -3286,7 +3286,7 @@ bool AndroidRenderer::draw_frame() noexcept {
                                VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cascade), &cascade);
             vkCmdDrawIndexedIndirect(command_buffers_[image_index], indirect_draw_buffer_, 0, 1,
                                      sizeof(VkDrawIndexedIndirectCommand));
-            if (mannequin_index_count_ != 0U) {
+            if (mannequin_index_count_ != 0U && !imported_character_enabled_) {
                 const std::array<VkBuffer, 2> mannequin_buffers{
                     mannequin_vertex_buffer_, mannequin_instance_buffer_};
                 const std::array<VkDeviceSize, 2> mannequin_offsets{0, 0};
@@ -3295,6 +3295,16 @@ bool AndroidRenderer::draw_frame() noexcept {
                 vkCmdBindIndexBuffer(command_buffers_[image_index], mannequin_index_buffer_,
                     0, VK_INDEX_TYPE_UINT32);
                 vkCmdDrawIndexed(command_buffers_[image_index], mannequin_index_count_, 1, 0, 0, 0);
+            }
+            if (imported_character_enabled_ && imported_character_index_count_ != 0U) {
+                const std::array<VkBuffer, 2> imported_buffers{
+                    imported_character_vertex_buffer_, mannequin_instance_buffer_};
+                const std::array<VkDeviceSize, 2> imported_offsets{0, 0};
+                vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 2,
+                    imported_buffers.data(), imported_offsets.data());
+                vkCmdBindIndexBuffer(command_buffers_[image_index], imported_character_index_buffer_,
+                    0, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(command_buffers_[image_index], imported_character_index_count_, 1, 0, 0, 0);
             }
             if (static_scene_instance_count_ != 0U) {
                 const std::array<VkBuffer, 2> static_buffers{
@@ -3355,7 +3365,7 @@ bool AndroidRenderer::draw_frame() noexcept {
     vkCmdBindIndexBuffer(command_buffers_[image_index], cube_index_buffer_, 0, VK_INDEX_TYPE_UINT32);
     vkCmdDrawIndexedIndirect(command_buffers_[image_index], indirect_draw_buffer_, 0, 1,
                              sizeof(VkDrawIndexedIndirectCommand));
-    if (mannequin_index_count_ != 0U) {
+    if (mannequin_index_count_ != 0U && !imported_character_enabled_) {
         const std::array<VkBuffer, 2> mannequin_buffers{
             mannequin_vertex_buffer_, mannequin_instance_buffer_};
         const std::array<VkDeviceSize, 2> mannequin_offsets{0, 0};
@@ -3364,6 +3374,16 @@ bool AndroidRenderer::draw_frame() noexcept {
         vkCmdBindIndexBuffer(command_buffers_[image_index], mannequin_index_buffer_,
             0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexed(command_buffers_[image_index], mannequin_index_count_, 1, 0, 0, 0);
+    }
+    if (imported_character_enabled_ && imported_character_index_count_ != 0U) {
+        const std::array<VkBuffer, 2> imported_buffers{
+            imported_character_vertex_buffer_, mannequin_instance_buffer_};
+        const std::array<VkDeviceSize, 2> imported_offsets{0, 0};
+        vkCmdBindVertexBuffers(command_buffers_[image_index], 0, 2,
+            imported_buffers.data(), imported_offsets.data());
+        vkCmdBindIndexBuffer(command_buffers_[image_index], imported_character_index_buffer_,
+            0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(command_buffers_[image_index], imported_character_index_count_, 1, 0, 0, 0);
     }
     if (static_scene_instance_count_ != 0U) {
         const std::array<VkBuffer, 2> static_buffers{
@@ -3428,10 +3448,13 @@ bool AndroidRenderer::draw_frame() noexcept {
         gpu_visibility_result_pending_ = true;
     }
     const auto terrain_draws = static_cast<std::uint32_t>(terrain_gpu_meshes_.size());
-    const std::uint32_t mannequin_draws = mannequin_index_count_ != 0U ? 1U : 0U;
+    const std::uint32_t mannequin_draws =
+        (mannequin_index_count_ != 0U && !imported_character_enabled_) ? 1U : 0U;
+    const std::uint32_t imported_draws =
+        (imported_character_enabled_ && imported_character_index_count_ != 0U) ? 1U : 0U;
     const std::uint32_t static_scene_draws = static_scene_instance_count_ != 0U ? 1U : 0U;
     const std::uint32_t scene_draws =
-        terrain_draws + 1U + mannequin_draws + static_scene_draws;
+        terrain_draws + 1U + mannequin_draws + imported_draws + static_scene_draws;
     last_draw_calls_ = (shadow_enabled_ ? shadow_cascade_count_ * scene_draws : 0U) + scene_draws;
     VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     present.waitSemaphoreCount = 1;
