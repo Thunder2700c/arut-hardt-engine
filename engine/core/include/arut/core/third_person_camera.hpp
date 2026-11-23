@@ -34,6 +34,7 @@ struct ThirdPersonCameraResult final {
     std::array<float, 3> position{};
     float distance{0.0F};
     bool terrain_obstructed{false};
+    bool geometry_obstructed{false};
     bool valid{false};
 };
 
@@ -132,7 +133,7 @@ struct ThirdPersonCameraResult final {
         const float obstacle_distance = safe_distance * hit_fraction;
         safe_distance = std::max(config.minimum_distance,
             obstacle_distance - config.collision_backoff);
-        result.terrain_obstructed = result.terrain_obstructed;
+        result.geometry_obstructed = true;
         camera_end = {
             target[0] - forward[0] * safe_distance,
             target[1] - forward[1] * safe_distance,
