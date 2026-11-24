@@ -545,6 +545,15 @@ void handle_app_command(android_app* app, std::int32_t command) {
    state->character_input_router.clear();
    state->mouse_look_active = false;
    state->gamepad_move_x = state->gamepad_move_y = 0.0F;
+   state->combat_attack_light_pressed = false;
+   state->combat_attack_heavy_pressed = false;
+   state->combat_attack_kick_pressed = false;
+   state->combat_block_held = false;
+   state->combat_dodge_pressed = false;
+   state->combat_hit_reaction_pressed = false;
+   state->combat_recover_pressed = false;
+   g_touch_combat_pending.store(0U, std::memory_order_release);
+   g_touch_combat_block_held.store(false, std::memory_order_release);
    state->renderer.clear_input();
    log_info("Lifecycle PAUSE");
    if (export_runtime_log(app)) __android_log_print(ANDROID_LOG_INFO, kLogTag, "Runtime log exported to Downloads/ARUT-HARDT/ARUT-HARDT-runtime.log");
@@ -573,6 +582,15 @@ void handle_app_command(android_app* app, std::int32_t command) {
    state->character_input_router.clear();
    state->mouse_look_active = false;
    state->gamepad_move_x = state->gamepad_move_y = 0.0F;
+   state->combat_attack_light_pressed = false;
+   state->combat_attack_heavy_pressed = false;
+   state->combat_attack_kick_pressed = false;
+   state->combat_block_held = false;
+   state->combat_dodge_pressed = false;
+   state->combat_hit_reaction_pressed = false;
+   state->combat_recover_pressed = false;
+   g_touch_combat_pending.store(0U, std::memory_order_release);
+   g_touch_combat_block_held.store(false, std::memory_order_release);
    state->renderer.set_gamepad_look_input(0.0F, 0.0F);
    log_info("Focus lost"); break;
   case APP_CMD_CONFIG_CHANGED:
