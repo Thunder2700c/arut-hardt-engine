@@ -150,5 +150,34 @@ int main() {
     input.vertical_speed = 0.0F;
     assert(controller.update(0.1F, input, pose, events));
     assert(controller.state() == CharacterAnimationState::Land);
-    std::cout << "CHARACTER_ANIMATION_TEST pass locomotion=1 combat_priority=1 timed_actions=1\n";
+
+    // Landing/recovery must respect a held guard when the timed action ends.
+    input.block_held = true;
+    assert(controller.update(0.1F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::Land);
+    assert(controller.update(0.4F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::Block);
+    assert(controller.update(0.1F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::Block);
+
+    // A hit reaction outranks guard, then the authored cancel window allows
+    // a defensive dodge; releasing guard returns to the current locomotion.
+    input.block_held = false;
+    input.hit_reaction = true;
+    assert(controller.update(0.1F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::HitReact);
+    input.hit_reaction = false;
+    assert(controller.update(0.2F, input, pose, events));
+    input.block_held = true;
+    assert(controller.update(0.1F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::Block);
+    input.block_held = false;
+    input.dodge_pressed = true;
+    assert(controller.update(0.1F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::Dodge);
+    input.dodge_pressed = false;
+    assert(controller.update(0.6F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::Idle);
+
+    std::cout << "CHARACTER_ANIMATION_TEST pass locomotion=1 combat_priority=1 timed_actions=1 guard_reentry=1 hit_cancel=1\n";
 }
