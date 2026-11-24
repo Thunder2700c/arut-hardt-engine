@@ -83,8 +83,11 @@ struct RuntimeState final {
  float gamepad_move_y{0.0F};
  bool combat_attack_light_pressed{false};
  bool combat_attack_heavy_pressed{false};
+ bool combat_attack_kick_pressed{false};
  bool combat_block_held{false};
  bool combat_dodge_pressed{false};
+ bool combat_hit_reaction_pressed{false};
+ bool combat_recover_pressed{false};
  arut::core::HumanoidSkeleton humanoid_skeleton{arut::core::make_robot_mannequin_skeleton()};
  arut::rendering::HumanoidAnimator humanoid_animator{};
  arut::animation::PoseHistory animation_pose_history{};
@@ -682,6 +685,13 @@ int32_t handle_input(android_app* app, AInputEvent* event) {
     state->combat_block_held = pressed; break;
    case AKEYCODE_I: case AKEYCODE_BUTTON_R1:
     if (pressed) state->combat_dodge_pressed = true; break;
+   case AKEYCODE_M: case AKEYCODE_BUTTON_L1:
+    if (pressed) state->combat_attack_kick_pressed = true; break;
+   // Diagnostic actions exercise these poses until gameplay supplies hit and knockdown events.
+   case AKEYCODE_H: case AKEYCODE_BUTTON_L2:
+    if (pressed) state->combat_hit_reaction_pressed = true; break;
+   case AKEYCODE_R: case AKEYCODE_BUTTON_R2:
+    if (pressed) state->combat_recover_pressed = true; break;
    default: handled = false; break;
   }
   if (handled) {
@@ -906,11 +916,17 @@ void run(android_app* app) {
     animation_input.grounded = character.grounded;
     animation_input.attack_light_pressed = state.combat_attack_light_pressed;
     animation_input.attack_heavy_pressed = state.combat_attack_heavy_pressed;
+    animation_input.attack_kick_pressed = state.combat_attack_kick_pressed;
     animation_input.block_held = state.combat_block_held;
     animation_input.dodge_pressed = state.combat_dodge_pressed;
+    animation_input.hit_reaction = state.combat_hit_reaction_pressed;
+    animation_input.recover_pressed = state.combat_recover_pressed;
     state.combat_attack_light_pressed = false;
     state.combat_attack_heavy_pressed = false;
+    state.combat_attack_kick_pressed = false;
     state.combat_dodge_pressed = false;
+    state.combat_hit_reaction_pressed = false;
+    state.combat_recover_pressed = false;
     auto pose = state.humanoid_animator.update(animation_input, frame_delta);
     const auto& animation_snapshot = state.humanoid_animator.snapshot();
     const bool stable_grounded_pose =
@@ -1101,8 +1117,11 @@ void run(android_app* app) {
         imported_input.sprinting = animation_input.horizontal_speed >= 3.25F;
         imported_input.attack_light_pressed = animation_input.attack_light_pressed;
         imported_input.attack_heavy_pressed = animation_input.attack_heavy_pressed;
+        imported_input.attack_kick_pressed = animation_input.attack_kick_pressed;
         imported_input.block_held = animation_input.block_held;
         imported_input.dodge_pressed = animation_input.dodge_pressed;
+        imported_input.hit_reaction = animation_input.hit_reaction;
+        imported_input.recover_pressed = animation_input.recover_pressed;
         std::vector<arut::animation::AnimationEvent> animation_events;
         if (!state.imported_character_animator.update(
              frame_delta, imported_input, imported_pose, animation_events)) {
