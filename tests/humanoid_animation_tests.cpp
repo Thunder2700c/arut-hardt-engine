@@ -132,6 +132,10 @@ int main() {
     input.block_held = true;
     input.attack_light_pressed = true;
     (void)animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::AttackKick);
+    (void)animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::AttackKick);
+    (void)animator.update(input, dt);
     assert(animator.snapshot().state == HumanoidAnimationState::Block);
     input.block_held = false;
     input.attack_light_pressed = false;
