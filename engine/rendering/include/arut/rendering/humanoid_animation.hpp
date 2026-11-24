@@ -290,7 +290,7 @@ private:
                 set_rotation(target_pose_, B::Chest, {0.0F, 1.0F, 0.0F}, 0.20F * strike);
                 set_rotation(target_pose_, B::RightUpperLeg, {1.0F, 0.0F, 0.0F}, thigh_lift);
                 set_rotation(target_pose_, B::RightLowerLeg, {1.0F, 0.0F, 0.0F},
-                             0.52F * windup - 0.96F * strike);
+                             0.52F * windup - 1.25F * strike);
                 set_rotation(target_pose_, B::LeftUpperLeg, {1.0F, 0.0F, 0.0F}, -0.12F * strike);
                 set_rotation(target_pose_, B::LeftUpperArm, {0.0F, 0.0F, 1.0F}, -0.58F * strike);
                 set_rotation(target_pose_, B::RightUpperArm, {0.0F, 0.0F, 1.0F}, 0.42F * strike);
