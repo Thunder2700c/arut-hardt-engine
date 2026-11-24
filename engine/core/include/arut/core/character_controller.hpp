@@ -215,27 +215,41 @@ public:
             state_.velocity.z = 0.0F;
         }
 
-        state_.velocity.y -= config_.gravity * dt;
-        const float proposed_y = state_.position.y + state_.velocity.y * dt;
-        const Vec3 vertical_position{state_.position.x, proposed_y, state_.position.z};
-        if (!collision_query ||
-            !collision_query(vertical_position, config_.capsule_radius,
-                             config_.capsule_height, collision_context)) {
-            state_.position.y = proposed_y;
-        } else {
-            if (state_.velocity.y > 0.0F) state_.velocity.y = 0.0F;
-            else state_.grounded = false;
-        }
-        const auto landing = ground_query(state_.position.x, state_.position.z,
-                                          ground_context);
-        if (landing.valid && is_walkable(landing.normal) &&
-            state_.velocity.y <= 0.0F &&
-            state_.position.y <= landing.height) {
-            state_.position.y = landing.height;
+        // A grounded character is constrained to the sampled support surface.
+        // Do not integrate gravity while supported: doing so creates a one-frame
+        // grounded/airborne oscillation when the render origin is a few millimetres
+        // above the terrain or a downward collision prevents crossing the plane.
+        const auto support = ground_query(state_.position.x, state_.position.z,
+                                           ground_context);
+        if (state_.grounded && !input.jump_pressed && support.valid &&
+            is_walkable(support.normal) &&
+            support.height - state_.position.y <= config_.maximum_step_height &&
+            state_.position.y - support.height <= config_.maximum_step_height) {
+            state_.position.y = support.height;
             state_.velocity.y = 0.0F;
-            state_.grounded = true;
         } else {
             state_.grounded = false;
+            state_.velocity.y -= config_.gravity * dt;
+            const float proposed_y = state_.position.y + state_.velocity.y * dt;
+            const Vec3 vertical_position{state_.position.x, proposed_y, state_.position.z};
+            const bool blocked = collision_query &&
+                collision_query(vertical_position, config_.capsule_radius,
+                                config_.capsule_height, collision_context);
+            if (!blocked) {
+                state_.position.y = proposed_y;
+            } else if (state_.velocity.y > 0.0F) {
+                state_.velocity.y = 0.0F;
+            }
+            const auto landing = ground_query(state_.position.x, state_.position.z,
+                                              ground_context);
+            constexpr float landing_tolerance = 0.025F;
+            if (landing.valid && is_walkable(landing.normal) &&
+                state_.velocity.y <= 0.0F &&
+                state_.position.y <= landing.height + landing_tolerance) {
+                state_.position.y = landing.height;
+                state_.velocity.y = 0.0F;
+                state_.grounded = true;
+            }
         }
         return true;
     }
