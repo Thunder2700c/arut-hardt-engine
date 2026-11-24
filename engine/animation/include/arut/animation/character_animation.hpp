@@ -5,6 +5,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
+#include <string>
 #include <vector>
 
 namespace arut::animation {
@@ -45,6 +47,12 @@ struct CharacterAnimationInput final {
     bool recover_pressed{false};
 };
 
+// Builds an original, lightweight keyframed fallback library for rigs whose
+// imported GLB contains only an idle clip. Bone matching is name-based and
+// safely leaves unmatched joints at their authored rest transforms.
+[[nodiscard]] std::vector<AnimationClip> make_procedural_humanoid_clips(
+    const Pose& rest_pose, std::span<const std::string> joint_names);
+
 class CharacterAnimationController final {
 public:
     CharacterAnimationController() = default;
@@ -79,6 +87,8 @@ private:
     CharacterAnimationState state_{CharacterAnimationState::Idle};
     float state_elapsed_{0.0F};
     float transition_seconds_{0.12F};
+    float input_buffer_seconds_{0.0F};
+    CharacterAnimationState buffered_action_{CharacterAnimationState::Count};
     bool configured_{false};
     bool started_{false};
     bool was_grounded_{true};
