@@ -96,8 +96,29 @@ int main() {
     const auto guard_arm = animator.pose().local_rotations[static_cast<std::size_t>(B::RightUpperArm)];
     assert(std::abs(guard_arm.z) > 0.01F);
     input.block_held = false;
-    animator.update(input, dt);
+    (void)animator.update(input, dt);
     assert(animator.snapshot().state == HumanoidAnimationState::Idle);
+
+    // A kick uses the right leg and counterbalances with both arms. Guard may
+    // cancel it after the initial commitment window, then recovery is explicit.
+    input.attack_kick_pressed = true;
+    (void)animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::AttackKick);
+    input.attack_kick_pressed = false;
+    for (int i = 0; i < 18; ++i) (void)animator.update(input, dt);
+    const auto kick_thigh = animator.pose().local_rotations[static_cast<std::size_t>(B::RightUpperLeg)];
+    const auto kick_calf = animator.pose().local_rotations[static_cast<std::size_t>(B::RightLowerLeg)];
+    assert(std::abs(kick_thigh.x) > 0.05F);
+    assert(std::abs(kick_calf.x) > 0.05F);
+    input.block_held = true;
+    (void)animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::Block);
+    input.block_held = false;
+    (void)animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::Idle);
+    input.recover_pressed = true;
+    (void)animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::Recover);
 
     return 0;
 }
