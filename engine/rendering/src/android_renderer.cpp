@@ -3303,6 +3303,49 @@ bool AndroidRenderer::draw_frame() noexcept {
     }
     update_humanoid_animation(delta_seconds);
     update_stress_camera(delta_seconds);
+    // Character visibility diagnostics: report the complete CPU-side draw state
+    // periodically so a successful asset upload cannot be mistaken for a visible draw.
+    static std::uint64_t character_diagnostic_frames = 0U;
+    ++character_diagnostic_frames;
+    if (mannequin_scene_enabled_ &&
+        (character_diagnostic_frames == 1U || (character_diagnostic_frames % 120U) == 0U)) {
+        const auto finite_matrix = [](const arut::rendering::Mat4& matrix) {
+            return std::all_of(matrix.value.begin(), matrix.value.end(),
+                [](float value) { return std::isfinite(value); });
+        };
+        const auto& model = pending_mannequin_model_;
+        char diagnostic[640]{};
+        std::snprintf(diagnostic, sizeof(diagnostic),
+            "CHARACTER_DIAG frame=%llu path=%s mannequin_indices=%u imported_indices=%u "
+            "vertex_buffer=%s index_buffer=%s instance_buffer=%s palette_buffer=%s "
+            "model_finite=%s model_scale=(%.4f,%.4f,%.4f) model_pos=(%.3f,%.3f,%.3f) "
+            "external_pose=%s",
+            static_cast<unsigned long long>(character_diagnostic_frames),
+            imported_character_enabled_ ? "imported_glb" : "procedural_mannequin",
+            mannequin_index_count_, imported_character_index_count_,
+            (imported_character_enabled_ ? imported_character_vertex_buffer_ : mannequin_vertex_buffer_) != VK_NULL_HANDLE ? "yes" : "no",
+            (imported_character_enabled_ ? imported_character_index_buffer_ : mannequin_index_buffer_) != VK_NULL_HANDLE ? "yes" : "no",
+            mannequin_instance_buffer_ != VK_NULL_HANDLE ? "yes" : "no",
+            bone_palette_uniform_memory_ != VK_NULL_HANDLE ? "yes" : "no",
+            finite_matrix(model) ? "yes" : "no",
+            model.value[0], model.value[5], model.value[10],
+            model.value[12], model.value[13], model.value[14],
+            has_external_humanoid_state_ ? "yes" : "no");
+        arut_android_log(ANDROID_LOG_INFO, diagnostic);
+        if (mannequin_scene_enabled_ &&
+            (mannequin_instance_buffer_ == VK_NULL_HANDLE ||
+             bone_palette_uniform_memory_ == VK_NULL_HANDLE ||
+             (imported_character_enabled_
+                ? (imported_character_index_count_ == 0U || imported_character_vertex_buffer_ == VK_NULL_HANDLE ||
+                   imported_character_index_buffer_ == VK_NULL_HANDLE)
+                : (mannequin_index_count_ == 0U || mannequin_vertex_buffer_ == VK_NULL_HANDLE ||
+                   mannequin_index_buffer_ == VK_NULL_HANDLE)) ||
+             !finite_matrix(model) || std::abs(model.value[0]) < 1.0e-6F ||
+             std::abs(model.value[5]) < 1.0e-6F || std::abs(model.value[10]) < 1.0e-6F)) {
+            arut_android_log(ANDROID_LOG_ERROR,
+                "CHARACTER_DIAG_FAIL reason=missing_gpu_resource_or_invalid_model_transform");
+        }
+    }
     if (gpu_visibility_enabled_ && gpu_visibility_result_pending_) {
         void* mapped = nullptr;
         const VkResult map_result = vkMapMemory(device_, indirect_draw_memory_, 0,
