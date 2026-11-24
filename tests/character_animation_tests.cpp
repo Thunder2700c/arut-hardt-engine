@@ -128,6 +128,9 @@ int main() {
     assert(controller.update(0.25F, input, pose, events));
     assert(controller.state() == CharacterAnimationState::Dodge);
     assert(controller.update(0.25F, input, pose, events));
+    // The generated Dodge clip is 0.56 s; the previous 0.55 s total
+    // left the controller one frame short of its timed-action exit.
+    assert(controller.update(0.02F, input, pose, events));
     assert(controller.state() == CharacterAnimationState::Idle);
 
     input.move_x = 1.0F;
