@@ -30,6 +30,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <cstring>
 #include <string>
 #include <cctype>
@@ -276,6 +277,37 @@ void log_info(const char* format, ...) {
  va_list args; va_start(args, format);
  char message[2048]{}; std::vsnprintf(message, sizeof(message), format, args); va_end(args);
  log_message(ANDROID_LOG_INFO, "INFO", message);
+}
+
+// Android thermal sysfs is device/vendor dependent. Read every exposed zone,
+// preserve the hottest reported sensor, and explicitly report unavailable data.
+bool read_thermal_peak(float& temperature_c, char* sensor, std::size_t sensor_size) noexcept {
+ temperature_c = 0.0F;
+ if (sensor && sensor_size) sensor[0] = '\\0';
+ bool found = false;
+ for (unsigned int zone = 0; zone < 64U; ++zone) {
+  char temp_path[96]{}, type_path[96]{};
+  std::snprintf(temp_path, sizeof(temp_path),
+   "/sys/class/thermal/thermal_zone%u/temp", zone);
+  std::snprintf(type_path, sizeof(type_path),
+   "/sys/class/thermal/thermal_zone%u/type", zone);
+  std::ifstream temperature_file(temp_path);
+  long raw = 0;
+  if (!(temperature_file >> raw)) continue;
+  std::ifstream type_file(type_path);
+  std::string type;
+  std::getline(type_file, type);
+  float value = static_cast<float>(raw);
+  if (std::abs(value) >= 1000.0F) value /= 1000.0F;
+  if (!std::isfinite(value) || value < -40.0F || value > 150.0F) continue;
+  if (!found || value > temperature_c) {
+   temperature_c = value;
+   if (sensor && sensor_size)
+    std::snprintf(sensor, sensor_size, "%s", type.empty() ? "unknown" : type.c_str());
+   found = true;
+  }
+ }
+ return found;
 }
 void log_warn(const char* format, ...) {
  va_list args; va_start(args, format);
@@ -1116,11 +1148,18 @@ void run(android_app* app) {
   }
   const auto metrics_now = std::chrono::steady_clock::now();
   const double metrics_seconds = std::chrono::duration<double>(metrics_now - metrics_start).count();
-  if (metrics_seconds >= 5.0) {
+  if (metrics_seconds >= 30.0) {
    if (frame_count > 0) log_info("PERF window=%.2fs fps=%.2f frame_interval_avg_ms=%.3f frame_interval_max_ms=%.3f frames=%" PRIu64,
     metrics_seconds, static_cast<double>(frame_count) / metrics_seconds,
     frame_ms_total / static_cast<double>(frame_count), frame_ms_max, frame_count);
    else log_info("PERF window=%.2fs renderer_idle=true", metrics_seconds);
+   float thermal_peak_c = 0.0F;
+   char thermal_sensor[96]{};
+   if (read_thermal_peak(thermal_peak_c, thermal_sensor, sizeof(thermal_sensor)))
+    log_info("THERMAL window=%.2fs peak_zone_c=%.1f sensor=%s source=sysfs",
+     metrics_seconds, thermal_peak_c, thermal_sensor);
+   else
+    log_info("THERMAL window=%.2fs available=false source=sysfs", metrics_seconds);
    if (state.renderer.ready()) {
     if (arut::core::test_lab_includes_humanoid(state.selected_profile)) {
      const auto& character = state.character_controller.state();
@@ -1131,6 +1170,13 @@ void run(android_app* app) {
       character.position.x, character.position.y, character.position.z,
       character.velocity.x, character.velocity.y, character.velocity.z,
       speed, character.grounded ? "true" : "false", state.character_fixed_steps);
+     const auto support = terrain_ground_query(character.position.x, character.position.z, nullptr);
+     log_info("CHARACTER_GROUND valid=%s feet_y=%.4f ground_y=%.4f clearance=%.4f normal=%.3f,%.3f,%.3f walkable=%s",
+      support.valid ? "true" : "false", character.position.y,
+      support.valid ? support.height : 0.0F,
+      support.valid ? character.position.y - support.height : 0.0F,
+      support.normal.x, support.normal.y, support.normal.z,
+      support.valid && support.normal.y >= 0.6691F ? "true" : "false");
      log_info("ANIMATION_RUNTIME_HISTORY frames=%zu trajectory_valid=%s p0=%.3f,%.3f,%.3f p1=%.3f,%.3f,%.3f p2=%.3f,%.3f,%.3f",
       state.animation_pose_history.size(), state.predicted_trajectory_valid ? "true" : "false",
       state.predicted_trajectory[0].position_offset.x, state.predicted_trajectory[0].position_offset.y, state.predicted_trajectory[0].position_offset.z,
