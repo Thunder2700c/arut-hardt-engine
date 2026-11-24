@@ -110,7 +110,7 @@ int main() {
     const auto kick_calf = animator.pose().local_rotations[static_cast<std::size_t>(B::RightLowerLeg)];
     std::cerr << "KICK_POSE state=" << static_cast<int>(animator.snapshot().state)
               << " phase=" << animator.snapshot().phase_seconds
-              << " thigh_x=" << kick_thigh.x << " calf_x=" << kick_calf.x << '\\n';
+              << " thigh_x=" << kick_thigh.x << " calf_x=" << kick_calf.x << '\n';
     assert(std::abs(kick_thigh.x) > 0.05F);
     assert(std::abs(kick_calf.x) > 0.05F);
     input.block_held = true;
