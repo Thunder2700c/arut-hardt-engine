@@ -20,6 +20,8 @@ public final class TestLabActivity extends Activity {
     private static native void nativeSelectProfile(int profileId);
     private static native void nativeSetImportedCharacterEnabled(boolean enabled);
 
+    private int selectedProfileId;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -32,6 +34,7 @@ public final class TestLabActivity extends Activity {
             .setItems(PROFILES, (dialog, which) -> {
                 // This must run BEFORE NativeActivity.onCreate starts android_main.
                 nativeSelectProfile(which);
+                selectedProfileId = which;
                 if (which == 1 || which == 2) {
                     showCharacterSourceChoice();
                 } else {
@@ -57,6 +60,7 @@ public final class TestLabActivity extends Activity {
     private void launchEngine(boolean useImportedCharacter) {
         nativeSetImportedCharacterEnabled(useImportedCharacter);
         Intent intent = new Intent(TestLabActivity.this, EngineNativeActivity.class);
+        intent.putExtra("arut.profile_id", selectedProfileId);
         startActivity(intent);
         finish();
     }
