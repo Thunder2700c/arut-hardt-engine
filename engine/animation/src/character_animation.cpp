@@ -335,10 +335,13 @@ bool CharacterAnimationController::update(float delta_seconds, const CharacterAn
         const bool defensive_cancel = cancel_window_open_ &&
             (input.dodge_pressed || input.block_held || input.recover_pressed);
         if (input.hit_reaction) desired = CharacterAnimationState::HitReact;
-        else if (combo_cancel) desired = buffered_action_;
+        // Defensive cancels outrank an offensive combo buffer. If both are
+        // pressed in the same frame, dodge/guard/recovery must not be eaten
+        // by the queued next strike.
         else if (defensive_cancel) desired = input.dodge_pressed
             ? CharacterAnimationState::Dodge : input.block_held
             ? CharacterAnimationState::Block : CharacterAnimationState::Recover;
+        else if (combo_cancel) desired = buffered_action_;
         else desired = state_;
     }
     if (state_ == CharacterAnimationState::Block && !input.block_held &&
