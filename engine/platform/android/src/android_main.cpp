@@ -937,14 +937,16 @@ void run(android_app* app) {
      animation_snapshot.state == arut::rendering::HumanoidAnimationState::Block ||
      animation_snapshot.state == arut::rendering::HumanoidAnimationState::HitReact ||
      animation_snapshot.state == arut::rendering::HumanoidAnimationState::Recover;
+    const bool kicking =
+     animation_snapshot.state == arut::rendering::HumanoidAnimationState::AttackKick;
     const bool airborne =
      animation_snapshot.state == arut::rendering::HumanoidAnimationState::Jump ||
      animation_snapshot.state == arut::rendering::HumanoidAnimationState::Fall ||
      !character.grounded;
     const float gait_wave = std::sin(animation_snapshot.phase_seconds);
     const std::array<bool, 2> stance{
-     !airborne && (stable_grounded_pose || gait_wave >= 0.0F),
-     !airborne && (stable_grounded_pose || gait_wave < 0.0F)
+     !airborne && (kicking || stable_grounded_pose || gait_wave >= 0.0F),
+     !airborne && !kicking && (stable_grounded_pose || gait_wave < 0.0F)
     };
     const float yaw_cosine = std::cos(character.facing_yaw_radians);
     const float yaw_sine = std::sin(character.facing_yaw_radians);
