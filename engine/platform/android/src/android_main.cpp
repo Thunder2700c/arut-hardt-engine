@@ -51,6 +51,7 @@ extern "C" std::uint32_t arut_tasks_abi_version() noexcept;
 namespace {
 constexpr char kLogTag[] = "ARUT-HARDT";
 std::atomic<std::int32_t> g_requested_test_profile{-1};
+std::atomic<bool> g_imported_character_enabled{false};
 struct FootPlantState final {
  arut::core::Vec3 world_anchor{};
  float blend{0.0F};
@@ -436,7 +437,10 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
 
  state.imported_character_active = false;
  state.imported_character_animator_ready = false;
- if (include_mannequin && app->activity && app->activity->assetManager) {
+ const bool request_imported_character =
+  g_imported_character_enabled.load(std::memory_order_acquire);
+ if (include_mannequin && request_imported_character &&
+     app->activity && app->activity->assetManager) {
   AAsset* probe = AAssetManager_open(app->activity->assetManager,
                                      "Characters/hero.glb", AASSET_MODE_STREAMING);
   if (probe) {
@@ -470,6 +474,8 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
   } else {
    log_info("IMPORTED_CHARACTER optional asset absent; using procedural robot mannequin");
   }
+ } else if (include_mannequin) {
+  log_info("CHARACTER_SOURCE selected=procedural_robot_mannequin imported_glb_enabled=false");
  }
  return true;
 }
@@ -701,6 +707,14 @@ Java_com_arut_engine_TestLabActivity_nativeSelectProfile(
   __android_log_print(ANDROID_LOG_ERROR, kLogTag,
    "TEST_LAB JNI invalid_profile_id=%d", profile_id);
  }
+}
+extern "C" JNIEXPORT void JNICALL
+Java_com_arut_engine_TestLabActivity_nativeSetImportedCharacterEnabled(
+    JNIEnv*, jclass, jboolean enabled) noexcept {
+ g_imported_character_enabled.store(enabled == JNI_TRUE, std::memory_order_release);
+ __android_log_print(ANDROID_LOG_INFO, kLogTag,
+  "CHARACTER_SOURCE selection=%s",
+  enabled == JNI_TRUE ? "optional_imported_glb" : "procedural_robot_mannequin");
 }
 extern "C" void arut_android_log(int priority, const char* message) noexcept {
  const char* level = priority >= ANDROID_LOG_ERROR ? "ERROR" : (priority >= ANDROID_LOG_WARN ? "WARN" : "INFO");
