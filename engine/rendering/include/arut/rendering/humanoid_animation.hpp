@@ -9,6 +9,8 @@
 
 namespace arut::rendering {
 
+inline constexpr float kAttackInputBufferSeconds = 0.22F;
+
 enum class HumanoidAnimationState : std::uint8_t {
     Idle, Walk, Run, StrafeLeft, StrafeRight, Backward, Jump, Fall, Land,
     AttackLight, AttackHeavy, AttackKick, Block, Dodge, HitReact, Recover
@@ -90,6 +92,22 @@ public:
             action_duration_ = duration;
             action_remaining_ = duration;
         };
+        const bool attack_pressed = raw_input.attack_light_pressed ||
+            raw_input.attack_heavy_pressed || raw_input.attack_kick_pressed;
+        if (attack_pressed) {
+            buffered_attack_ = raw_input.attack_heavy_pressed
+                ? HumanoidAnimationState::AttackHeavy
+                : raw_input.attack_kick_pressed
+                    ? HumanoidAnimationState::AttackKick
+                    : HumanoidAnimationState::AttackLight;
+            attack_buffer_remaining_ = kAttackInputBufferSeconds;
+        } else if (attack_buffer_remaining_ > 0.0F) {
+            attack_buffer_remaining_ = std::max(0.0F, attack_buffer_remaining_ - dt);
+            if (attack_buffer_remaining_ == 0.0F)
+                buffered_attack_ = HumanoidAnimationState::Idle;
+        }
+        const bool defensive_input = raw_input.hit_reaction || raw_input.dodge_pressed ||
+            raw_input.block_held || raw_input.recover_pressed;
         const bool committed_action = action_remaining_ > 0.0F &&
             state_ != HumanoidAnimationState::Block;
         const bool attack_state = state_ == HumanoidAnimationState::AttackLight ||
@@ -97,32 +115,40 @@ public:
                                   state_ == HumanoidAnimationState::AttackKick;
         const bool combo_window = committed_action && attack_state &&
                                   action_elapsed_ >= action_duration_ * 0.60F;
+        const auto clear_attack_buffer = [this]() {
+            buffered_attack_ = HumanoidAnimationState::Idle;
+            attack_buffer_remaining_ = 0.0F;
+        };
         if (raw_input.hit_reaction) {
+            clear_attack_buffer();
             begin_action(HumanoidAnimationState::HitReact, 0.42F);
         } else if (raw_input.dodge_pressed) {
+            clear_attack_buffer();
             begin_action(HumanoidAnimationState::Dodge, 0.46F);
         } else if (raw_input.block_held && raw_input.grounded &&
                    (!committed_action || (attack_state &&
                     action_elapsed_ >= action_duration_ * 0.40F))) {
+            clear_attack_buffer();
             state_ = HumanoidAnimationState::Block;
             action_elapsed_ = action_duration_ = action_remaining_ = 0.0F;
         } else if (raw_input.recover_pressed && raw_input.grounded &&
                    (!committed_action ||
                     action_elapsed_ >= action_duration_ * 0.68F)) {
+            clear_attack_buffer();
             begin_action(HumanoidAnimationState::Recover, 0.55F);
-        } else if (raw_input.grounded && raw_input.attack_heavy_pressed &&
+        } else if (raw_input.grounded && !defensive_input &&
+                   attack_buffer_remaining_ > 0.0F &&
                    (!committed_action || combo_window)) {
-            begin_action(HumanoidAnimationState::AttackHeavy, 0.72F);
-        } else if (raw_input.grounded && raw_input.attack_kick_pressed &&
-                   (!committed_action || combo_window)) {
-            begin_action(HumanoidAnimationState::AttackKick, 0.68F);
-        } else if (raw_input.grounded && raw_input.attack_light_pressed &&
-                   (!committed_action || combo_window)) {
-            begin_action(HumanoidAnimationState::AttackLight, 0.52F);
+            const auto next = buffered_attack_;
+            const float duration = next == HumanoidAnimationState::AttackHeavy ? 0.72F
+                : next == HumanoidAnimationState::AttackKick ? 0.68F : 0.52F;
+            clear_attack_buffer();
+            begin_action(next, duration);
         } else if (committed_action) {
             action_elapsed_ += dt;
             action_remaining_ = std::max(0.0F, action_duration_ - action_elapsed_);
         } else if (raw_input.block_held && raw_input.grounded) {
+            clear_attack_buffer();
             state_ = HumanoidAnimationState::Block;
             action_remaining_ = 0.0F;
         } else if (!raw_input.grounded) {
@@ -392,6 +418,8 @@ private:
     float action_elapsed_{0.0F};
     float action_duration_{0.0F};
     float action_remaining_{0.0F};
+    HumanoidAnimationState buffered_attack_{HumanoidAnimationState::Idle};
+    float attack_buffer_remaining_{0.0F};
 };
 
 } // namespace arut::rendering
