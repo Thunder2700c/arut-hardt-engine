@@ -114,7 +114,7 @@ public:
                                   state_ == HumanoidAnimationState::AttackHeavy ||
                                   state_ == HumanoidAnimationState::AttackKick;
         const bool combo_window = committed_action && attack_state &&
-                                  action_elapsed_ >= action_duration_ * 0.60F;
+                                  action_elapsed_ >= action_duration_ * 0.50F;
         const auto clear_attack_buffer = [this]() {
             buffered_attack_ = HumanoidAnimationState::Idle;
             attack_buffer_remaining_ = 0.0F;
@@ -127,13 +127,13 @@ public:
             begin_action(HumanoidAnimationState::Dodge, 0.46F);
         } else if (raw_input.block_held && raw_input.grounded &&
                    (!committed_action || (attack_state &&
-                    action_elapsed_ >= action_duration_ * 0.40F))) {
+                    action_elapsed_ >= action_duration_ * 0.50F))) {
             clear_attack_buffer();
             state_ = HumanoidAnimationState::Block;
             action_elapsed_ = action_duration_ = action_remaining_ = 0.0F;
         } else if (raw_input.recover_pressed && raw_input.grounded &&
                    (!committed_action ||
-                    action_elapsed_ >= action_duration_ * 0.68F)) {
+                    action_elapsed_ >= action_duration_ * 0.50F)) {
             clear_attack_buffer();
             begin_action(HumanoidAnimationState::Recover, 0.55F);
         } else if (raw_input.grounded && !defensive_input &&
