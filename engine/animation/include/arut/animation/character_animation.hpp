@@ -13,7 +13,7 @@ namespace arut::animation {
 
 enum class CharacterAnimationState : std::uint8_t {
     Idle, Walk, Run, StrafeLeft, StrafeRight, Backward, Jump, Fall, Land,
-    AttackLight, AttackHeavy, Block, Dodge, HitReact, Recover, Count
+    AttackLight, AttackHeavy, AttackKick, Block, Dodge, HitReact, Recover, Count
 };
 
 inline constexpr std::size_t kCharacterAnimationStateCount =
@@ -41,6 +41,7 @@ struct CharacterAnimationInput final {
     bool sprinting{false};
     bool attack_light_pressed{false};
     bool attack_heavy_pressed{false};
+    bool attack_kick_pressed{false};
     bool block_held{false};
     bool dodge_pressed{false};
     bool hit_reaction{false};
