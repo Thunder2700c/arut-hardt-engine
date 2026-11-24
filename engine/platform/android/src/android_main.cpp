@@ -52,6 +52,8 @@ namespace {
 constexpr char kLogTag[] = "ARUT-HARDT";
 std::atomic<std::int32_t> g_requested_test_profile{-1};
 std::atomic<bool> g_imported_character_enabled{false};
+std::atomic<std::uint32_t> g_touch_combat_pending{0U};
+std::atomic<bool> g_touch_combat_block_held{false};
 struct FootPlantState final {
  arut::core::Vec3 world_anchor{};
  float blend{0.0F};
@@ -726,6 +728,17 @@ Java_com_arut_engine_TestLabActivity_nativeSetImportedCharacterEnabled(
   "CHARACTER_SOURCE selection=%s",
   enabled == JNI_TRUE ? "optional_imported_glb" : "procedural_robot_mannequin");
 }
+extern "C" JNIEXPORT void JNICALL
+Java_com_arut_engine_EngineNativeActivity_nativeSetCombatAction(
+    JNIEnv*, jclass, jint action, jboolean pressed) noexcept {
+ if (action < 0 || action > 7) return;
+ if (action == 3) {
+  g_touch_combat_block_held.store(pressed == JNI_TRUE, std::memory_order_release);
+ } else if (pressed == JNI_TRUE) {
+  g_touch_combat_pending.fetch_or(1U << static_cast<std::uint32_t>(action),
+                                  std::memory_order_release);
+ }
+}
 extern "C" void arut_android_log(int priority, const char* message) noexcept {
  const char* level = priority >= ANDROID_LOG_ERROR ? "ERROR" : (priority >= ANDROID_LOG_WARN ? "WARN" : "INFO");
  log_message(priority, level, message);
@@ -896,8 +909,10 @@ void run(android_app* app) {
      std::clamp(movement[1] + state.gamepad_move_y, -1.0F, 1.0F));
     arut::core::CharacterInput character_input =
      state.character_input_router.sample();
-    character_input.jump_pressed =
-     character_input.jump_pressed || state.renderer.consume_jump_pressed();
+    const std::uint32_t touch_combat_actions =
+     g_touch_combat_pending.exchange(0U, std::memory_order_acq_rel);
+    character_input.jump_pressed = character_input.jump_pressed ||
+     state.renderer.consume_jump_pressed() || (touch_combat_actions & (1U << 7U)) != 0U;
     constexpr float half_turn = 1.570796327F;
     state.character_controller.set_facing_yaw(state.renderer.camera_yaw() + half_turn);
     state.character_fixed_steps += state.character_controller.update(
@@ -914,13 +929,20 @@ void run(android_app* app) {
     animation_input.horizontal_speed = horizontal_speed;
     animation_input.vertical_speed = character.velocity.y;
     animation_input.grounded = character.grounded;
-    animation_input.attack_light_pressed = state.combat_attack_light_pressed;
-    animation_input.attack_heavy_pressed = state.combat_attack_heavy_pressed;
-    animation_input.attack_kick_pressed = state.combat_attack_kick_pressed;
-    animation_input.block_held = state.combat_block_held;
-    animation_input.dodge_pressed = state.combat_dodge_pressed;
-    animation_input.hit_reaction = state.combat_hit_reaction_pressed;
-    animation_input.recover_pressed = state.combat_recover_pressed;
+    animation_input.attack_light_pressed = state.combat_attack_light_pressed ||
+     (touch_combat_actions & (1U << 0U)) != 0U;
+    animation_input.attack_heavy_pressed = state.combat_attack_heavy_pressed ||
+     (touch_combat_actions & (1U << 1U)) != 0U;
+    animation_input.attack_kick_pressed = state.combat_attack_kick_pressed ||
+     (touch_combat_actions & (1U << 2U)) != 0U;
+    animation_input.block_held = state.combat_block_held ||
+     g_touch_combat_block_held.load(std::memory_order_acquire);
+    animation_input.dodge_pressed = state.combat_dodge_pressed ||
+     (touch_combat_actions & (1U << 4U)) != 0U;
+    animation_input.hit_reaction = state.combat_hit_reaction_pressed ||
+     (touch_combat_actions & (1U << 5U)) != 0U;
+    animation_input.recover_pressed = state.combat_recover_pressed ||
+     (touch_combat_actions & (1U << 6U)) != 0U;
     state.combat_attack_light_pressed = false;
     state.combat_attack_heavy_pressed = false;
     state.combat_attack_kick_pressed = false;
