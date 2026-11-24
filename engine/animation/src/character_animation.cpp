@@ -306,8 +306,8 @@ CharacterAnimationState CharacterAnimationController::choose_state(
     const CharacterAnimationInput& input) const noexcept {
     if (input.hit_reaction && has_state(CharacterAnimationState::HitReact)) return CharacterAnimationState::HitReact;
     if (input.dodge_pressed && has_state(CharacterAnimationState::Dodge)) return CharacterAnimationState::Dodge;
-    if (input.recover_pressed && has_state(CharacterAnimationState::Recover)) return CharacterAnimationState::Recover;
     if (input.block_held && has_state(CharacterAnimationState::Block)) return CharacterAnimationState::Block;
+    if (input.recover_pressed && has_state(CharacterAnimationState::Recover)) return CharacterAnimationState::Recover;
     if (input.attack_heavy_pressed && has_state(CharacterAnimationState::AttackHeavy)) return CharacterAnimationState::AttackHeavy;
     if (input.attack_kick_pressed && has_state(CharacterAnimationState::AttackKick)) return CharacterAnimationState::AttackKick;
     if (input.attack_light_pressed && has_state(CharacterAnimationState::AttackLight)) return CharacterAnimationState::AttackLight;
