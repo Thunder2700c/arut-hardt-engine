@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cctype>
 #include <string>
+#include <utility>
 
 namespace arut::animation {
 namespace {
@@ -59,8 +60,6 @@ std::vector<AnimationClip> make_procedural_humanoid_clips(
     const auto right_thigh = joint("rightupleg");
     const auto left_calf = joint("leftleg");
     const auto right_calf = joint("rightleg");
-    const auto left_foot = joint("leftfoot");
-    const auto right_foot = joint("rightfoot");
 
     struct Motion { const char* name; CharacterAnimationState state; float duration; bool loop; };
     constexpr Motion motions[] = {
