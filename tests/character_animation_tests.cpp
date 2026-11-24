@@ -1,7 +1,11 @@
 #include "arut/animation/character_animation.hpp"
 
+#include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <iostream>
+#include <string>
+#include <vector>
 
 using namespace arut::animation;
 
@@ -26,7 +30,7 @@ int main() {
     const std::vector<std::string> generated_names{
         "pelvis", "spine_01", "leftArm", "rightArm", "leftForeArm", "rightForeArm"};
     const auto generated = make_procedural_humanoid_clips(generated_rest, generated_names);
-    assert(generated.size() == kCharacterAnimationStateCount - 1U);
+    assert(generated.size() == kCharacterAnimationStateCount);
     const auto generated_attack = std::find_if(generated.begin(), generated.end(),
         [](const AnimationClip& clip) { return clip.name == "ARUT_AttackLight"; });
     assert(generated_attack != generated.end());
