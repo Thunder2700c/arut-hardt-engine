@@ -11,7 +11,7 @@ namespace arut::rendering {
 
 enum class HumanoidAnimationState : std::uint8_t {
     Idle, Walk, Run, StrafeLeft, StrafeRight, Backward, Jump, Fall, Land,
-    AttackLight, AttackHeavy, Block, Dodge, HitReact, Recover
+    AttackLight, AttackHeavy, AttackKick, Block, Dodge, HitReact, Recover
 };
 
 struct HumanoidAnimationInput final {
@@ -22,6 +22,7 @@ struct HumanoidAnimationInput final {
     bool grounded{true};
     bool attack_light_pressed{false};
     bool attack_heavy_pressed{false};
+    bool attack_kick_pressed{false};
     bool block_held{false};
     bool dodge_pressed{false};
     bool hit_reaction{false};
@@ -49,6 +50,7 @@ struct HumanoidAnimationSnapshot final {
         case HumanoidAnimationState::Land: return "land";
         case HumanoidAnimationState::AttackLight: return "attack_light";
         case HumanoidAnimationState::AttackHeavy: return "attack_heavy";
+        case HumanoidAnimationState::AttackKick: return "attack_kick";
         case HumanoidAnimationState::Block: return "block";
         case HumanoidAnimationState::Dodge: return "dodge";
         case HumanoidAnimationState::HitReact: return "hit_react";
@@ -91,18 +93,29 @@ public:
         const bool committed_action = action_remaining_ > 0.0F &&
             state_ != HumanoidAnimationState::Block;
         const bool attack_state = state_ == HumanoidAnimationState::AttackLight ||
-                                  state_ == HumanoidAnimationState::AttackHeavy;
+                                  state_ == HumanoidAnimationState::AttackHeavy ||
+                                  state_ == HumanoidAnimationState::AttackKick;
         const bool combo_window = committed_action && attack_state &&
                                   action_elapsed_ >= action_duration_ * 0.60F;
         if (raw_input.hit_reaction) {
             begin_action(HumanoidAnimationState::HitReact, 0.42F);
         } else if (raw_input.dodge_pressed) {
             begin_action(HumanoidAnimationState::Dodge, 0.46F);
-        } else if (raw_input.recover_pressed && !committed_action) {
+        } else if (raw_input.block_held && raw_input.grounded &&
+                   (!committed_action || (attack_state &&
+                    action_elapsed_ >= action_duration_ * 0.40F))) {
+            state_ = HumanoidAnimationState::Block;
+            action_elapsed_ = action_duration_ = action_remaining_ = 0.0F;
+        } else if (raw_input.recover_pressed && raw_input.grounded &&
+                   (!committed_action ||
+                    action_elapsed_ >= action_duration_ * 0.68F)) {
             begin_action(HumanoidAnimationState::Recover, 0.55F);
         } else if (raw_input.grounded && raw_input.attack_heavy_pressed &&
                    (!committed_action || combo_window)) {
             begin_action(HumanoidAnimationState::AttackHeavy, 0.72F);
+        } else if (raw_input.grounded && raw_input.attack_kick_pressed &&
+                   (!committed_action || combo_window)) {
+            begin_action(HumanoidAnimationState::AttackKick, 0.68F);
         } else if (raw_input.grounded && raw_input.attack_light_pressed &&
                    (!committed_action || combo_window)) {
             begin_action(HumanoidAnimationState::AttackLight, 0.52F);
@@ -263,6 +276,25 @@ private:
                 set_rotation(target_pose_, B::RightLowerArm, {1.0F, 0.0F, 0.0F}, -0.72F * strike);
                 set_rotation(target_pose_, B::LeftUpperArm, {0.0F, 0.0F, 1.0F}, -0.38F);
                 target_pose_.local_translations[static_cast<std::size_t>(B::Pelvis)].y -= 0.055F * strike;
+                break;
+            }
+            case HumanoidAnimationState::AttackKick: {
+                const float phase = std::clamp(action_elapsed_ / 0.68F, 0.0F, 1.0F);
+                const float windup = std::clamp(phase / 0.26F, 0.0F, 1.0F);
+                const float strike_phase = std::clamp((phase - 0.26F) / 0.32F, 0.0F, 1.0F);
+                const float strike = std::sin(strike_phase * 3.14159265F);
+                const float recover = std::clamp((phase - 0.58F) / 0.42F, 0.0F, 1.0F);
+                const float thigh_lift = 0.18F * windup + 0.95F * strike - 0.18F * recover;
+                set_rotation(target_pose_, B::Pelvis, {0.0F, 1.0F, 0.0F}, -0.24F * strike);
+                set_rotation(target_pose_, B::Chest, {0.0F, 1.0F, 0.0F}, 0.20F * strike);
+                set_rotation(target_pose_, B::RightUpperLeg, {1.0F, 0.0F, 0.0F}, thigh_lift);
+                set_rotation(target_pose_, B::RightLowerLeg, {1.0F, 0.0F, 0.0F},
+                             0.52F * windup - 0.96F * strike);
+                set_rotation(target_pose_, B::LeftUpperLeg, {1.0F, 0.0F, 0.0F}, -0.12F * strike);
+                set_rotation(target_pose_, B::LeftUpperArm, {0.0F, 0.0F, 1.0F}, -0.58F * strike);
+                set_rotation(target_pose_, B::RightUpperArm, {0.0F, 0.0F, 1.0F}, 0.42F * strike);
+                target_pose_.local_translations[static_cast<std::size_t>(B::Pelvis)].y -=
+                    0.025F * strike;
                 break;
             }
             case HumanoidAnimationState::Block:
