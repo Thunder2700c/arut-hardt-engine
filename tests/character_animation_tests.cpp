@@ -26,9 +26,10 @@ static AnimationClip make_clip(const char* name, float offset, bool looping = tr
 
 int main() {
     Pose generated_rest{};
-    generated_rest.joint_count = 6U;
+    generated_rest.joint_count = 8U;
     const std::vector<std::string> generated_names{
-        "pelvis", "spine_01", "leftArm", "rightArm", "leftForeArm", "rightForeArm"};
+        "pelvis", "spine_01", "leftArm", "rightArm", "leftForeArm", "rightForeArm",
+        "rightUpLeg", "rightLeg"};
     const auto generated = make_procedural_humanoid_clips(generated_rest, generated_names);
     assert(generated.size() == kCharacterAnimationStateCount);
     const auto generated_attack = std::find_if(generated.begin(), generated.end(),
@@ -42,6 +43,11 @@ int main() {
     assert(std::abs(generated_pose.joints[2].rotation.x) > 0.01F ||
            std::abs(generated_pose.joints[2].rotation.y) > 0.01F ||
            std::abs(generated_pose.joints[2].rotation.z) > 0.01F);
+    Pose generated_kick_pose{};
+    assert(generated_kick->sample(generated_kick->duration_seconds * 0.5F,
+                                  generated_kick_pose));
+    assert(std::abs(generated_kick_pose.joints[6].rotation.x) > 0.1F);
+    assert(std::abs(generated_kick_pose.joints[7].rotation.x) > 0.1F);
     auto idle = make_clip("idle", 0.0F);
     auto walk = make_clip("walk", 2.0F);
     auto run = make_clip("run", 4.0F);
