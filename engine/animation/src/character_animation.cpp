@@ -74,6 +74,7 @@ std::vector<AnimationClip> make_procedural_humanoid_clips(
         {"ARUT_Land", CharacterAnimationState::Land, 0.42F, false},
         {"ARUT_AttackLight", CharacterAnimationState::AttackLight, 0.48F, false},
         {"ARUT_AttackHeavy", CharacterAnimationState::AttackHeavy, 0.78F, false},
+        {"ARUT_AttackKick", CharacterAnimationState::AttackKick, 0.66F, false},
         {"ARUT_Block", CharacterAnimationState::Block, 0.8F, true},
         {"ARUT_Dodge", CharacterAnimationState::Dodge, 0.56F, false},
         {"ARUT_HitReact", CharacterAnimationState::HitReact, 0.5F, false},
@@ -171,6 +172,20 @@ std::vector<AnimationClip> make_procedural_humanoid_clips(
                     if (phase == 0.5F) clip.events.push_back({motion.duration*0.5F,"combo_open",{}});
                     if (phase == 0.75F) clip.events.push_back({motion.duration*0.75F,"combo_close",{}});
                     break;
+                case CharacterAnimationState::AttackKick: {
+                    const float kick = std::sin(phase * kPi);
+                    rotate(pelvis,0,1,0,-24.0F*smooth);
+                    rotate(spine,0,1,0,18.0F*smooth);
+                    rotate(right_thigh,1,0,0,-58.0F*kick);
+                    rotate(right_calf,1,0,0,72.0F*kick);
+                    rotate(left_thigh,1,0,0,8.0F*kick);
+                    rotate(left_calf,1,0,0,-10.0F*kick);
+                    rotate(left_upper_arm,0,0,1,-34.0F*smooth);
+                    rotate(right_upper_arm,0,0,1,42.0F*smooth);
+                    if (phase == 0.5F) clip.events.push_back({motion.duration*0.5F,"combo_open",{}});
+                    if (phase == 0.75F) clip.events.push_back({motion.duration*0.75F,"combo_close",{}});
+                    break;
+                }
                 case CharacterAnimationState::Block:
                     rotate(left_upper_arm,1,0,0,-65.0F);
                     rotate(right_upper_arm,1,0,0,-65.0F);
@@ -231,6 +246,7 @@ bool CharacterAnimationController::configure(const CharacterAnimationSet& clips)
             case CharacterAnimationState::Land:
             case CharacterAnimationState::AttackLight:
             case CharacterAnimationState::AttackHeavy:
+            case CharacterAnimationState::AttackKick:
             case CharacterAnimationState::Dodge:
             case CharacterAnimationState::HitReact:
             case CharacterAnimationState::Recover:
@@ -284,6 +300,7 @@ CharacterAnimationState CharacterAnimationController::choose_state(
     if (input.recover_pressed && has_state(CharacterAnimationState::Recover)) return CharacterAnimationState::Recover;
     if (input.block_held && has_state(CharacterAnimationState::Block)) return CharacterAnimationState::Block;
     if (input.attack_heavy_pressed && has_state(CharacterAnimationState::AttackHeavy)) return CharacterAnimationState::AttackHeavy;
+    if (input.attack_kick_pressed && has_state(CharacterAnimationState::AttackKick)) return CharacterAnimationState::AttackKick;
     if (input.attack_light_pressed && has_state(CharacterAnimationState::AttackLight)) return CharacterAnimationState::AttackLight;
     const auto locomotion = locomotion_state(input);
     if (!was_grounded_ && input.grounded && has_state(CharacterAnimationState::Land)) return CharacterAnimationState::Land;
@@ -318,10 +335,12 @@ bool CharacterAnimationController::update(float delta_seconds, const CharacterAn
         !std::isfinite(input.move_x) || !std::isfinite(input.move_y) ||
         !std::isfinite(input.horizontal_speed) || !std::isfinite(input.vertical_speed)) return false;
     const float dt = std::min(delta_seconds, 0.25F);
-    const bool attack_pressed = input.attack_light_pressed || input.attack_heavy_pressed;
+    const bool attack_pressed = input.attack_light_pressed || input.attack_heavy_pressed ||
+                                input.attack_kick_pressed;
     if (attack_pressed) {
         buffered_action_ = input.attack_heavy_pressed ? CharacterAnimationState::AttackHeavy
-                                                       : CharacterAnimationState::AttackLight;
+            : input.attack_kick_pressed ? CharacterAnimationState::AttackKick
+                                        : CharacterAnimationState::AttackLight;
         input_buffer_seconds_ = 0.22F;
     } else if (input_buffer_seconds_ > 0.0F) {
         input_buffer_seconds_ = std::max(0.0F, input_buffer_seconds_ - dt);
@@ -349,7 +368,8 @@ bool CharacterAnimationController::update(float delta_seconds, const CharacterAn
     if (desired == state_ && is_timed_action(state_) &&
         combo_window_open_ && buffered_attack &&
         (state_ == CharacterAnimationState::AttackLight ||
-         state_ == CharacterAnimationState::AttackHeavy)) {
+         state_ == CharacterAnimationState::AttackHeavy ||
+          state_ == CharacterAnimationState::AttackKick)) {
         if (!graph_.restart_current(transition_seconds_)) return false;
         state_elapsed_ = 0.0F;
         combo_window_open_ = cancel_window_open_ = false;
@@ -361,7 +381,8 @@ bool CharacterAnimationController::update(float delta_seconds, const CharacterAn
                 ? CharacterAnimationState::Idle : state_;
             if (fallback != state_ && !enter(fallback, transition_seconds_)) return false;
         } else if (desired == CharacterAnimationState::AttackLight ||
-                   desired == CharacterAnimationState::AttackHeavy) {
+                   desired == CharacterAnimationState::AttackHeavy ||
+                   desired == CharacterAnimationState::AttackKick) {
             buffered_action_ = CharacterAnimationState::Count;
             input_buffer_seconds_ = 0.0F;
         }
