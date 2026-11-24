@@ -18,6 +18,7 @@ public final class TestLabActivity extends Activity {
     };
 
     private static native void nativeSelectProfile(int profileId);
+    private static native void nativeSetImportedCharacterEnabled(boolean enabled);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -31,11 +32,32 @@ public final class TestLabActivity extends Activity {
             .setItems(PROFILES, (dialog, which) -> {
                 // This must run BEFORE NativeActivity.onCreate starts android_main.
                 nativeSelectProfile(which);
-                Intent intent = new Intent(TestLabActivity.this, EngineNativeActivity.class);
-                startActivity(intent);
-                finish();
+                if (which == 1 || which == 2) {
+                    showCharacterSourceChoice();
+                } else {
+                    launchEngine(false);
+                }
             })
             .setCancelable(false)
             .show();
+    }
+
+    private void showCharacterSourceChoice() {
+        final CharSequence[] sources = {
+            "Procedural robot mannequin (default)",
+            "Optional imported GLB character"
+        };
+        new AlertDialog.Builder(this)
+            .setTitle("Choose the humanoid character")
+            .setItems(sources, (dialog, which) -> launchEngine(which == 1))
+            .setCancelable(false)
+            .show();
+    }
+
+    private void launchEngine(boolean useImportedCharacter) {
+        nativeSetImportedCharacterEnabled(useImportedCharacter);
+        Intent intent = new Intent(TestLabActivity.this, EngineNativeActivity.class);
+        startActivity(intent);
+        finish();
     }
 }
