@@ -56,6 +56,24 @@ bool AnimationStateMachine::transition_to(std::uint32_t state_id,
     return true;
 }
 
+bool AnimationStateMachine::restart_current(float blend_seconds) noexcept {
+    if (!started_ || !std::isfinite(blend_seconds) || blend_seconds < 0.0F ||
+        !last_pose_.joint_count) return false;
+    const auto* state = find_state(current_state_id_);
+    if (!state || !state->clip) return false;
+    transition_source_ = last_pose_;
+    target_player_.set_clip(state->clip, true);
+    target_state_id_ = current_state_id_;
+    blend_duration_ = blend_seconds;
+    blend_elapsed_ = 0.0F;
+    transition_active_ = blend_seconds > 0.0F;
+    if (!transition_active_) {
+        player_ = target_player_;
+        target_state_id_ = 0U;
+    }
+    return true;
+}
+
 bool AnimationStateMachine::update(float delta_seconds, Pose& output) noexcept {
     if (!started_ || !std::isfinite(delta_seconds) || delta_seconds < 0.0F)
         return false;
