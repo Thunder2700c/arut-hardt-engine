@@ -331,12 +331,48 @@ bool configure_imported_character_animator(RuntimeState& state) {
   else if (name.find("walk") != std::string::npos)
    bind(S::Walk);
  }
- // A GLB with a single generically named clip is still usable for an
- // animation smoke test; projects should name production clips explicitly.
+ // Preserve every authored GLB clip that has a recognized semantic name.
+ // The bundled default pack currently exposes only one generic clip, so
+ // author a complete original fallback set against this exact 66-joint rest rig.
  if (!clips.get(S::Idle) && !state.imported_character_asset.animations.empty())
   clips.set(S::Idle, &state.imported_character_asset.animations.front());
- return state.imported_character_animator.configure(clips) &&
-        state.imported_character_animator.start();
+
+ std::vector<std::string> joint_names;
+ joint_names.reserve(state.imported_character_asset.joints.size());
+ for (const auto& joint : state.imported_character_asset.joints)
+  joint_names.push_back(joint.name);
+ auto procedural_clips = arut::animation::make_procedural_humanoid_clips(
+  state.imported_character_rest_pose, joint_names);
+ std::size_t generated_count = 0U;
+ for (const auto& clip : procedural_clips) {
+  const auto name = clip.name;
+  S target = S::Count;
+  if (name == "ARUT_Idle") target = S::Idle;
+  else if (name == "ARUT_Walk") target = S::Walk;
+  else if (name == "ARUT_Run") target = S::Run;
+  else if (name == "ARUT_StrafeLeft") target = S::StrafeLeft;
+  else if (name == "ARUT_StrafeRight") target = S::StrafeRight;
+  else if (name == "ARUT_Backward") target = S::Backward;
+  else if (name == "ARUT_Jump") target = S::Jump;
+  else if (name == "ARUT_Fall") target = S::Fall;
+  else if (name == "ARUT_Land") target = S::Land;
+  else if (name == "ARUT_AttackLight") target = S::AttackLight;
+  else if (name == "ARUT_AttackHeavy") target = S::AttackHeavy;
+  else if (name == "ARUT_Block") target = S::Block;
+  else if (name == "ARUT_Dodge") target = S::Dodge;
+  else if (name == "ARUT_HitReact") target = S::HitReact;
+  else if (name == "ARUT_Recover") target = S::Recover;
+  if (target != S::Count && !clips.get(target)) {
+   clips.set(target, &clip);
+   ++generated_count;
+  }
+ }
+ const bool configured = state.imported_character_animator.configure(clips) &&
+                         state.imported_character_animator.start();
+ log_info("IMPORTED_CHARACTER animation_library authored=%zu imported=%zu generated_fallback=%zu ready=%s",
+  clips.clips.size(), state.imported_character_asset.animations.size(),
+  generated_count, configured ? "true" : "false");
+ return configured;
 }
 
 bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
