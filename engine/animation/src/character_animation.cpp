@@ -375,7 +375,12 @@ bool CharacterAnimationController::update(float delta_seconds, const CharacterAn
     state_elapsed_ += dt;
     was_grounded_ = input.grounded;
     if (is_timed_action(state_) && state_elapsed_ >= duration_of(state_)) {
-        const auto next = locomotion_state(input);
+        // A held guard is a persistent stance, not a one-shot action. Return
+        // directly to it after an attack/landing/recovery instead of briefly
+        // dropping to locomotion for one frame.
+        const auto next = input.block_held && input.grounded &&
+                          has_state(CharacterAnimationState::Block)
+            ? CharacterAnimationState::Block : locomotion_state(input);
         if (next != state_) (void)enter(next, transition_seconds_);
     }
     return true;
