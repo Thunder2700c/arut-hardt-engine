@@ -344,7 +344,16 @@ bool CharacterAnimationController::update(float delta_seconds, const CharacterAn
     }
     if (state_ == CharacterAnimationState::Block && !input.block_held &&
         !input.hit_reaction && !input.dodge_pressed) desired = locomotion_state(input);
-    if (desired != state_) {
+    if (desired == state_ && is_timed_action(state_) &&
+        combo_window_open_ && buffered_attack &&
+        (state_ == CharacterAnimationState::AttackLight ||
+         state_ == CharacterAnimationState::AttackHeavy)) {
+        if (!graph_.restart_current(transition_seconds_)) return false;
+        state_elapsed_ = 0.0F;
+        combo_window_open_ = cancel_window_open_ = false;
+        buffered_action_ = CharacterAnimationState::Count;
+        input_buffer_seconds_ = 0.0F;
+    } else if (desired != state_) {
         if (!enter(desired, transition_seconds_)) {
             const auto fallback = has_state(CharacterAnimationState::Idle)
                 ? CharacterAnimationState::Idle : state_;
