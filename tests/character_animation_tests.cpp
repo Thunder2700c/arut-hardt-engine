@@ -50,6 +50,7 @@ int main() {
     auto hit = make_clip("hit", 10.0F, false);
     auto heavy = make_clip("heavy", 12.0F, true);
     auto kick = make_clip("kick", 26.0F, false);
+    kick.events.push_back({0.15F, "cancel_open", {}});
     auto strafe = make_clip("strafe", 14.0F);
     auto jump = make_clip("jump", 16.0F);
     auto fall = make_clip("fall", 18.0F);
