@@ -3047,6 +3047,23 @@ bool AndroidRenderer::load_imported_character_glb(
         return false;
     }
 
+    char import_summary[256]{};
+    std::snprintf(import_summary, sizeof(import_summary),
+        "GLB_IMPORT_REPORT joints=%zu meshes=%zu vertices=%zu indices=%zu animations=%zu",
+        report.imported_joints, report.imported_meshes, report.imported_vertices,
+        report.imported_indices, report.imported_animations);
+    arut_android_log(ANDROID_LOG_INFO, import_summary);
+    for (std::size_t index = 0; index < asset.meshes.size(); ++index) {
+        const auto& imported_mesh = asset.meshes[index];
+        char mesh_summary[256]{};
+        std::snprintf(mesh_summary, sizeof(mesh_summary),
+            "GLB_MESH index=%zu name=%.*s vertices=%zu indices=%zu",
+            index, static_cast<int>(std::min<std::size_t>(imported_mesh.name.size(), 96U)),
+            imported_mesh.name.c_str(), imported_mesh.vertices.size(),
+            imported_mesh.indices.size());
+        arut_android_log(ANDROID_LOG_INFO, mesh_summary);
+    }
+
     arut::animation::Pose rest_pose{};
     rest_pose.joint_count = asset.joint_count;
     for (std::size_t joint = 0; joint < asset.joint_count; ++joint)
@@ -3072,17 +3089,47 @@ bool AndroidRenderer::set_imported_character(
     const bool model_is_finite = std::all_of(model.value.begin(), model.value.end(),
         [](float value) { return std::isfinite(value); });
     if (!ready() || !mannequin_scene_enabled_ || !mannequin_instance_memory_ ||
-        !bone_palette_uniform_memory_ || !model_is_finite || !asset.valid() || asset.meshes.empty() ||
-        asset.meshes.front().indices.size() > UINT32_MAX) {
+        !bone_palette_uniform_memory_ || !model_is_finite || !asset.valid() || asset.meshes.empty()) {
         log_error("Imported character rejected: renderer, asset, or mannequin resources are not ready");
         return false;
     }
 
     arut::rendering::MeshData mesh{};
     try {
-        if (!arut::rendering::convert_imported_skinned_mesh(asset, asset.meshes.front(), mesh) ||
-            mesh.vertices.empty() || mesh.indices.empty()) {
-            log_error("Imported character vertex conversion failed");
+        const std::size_t maximum_elements =
+            static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max());
+        std::size_t total_vertices = 0U;
+        std::size_t total_indices = 0U;
+        for (const auto& source_mesh : asset.meshes) {
+            if (source_mesh.vertices.size() > maximum_elements - total_vertices ||
+                source_mesh.indices.size() > maximum_elements - total_indices) {
+                log_error("Imported character combined mesh exceeds 32-bit Vulkan index limits");
+                return false;
+            }
+            total_vertices += source_mesh.vertices.size();
+            total_indices += source_mesh.indices.size();
+        }
+        mesh.vertices.reserve(total_vertices);
+        mesh.indices.reserve(total_indices);
+        for (const auto& source_mesh : asset.meshes) {
+            arut::rendering::MeshData part{};
+            if (!arut::rendering::convert_imported_skinned_mesh(asset, source_mesh, part)) {
+                log_error("Imported character submesh conversion failed");
+                return false;
+            }
+            const auto vertex_base = static_cast<std::uint32_t>(mesh.vertices.size());
+            mesh.vertices.insert(mesh.vertices.end(), part.vertices.begin(), part.vertices.end());
+            for (const std::uint32_t index : part.indices) {
+                if (index > UINT32_MAX - vertex_base) {
+                    log_error("Imported character combined index overflow");
+                    return false;
+                }
+                mesh.indices.push_back(vertex_base + index);
+            }
+        }
+        if (mesh.vertices.empty() || mesh.indices.empty() ||
+            mesh.indices.size() > maximum_elements) {
+            log_error("Imported character combined mesh is empty or exceeds 32-bit draw limits");
             return false;
         }
     } catch (...) {
@@ -3178,7 +3225,11 @@ bool AndroidRenderer::set_imported_character(
     pending_humanoid_palette_ = gpu_palette;
     humanoid_camera_position_ = camera_position_;
     has_external_humanoid_state_ = true;
-    arut_android_log(ANDROID_LOG_INFO, "IMPORTED_CHARACTER uploaded=true mesh=first_skinned_mesh skinning=128_joint_palette");
+    char upload_summary[256]{};
+    std::snprintf(upload_summary, sizeof(upload_summary),
+        "IMPORTED_CHARACTER uploaded=true meshes=%zu vertices=%zu indices=%u skinning=128_joint_palette",
+        asset.meshes.size(), mesh.vertices.size(), imported_character_index_count_);
+    arut_android_log(ANDROID_LOG_INFO, upload_summary);
     return true;
 }
 
@@ -3314,12 +3365,21 @@ bool AndroidRenderer::draw_frame() noexcept {
                 [](float value) { return std::isfinite(value); });
         };
         const auto& model = pending_mannequin_model_;
+        const auto basis_length = [&model](std::size_t offset) {
+            const float x = model.value[offset];
+            const float y = model.value[offset + 1U];
+            const float z = model.value[offset + 2U];
+            return std::sqrt(x * x + y * y + z * z);
+        };
+        const float scale_x = basis_length(0U);
+        const float scale_y = basis_length(4U);
+        const float scale_z = basis_length(8U);
         char diagnostic[640]{};
         std::snprintf(diagnostic, sizeof(diagnostic),
             "CHARACTER_DIAG frame=%llu path=%s mannequin_indices=%u imported_indices=%u "
             "vertex_buffer=%s index_buffer=%s instance_buffer=%s palette_buffer=%s "
-            "model_finite=%s model_scale=(%.4f,%.4f,%.4f) model_pos=(%.3f,%.3f,%.3f) "
-            "external_pose=%s",
+            "model_finite=%s model_basis_scale=(%.4f,%.4f,%.4f) model_yaw=%.3f "
+            "model_pos=(%.3f,%.3f,%.3f) external_pose=%s",
             static_cast<unsigned long long>(character_diagnostic_frames),
             imported_character_enabled_ ? "imported_glb" : "procedural_mannequin",
             mannequin_index_count_, imported_character_index_count_,
@@ -3328,7 +3388,7 @@ bool AndroidRenderer::draw_frame() noexcept {
             mannequin_instance_buffer_ != VK_NULL_HANDLE ? "yes" : "no",
             bone_palette_uniform_memory_ != VK_NULL_HANDLE ? "yes" : "no",
             finite_matrix(model) ? "yes" : "no",
-            model.value[0], model.value[5], model.value[10],
+            scale_x, scale_y, scale_z, std::atan2(model.value[2], model.value[0]),
             model.value[12], model.value[13], model.value[14],
             has_external_humanoid_state_ ? "yes" : "no");
         arut_android_log(ANDROID_LOG_INFO, diagnostic);
@@ -3340,8 +3400,8 @@ bool AndroidRenderer::draw_frame() noexcept {
                    imported_character_index_buffer_ == VK_NULL_HANDLE)
                 : (mannequin_index_count_ == 0U || mannequin_vertex_buffer_ == VK_NULL_HANDLE ||
                    mannequin_index_buffer_ == VK_NULL_HANDLE)) ||
-             !finite_matrix(model) || std::abs(model.value[0]) < 1.0e-6F ||
-             std::abs(model.value[5]) < 1.0e-6F || std::abs(model.value[10]) < 1.0e-6F)) {
+             !finite_matrix(model) || scale_x < 1.0e-6F ||
+             scale_y < 1.0e-6F || scale_z < 1.0e-6F)) {
             arut_android_log(ANDROID_LOG_ERROR,
                 "CHARACTER_DIAG_FAIL reason=missing_gpu_resource_or_invalid_model_transform");
         }

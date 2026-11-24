@@ -48,6 +48,33 @@ std::int16_t joint_index(const cgltf_skin& skin, const cgltf_node* node) noexcep
     return -1;
 }
 
+bool same_skin_layout(const cgltf_skin& reference, const cgltf_skin& candidate) noexcept {
+    if (reference.joints_count == 0U ||
+        reference.joints_count != candidate.joints_count) return false;
+    for (cgltf_size i = 0; i < reference.joints_count; ++i)
+        if (reference.joints[i] != candidate.joints[i]) return false;
+
+    const auto read_bind = [](const cgltf_accessor* accessor, cgltf_size index,
+                              std::array<float, 16>& matrix) noexcept {
+        matrix.fill(0.0F);
+        if (accessor)
+            return cgltf_accessor_read_float(accessor, index, matrix.data(), 16U) != 0;
+        matrix[0] = matrix[5] = matrix[10] = matrix[15] = 1.0F;
+        return true;
+    };
+    std::array<float, 16> reference_bind{};
+    std::array<float, 16> candidate_bind{};
+    for (cgltf_size i = 0; i < reference.joints_count; ++i) {
+        if (!read_bind(reference.inverse_bind_matrices, i, reference_bind) ||
+            !read_bind(candidate.inverse_bind_matrices, i, candidate_bind)) return false;
+        for (std::size_t component = 0; component < reference_bind.size(); ++component)
+            if (!finite(reference_bind[component]) || !finite(candidate_bind[component]) ||
+                std::abs(reference_bind[component] - candidate_bind[component]) > 1.0e-5F)
+                return false;
+    }
+    return true;
+}
+
 Quaternion normalized(Quaternion q) noexcept {
     const float l2 = q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w;
     if (!finite(l2) || l2 < 1.0e-12F) return {};
@@ -290,7 +317,26 @@ bool import_glb(const void* bytes, std::size_t byte_count,
 
     for(cgltf_size ni=0;ni<data->nodes_count;++ni) {
         const auto& node=data->nodes[ni];
-        if(node.skin!=&skin||!node.mesh) continue;
+        if(!node.mesh || !node.skin) continue;
+
+        bool skin_belongs_to_asset = false;
+        for (cgltf_size si = 0; si < data->skins_count; ++si) {
+            if (node.skin == &data->skins[si]) {
+                skin_belongs_to_asset = true;
+                break;
+            }
+        }
+        if (!skin_belongs_to_asset) {
+            report.message = "A skinned mesh references a skin outside the parsed GLB";
+            output = {};
+            return false;
+        }
+        if (!same_skin_layout(skin, *node.skin)) {
+            report.message = "GLB contains multiple incompatible skeletons or inverse-bind layouts; one SkeletalAsset can represent only one compatible rig";
+            output = {};
+            return false;
+        }
+
         ImportedSkinnedMesh mesh{};
         mesh.name=node.mesh->name&&node.mesh->name[0]?node.mesh->name:
                   (node.name&&node.name[0]?node.name:"skinned_mesh");
@@ -303,7 +349,8 @@ bool import_glb(const void* bytes, std::size_t byte_count,
         if(!mesh.vertices.empty()) output.meshes.push_back(std::move(mesh));
     }
     if(output.meshes.empty()) {
-        report.message="No mesh node referencing the selected skin was found"; output={}; return false;
+        report.message="No mesh node references the selected compatible skeleton";
+        output={}; return false;
     }
 
     for(cgltf_size ai=0;ai<data->animations_count;++ai) {

@@ -76,11 +76,11 @@ std::vector<std::uint8_t> make_glb() {
     json+="{\"bufferView\":6,\"componentType\":5126,\"count\":2,\"type\":\"VEC3\"},";
     json+="{\"bufferView\":7,\"componentType\":5126,\"count\":6,\"type\":\"VEC3\"}],";
     json+="\"meshes\":[{\"name\":\"TestMesh\",\"primitives\":[{\"attributes\":{\"POSITION\":0,\"JOINTS_0\":1,\"WEIGHTS_0\":2},\"indices\":3}]}],";
-    json+="\"nodes\":[{\"name\":\"MeshNode\",\"mesh\":0,\"skin\":0},{\"name\":\"Root\"}],";
-    json+="\"skins\":[{\"joints\":[1],\"inverseBindMatrices\":4}],";
+    json+="\"nodes\":[{\"name\":\"MeshNode\",\"mesh\":0,\"skin\":0},{\"name\":\"Root\"},{\"name\":\"MeshNodeSecondary\",\"mesh\":0,\"skin\":1}],";
+    json+="\"skins\":[{\"joints\":[1],\"inverseBindMatrices\":4},{\"joints\":[1],\"inverseBindMatrices\":4}],";
     json+="\"animations\":[{\"name\":\"Idle\",\"samplers\":[{\"input\":5,\"output\":6,\"interpolation\":\"LINEAR\"}],\"channels\":[{\"sampler\":0,\"target\":{\"node\":1,\"path\":\"translation\"}}]},";
     json+="{\"name\":\"ScalePulse\",\"samplers\":[{\"input\":5,\"output\":7,\"interpolation\":\"CUBICSPLINE\"}],\"channels\":[{\"sampler\":0,\"target\":{\"node\":1,\"path\":\"scale\"}}]}],";
-    json+="\"scenes\":[{\"nodes\":[0,1]}],\"scene\":0}";
+    json+="\"scenes\":[{\"nodes\":[0,1,2]}],\"scene\":0}";
     while(json.size()%4U) json.push_back(' ');
     std::vector<std::uint8_t> glb;
     const std::uint32_t total=12U+8U+static_cast<std::uint32_t>(json.size())+
@@ -101,9 +101,11 @@ int main() {
     assert(arut::animation::import_glb(bytes.data(),bytes.size(),asset,report));
     assert(asset.valid());
     assert(asset.joint_count==1U);
-    assert(asset.meshes.size()==1U);
+    assert(asset.meshes.size()==2U);
     assert(asset.meshes[0].vertices.size()==3U);
     assert(asset.meshes[0].indices.size()==3U);
+    assert(asset.meshes[1].vertices.size()==3U);
+    assert(asset.meshes[1].indices.size()==3U);
     assert(asset.animations.size()==2U);
     assert(asset.animations[0].name=="Idle");
     arut::animation::Pose sampled{};
@@ -112,8 +114,10 @@ int main() {
     assert(sampled.joints[0].translation.y>0.24F);
     assert(asset.animations[1].sample(0.5F,sampled));
     assert(sampled.joints[0].scale.x>1.49F&&sampled.joints[0].scale.x<1.51F);
-    assert(report.imported_vertices==3U);
+    assert(report.imported_meshes==2U);
+    assert(report.imported_vertices==6U);
+    assert(report.imported_indices==6U);
     const std::uint8_t invalid[4]{};
     assert(!arut::animation::import_glb(invalid,sizeof(invalid),asset,report));
-    std::cout<<"GLTF_IMPORTER_TEST pass joints=1 vertices=3 clips=2 linear+cubic\n";
+    std::cout<<"GLTF_IMPORTER_TEST pass joints=1 compatible_multi_skin_meshes=2 vertices=6 clips=2 linear+cubic\n";
 }
