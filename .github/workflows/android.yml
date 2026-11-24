@@ -6,6 +6,9 @@ on:
       - ".github/phase3-apk-test.trigger"
       - ".github/phase4-apk-test.trigger"
       - "scripts/fetch_default_character.sh"
+      - "engine/rendering/src/android_renderer.cpp"
+      - "engine/rendering/include/arut/rendering/**"
+      - "engine/rendering/shaders/**"
   workflow_dispatch:
     inputs:
       build_apk:
