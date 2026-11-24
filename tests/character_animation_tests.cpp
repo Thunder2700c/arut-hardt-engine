@@ -155,7 +155,12 @@ int main() {
     input.block_held = true;
     assert(controller.update(0.1F, input, pose, events));
     assert(controller.state() == CharacterAnimationState::Land);
-    assert(controller.update(0.4F, input, pose, events));
+    // update() intentionally clamps a single delta to 250 ms. Advance in
+    // bounded frames until the authored landing clip has actually completed.
+    for (int frame = 0; frame < 8 &&
+         controller.state() != CharacterAnimationState::Block; ++frame) {
+        assert(controller.update(0.25F, input, pose, events));
+    }
     assert(controller.state() == CharacterAnimationState::Block);
     assert(controller.update(0.1F, input, pose, events));
     assert(controller.state() == CharacterAnimationState::Block);
