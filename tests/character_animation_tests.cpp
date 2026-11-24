@@ -104,6 +104,8 @@ int main() {
     assert(controller.state() == CharacterAnimationState::AttackLight);
     assert(controller.state_time_seconds() < 0.15F);
     input.attack_light_pressed = false;
+    // Advance into the restarted strike's next authored combo window.
+    assert(controller.update(0.1F, input, pose, events));
 
     input.attack_heavy_pressed = true;
     assert(controller.update(0.1F, input, pose, events));
