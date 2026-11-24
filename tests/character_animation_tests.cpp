@@ -176,7 +176,9 @@ int main() {
     assert(controller.update(0.1F, input, pose, events));
     assert(controller.state() == CharacterAnimationState::Dodge);
     input.dodge_pressed = false;
-    assert(controller.update(0.6F, input, pose, events));
+    assert(controller.update(0.25F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::Dodge);
+    assert(controller.update(0.25F, input, pose, events));
     assert(controller.state() == CharacterAnimationState::Idle);
 
     std::cout << "CHARACTER_ANIMATION_TEST pass locomotion=1 combat_priority=1 timed_actions=1 guard_reentry=1 hit_cancel=1\n";
