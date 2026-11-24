@@ -33,6 +33,9 @@ int main() {
     assert(generated.size() == kCharacterAnimationStateCount);
     const auto generated_attack = std::find_if(generated.begin(), generated.end(),
         [](const AnimationClip& clip) { return clip.name == "ARUT_AttackLight"; });
+    const auto generated_kick = std::find_if(generated.begin(), generated.end(),
+        [](const AnimationClip& clip) { return clip.name == "ARUT_AttackKick"; });
+    assert(generated_kick != generated.end());
     assert(generated_attack != generated.end());
     Pose generated_pose{};
     assert(generated_attack->sample(generated_attack->duration_seconds * 0.5F, generated_pose));
@@ -46,6 +49,7 @@ int main() {
     auto dodge = make_clip("dodge", 8.0F, false);
     auto hit = make_clip("hit", 10.0F, false);
     auto heavy = make_clip("heavy", 12.0F, true);
+    auto kick = make_clip("kick", 26.0F, false);
     auto strafe = make_clip("strafe", 14.0F);
     auto jump = make_clip("jump", 16.0F);
     auto fall = make_clip("fall", 18.0F);
@@ -64,6 +68,7 @@ int main() {
     set.set(CharacterAnimationState::Dodge, &dodge);
     set.set(CharacterAnimationState::HitReact, &hit);
     set.set(CharacterAnimationState::AttackHeavy, &heavy);
+    set.set(CharacterAnimationState::AttackKick, &kick);
     set.set(CharacterAnimationState::StrafeRight, &strafe);
     set.set(CharacterAnimationState::Jump, &jump);
     set.set(CharacterAnimationState::Fall, &fall);
@@ -203,5 +208,15 @@ int main() {
     assert(controller.update(0.25F, input, pose, events));
     assert(controller.state() == CharacterAnimationState::Idle);
 
-    std::cout << "CHARACTER_ANIMATION_TEST pass locomotion=1 combat_priority=1 timed_actions=1 guard_reentry=1 hit_cancel=1\n";
+    input.attack_kick_pressed = true;
+    assert(controller.update(0.1F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::AttackKick);
+    input.attack_kick_pressed = false;
+    assert(controller.update(0.25F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::AttackKick);
+    input.block_held = true;
+    assert(controller.update(0.1F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::Block);
+
+    std::cout << "CHARACTER_ANIMATION_TEST pass locomotion=1 combat_priority=1 timed_actions=1 guard_reentry=1 hit_cancel=1 kick=1\n";
 }
