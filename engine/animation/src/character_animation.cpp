@@ -158,7 +158,10 @@ std::vector<AnimationClip> make_procedural_humanoid_clips(
                     rotate(right_upper_arm,1,0,0,-105.0F*smooth);
                     rotate(right_forearm,1,0,0,-65.0F*smooth);
                     rotate(left_upper_arm,1,0,0,-22.0F*smooth);
-                    if (phase == 0.5F) clip.events.push_back({motion.duration*0.5F,"combo_open",{}});
+                    if (phase == 0.5F) {
+                        clip.events.push_back({motion.duration*0.5F,"combo_open",{}});
+                        clip.events.push_back({motion.duration*0.5F,"cancel_open",{}});
+                    }
                     if (phase == 0.75F) clip.events.push_back({motion.duration*0.75F,"combo_close",{}});
                     break;
                 case CharacterAnimationState::AttackHeavy:
@@ -169,7 +172,10 @@ std::vector<AnimationClip> make_procedural_humanoid_clips(
                     rotate(right_forearm,1,0,0,-85.0F*smooth);
                     rotate(left_upper_arm,1,0,0,-45.0F*smooth);
                     rotate(left_forearm,1,0,0,-30.0F*smooth);
-                    if (phase == 0.5F) clip.events.push_back({motion.duration*0.5F,"combo_open",{}});
+                    if (phase == 0.5F) {
+                        clip.events.push_back({motion.duration*0.5F,"combo_open",{}});
+                        clip.events.push_back({motion.duration*0.5F,"cancel_open",{}});
+                    }
                     if (phase == 0.75F) clip.events.push_back({motion.duration*0.75F,"combo_close",{}});
                     break;
                 case CharacterAnimationState::AttackKick: {
@@ -182,7 +188,10 @@ std::vector<AnimationClip> make_procedural_humanoid_clips(
                     rotate(left_calf,1,0,0,-10.0F*kick);
                     rotate(left_upper_arm,0,0,1,-34.0F*smooth);
                     rotate(right_upper_arm,0,0,1,42.0F*smooth);
-                    if (phase == 0.5F) clip.events.push_back({motion.duration*0.5F,"combo_open",{}});
+                    if (phase == 0.5F) {
+                        clip.events.push_back({motion.duration*0.5F,"combo_open",{}});
+                        clip.events.push_back({motion.duration*0.5F,"cancel_open",{}});
+                    }
                     if (phase == 0.75F) clip.events.push_back({motion.duration*0.75F,"combo_close",{}});
                     break;
                 }
@@ -311,7 +320,8 @@ CharacterAnimationState CharacterAnimationController::choose_state(
 bool CharacterAnimationController::is_timed_action(CharacterAnimationState state) const noexcept {
     switch (state) {
         case CharacterAnimationState::Land: case CharacterAnimationState::AttackLight:
-        case CharacterAnimationState::AttackHeavy: case CharacterAnimationState::Dodge:
+        case CharacterAnimationState::AttackHeavy: case CharacterAnimationState::AttackKick:
+        case CharacterAnimationState::Dodge:
         case CharacterAnimationState::HitReact: case CharacterAnimationState::Recover: return true;
         default: return false;
     }
