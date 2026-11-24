@@ -211,12 +211,17 @@ int main() {
     assert(controller.update(0.25F, input, pose, events));
     assert(controller.state() == CharacterAnimationState::Run);
 
+    events.clear();
     input.attack_kick_pressed = true;
     assert(controller.update(0.1F, input, pose, events));
     assert(controller.state() == CharacterAnimationState::AttackKick);
     input.attack_kick_pressed = false;
     assert(controller.update(0.25F, input, pose, events));
     assert(controller.state() == CharacterAnimationState::AttackKick);
+    bool kick_cancel_window_seen = false;
+    for (const auto& event : events)
+        kick_cancel_window_seen |= event.name == "cancel_open";
+    assert(kick_cancel_window_seen);
     input.block_held = true;
     assert(controller.update(0.1F, input, pose, events));
     assert(controller.state() == CharacterAnimationState::Block);
