@@ -21,6 +21,20 @@ static AnimationClip make_clip(const char* name, float offset, bool looping = tr
 }
 
 int main() {
+    Pose generated_rest{};
+    generated_rest.joint_count = 6U;
+    const std::vector<std::string> generated_names{
+        "pelvis", "spine_01", "leftArm", "rightArm", "leftForeArm", "rightForeArm"};
+    const auto generated = make_procedural_humanoid_clips(generated_rest, generated_names);
+    assert(generated.size() == kCharacterAnimationStateCount - 1U);
+    const auto generated_attack = std::find_if(generated.begin(), generated.end(),
+        [](const AnimationClip& clip) { return clip.name == "ARUT_AttackLight"; });
+    assert(generated_attack != generated.end());
+    Pose generated_pose{};
+    assert(generated_attack->sample(generated_attack->duration_seconds * 0.5F, generated_pose));
+    assert(std::abs(generated_pose.joints[2].rotation.x) > 0.01F ||
+           std::abs(generated_pose.joints[2].rotation.y) > 0.01F ||
+           std::abs(generated_pose.joints[2].rotation.z) > 0.01F);
     auto idle = make_clip("idle", 0.0F);
     auto walk = make_clip("walk", 2.0F);
     auto run = make_clip("run", 4.0F);
@@ -78,6 +92,14 @@ int main() {
     bool combo_open_seen = false;
     for (const auto& event : events) combo_open_seen |= event.name == "combo_open";
     assert(combo_open_seen);
+
+    // Buffer the same attack before the authored combo window and verify the
+    // active clip restarts instead of remaining stuck in its first strike.
+    input.attack_light_pressed = true;
+    assert(controller.update(0.1F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::AttackLight);
+    assert(controller.state_time_seconds() < 0.15F);
+    input.attack_light_pressed = false;
 
     input.attack_heavy_pressed = true;
     assert(controller.update(0.1F, input, pose, events));
