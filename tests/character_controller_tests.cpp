@@ -109,6 +109,15 @@ int main() {
     assert(!controller.state().grounded);
     assert(controller.state().position.y > 0.0F);
 
+    // Regression: a grounded idle character must remain constrained to
+    // the support plane for a long run, with no gravity-induced fall drift.
+    controller.reset();
+    for (int i = 0; i < 600; ++i)
+        assert(controller.fixed_step(release, ground_query, &flat));
+    assert(controller.state().grounded);
+    assert(std::abs(controller.state().position.y) < 1.0e-6F);
+    assert(std::abs(controller.state().velocity.y) < 1.0e-6F);
+
     const CharacterAabbObstacle nearby_wall{
         {0.9F, 0.0F, -1.0F}, {1.2F, 2.0F, 1.0F}};
     assert(!character_capsule_overlaps_aabb(
