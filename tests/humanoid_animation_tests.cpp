@@ -14,6 +14,25 @@ int main() {
     animator.update(input, dt);
     assert(animator.snapshot().state == HumanoidAnimationState::Idle);
 
+    // The procedural mannequin must hold an early combo press until its
+    // authored combo window opens, using the same 220 ms buffer as the graph path.
+    HumanoidAnimator buffered_animator;
+    HumanoidAnimationInput buffered_input{};
+    buffered_input.grounded = true;
+    buffered_input.attack_light_pressed = true;
+    (void)buffered_animator.update(buffered_input, dt);
+    assert(buffered_animator.snapshot().state == HumanoidAnimationState::AttackLight);
+    buffered_input.attack_light_pressed = false;
+    for (int i = 0; i < 10; ++i) (void)buffered_animator.update(buffered_input, dt);
+    buffered_input.attack_heavy_pressed = true;
+    (void)buffered_animator.update(buffered_input, dt);
+    assert(buffered_animator.snapshot().state == HumanoidAnimationState::AttackLight);
+    buffered_input.attack_heavy_pressed = false;
+    for (int i = 0; i < 12 &&
+         buffered_animator.snapshot().state == HumanoidAnimationState::AttackLight; ++i)
+        (void)buffered_animator.update(buffered_input, dt);
+    assert(buffered_animator.snapshot().state == HumanoidAnimationState::AttackHeavy);
+
     input.local_move_y = 1.0F;
     input.horizontal_speed = 2.0F;
     for (int i = 0; i < 30; ++i) animator.update(input, dt);
@@ -111,9 +130,11 @@ int main() {
     assert(std::abs(kick_thigh.x) > 0.05F);
     assert(std::abs(kick_calf.x) > 0.05F);
     input.block_held = true;
+    input.attack_light_pressed = true;
     (void)animator.update(input, dt);
     assert(animator.snapshot().state == HumanoidAnimationState::Block);
     input.block_held = false;
+    input.attack_light_pressed = false;
     (void)animator.update(input, dt);
     assert(animator.snapshot().state == HumanoidAnimationState::Idle);
     input.recover_pressed = true;
