@@ -194,6 +194,8 @@ int main() {
     assert(controller.state() == CharacterAnimationState::Dodge);
     input.block_held = false;
     assert(controller.update(0.25F, input, pose, events));
+    // This second Dodge sequence also needs the final 20 ms to cross 0.56 s.
+    assert(controller.update(0.02F, input, pose, events));
     assert(controller.state() == CharacterAnimationState::Idle);
     input.block_held = true;
     assert(controller.update(0.1F, input, pose, events));
