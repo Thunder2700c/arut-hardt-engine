@@ -158,6 +158,7 @@ public:
             state_ != HumanoidAnimationState::Block &&
             state_ != HumanoidAnimationState::AttackLight &&
             state_ != HumanoidAnimationState::AttackHeavy &&
+            state_ != HumanoidAnimationState::AttackKick &&
             state_ != HumanoidAnimationState::Dodge &&
             state_ != HumanoidAnimationState::HitReact &&
             state_ != HumanoidAnimationState::Recover) {
