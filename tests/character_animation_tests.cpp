@@ -168,6 +168,20 @@ int main() {
     assert(controller.state() == CharacterAnimationState::HitReact);
     input.hit_reaction = false;
     assert(controller.update(0.2F, input, pose, events));
+    // A defensive input in the same frame as a buffered strike must win.
+    input.attack_light_pressed = true;
+    input.dodge_pressed = true;
+    assert(controller.update(0.1F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::Dodge);
+    input.attack_light_pressed = false;
+    input.dodge_pressed = false;
+    assert(controller.update(0.1F, input, pose, events));
+    input.block_held = true;
+    assert(controller.update(0.1F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::Dodge);
+    input.block_held = false;
+    assert(controller.update(0.25F, input, pose, events));
+    assert(controller.state() == CharacterAnimationState::Idle);
     input.block_held = true;
     assert(controller.update(0.1F, input, pose, events));
     assert(controller.state() == CharacterAnimationState::Block);
