@@ -1,1 +1,1 @@
-Phase 4 default-character integration: fetch and validate the pinned CC0 rigged GLB, package it as Characters/hero.glb, then build the Android ARM64 debug APK for S23 FE validation.
+Phase 4C implementation: procedural humanoid fallback animation library for all locomotion/combat states, buffered combo chaining, and automated host/Android compile validation.
