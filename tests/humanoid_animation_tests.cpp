@@ -100,16 +100,25 @@ int main() {
     assert(std::abs(jab_forearm.x) > 0.01F);
     assert(std::abs(jab_chest.y) > 0.01F);
     assert(std::abs(jab_chest.x) > 0.01F);
-    input.attack_heavy_pressed = true;
-    animator.update(input, dt);
-    assert(animator.snapshot().state == HumanoidAnimationState::AttackHeavy);
-    input.attack_heavy_pressed = false;
-    for (int i = 0; i < 20; ++i) (void)animator.update(input, dt);
-    assert(animator.snapshot().state == HumanoidAnimationState::AttackHeavy);
-    const auto heavy_arm = animator.pose().local_rotations[static_cast<std::size_t>(B::RightUpperArm)];
-    const auto heavy_elbow = animator.pose().local_rotations[static_cast<std::size_t>(B::RightLowerArm)];
+    // Sample the heavy punch on a fresh animator so its authored wind-up
+    // and extension are measured independently of the preceding jab blend.
+    HumanoidAnimator heavy_animator;
+    HumanoidAnimationInput heavy_input{};
+    heavy_input.grounded = true;
+    heavy_input.attack_heavy_pressed = true;
+    (void)heavy_animator.update(heavy_input, dt);
+    assert(heavy_animator.snapshot().state == HumanoidAnimationState::AttackHeavy);
+    heavy_input.attack_heavy_pressed = false;
+    for (int i = 0; i < 20; ++i) (void)heavy_animator.update(heavy_input, dt);
+    const auto heavy_arm = heavy_animator.pose().local_rotations[static_cast<std::size_t>(B::RightUpperArm)];
+    const auto heavy_elbow = heavy_animator.pose().local_rotations[static_cast<std::size_t>(B::RightLowerArm)];
     assert(std::abs(heavy_arm.x) > 0.10F);
     assert(std::abs(heavy_elbow.x) > 0.10F);
+
+    input.attack_heavy_pressed = true;
+    (void)animator.update(input, dt);
+    assert(animator.snapshot().state == HumanoidAnimationState::AttackHeavy);
+    input.attack_heavy_pressed = false;
     input.block_held = true;
     animator.update(input, dt);
     assert(animator.snapshot().state == HumanoidAnimationState::AttackHeavy);
