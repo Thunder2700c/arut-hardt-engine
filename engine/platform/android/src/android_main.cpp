@@ -1539,8 +1539,20 @@ void run(android_app* app) {
         imported_model.value[column * 4U + 1U] *= imported_scale;
         imported_model.value[column * 4U + 2U] *= imported_scale;
        }
-       const float cosine_yaw = std::cos(character.facing_yaw_radians);
-       const float sine_yaw = std::sin(character.facing_yaw_radians);
+       // The imported GLB's authored forward axis points toward +Z.
+       // The third-person camera is behind the controller's forward direction,
+       // so apply a fixed half-turn to make the character face away from it.
+       // Keep this correction in the model transform: animation-local poses,
+       // root motion removal, and controller/camera yaw remain unchanged.
+       constexpr float imported_asset_forward_correction = 3.141592654F;
+       const float imported_model_yaw =
+        character.facing_yaw_radians + imported_asset_forward_correction;
+       const float cosine_yaw = std::cos(imported_model_yaw);
+       const float sine_yaw = std::sin(imported_model_yaw);
+       imported_model.value[0] = cosine_yaw * imported_scale;
+       imported_model.value[2] = sine_yaw * imported_scale;
+       imported_model.value[8] = -sine_yaw * imported_scale;
+       imported_model.value[10] = cosine_yaw * imported_scale;
        const float center_x = state.imported_character_bounds_center_x;
        const float center_z = state.imported_character_bounds_center_z;
        const float world_center_x = cosine_yaw * center_x - sine_yaw * center_z;
