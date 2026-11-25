@@ -2,7 +2,6 @@
 
 #include <cassert>
 #include <cmath>
-#include <cstdio>
 
 int main() {
     using namespace arut::rendering;
@@ -114,11 +113,6 @@ int main() {
     assert(heavy_animator.snapshot().action_phase > 0.40F);
     const auto heavy_arm = heavy_animator.pose().local_rotations[static_cast<std::size_t>(B::RightUpperArm)];
     const auto heavy_elbow = heavy_animator.pose().local_rotations[static_cast<std::size_t>(B::RightLowerArm)];
-    const auto heavy_target_arm = heavy_animator.target_pose().local_rotations[static_cast<std::size_t>(B::RightUpperArm)];
-    std::fprintf(stderr, "HEAVY_DEBUG phase=%.3f arm=(%.3f,%.3f,%.3f,%.3f) target=(%.3f,%.3f,%.3f,%.3f) elbow=(%.3f,%.3f,%.3f,%.3f)\\n",
-        heavy_animator.snapshot().action_phase, heavy_arm.x, heavy_arm.y, heavy_arm.z, heavy_arm.w,
-        heavy_target_arm.x, heavy_target_arm.y, heavy_target_arm.z, heavy_target_arm.w,
-        heavy_elbow.x, heavy_elbow.y, heavy_elbow.z, heavy_elbow.w);
     assert(std::abs(heavy_arm.x) > 0.10F);
     assert(std::abs(heavy_elbow.x) > 0.10F);
 
