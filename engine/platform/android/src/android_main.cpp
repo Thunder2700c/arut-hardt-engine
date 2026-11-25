@@ -296,7 +296,7 @@ void log_info(const char* format, ...) {
 // preserve the hottest reported sensor, and explicitly report unavailable data.
 bool read_thermal_peak(float& temperature_c, char* sensor, std::size_t sensor_size) noexcept {
  temperature_c = 0.0F;
- if (sensor && sensor_size) sensor[0] = '\\0';
+ if (sensor && sensor_size) sensor[0] = '\0';
  bool found = false;
  for (unsigned int zone = 0; zone < 64U; ++zone) {
   char temp_path[96]{}, type_path[96]{};
@@ -604,10 +604,8 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
    const auto identity = arut::rendering::Mat4::identity();
    if (state.renderer.load_imported_character_glb(
         "Characters/hero.glb", state.imported_character_asset, identity)) {
-    if (!load_optional_retargeted_animation_pack(
-         app->activity->assetManager, state.imported_character_asset)) {
-     log_info("ANIMATION_PACK optional Characters/animation_pack.glb absent or rejected; using hero GLB clips and fallback");
-    }
+    log_info("IMPORTED_CHARACTER animation_source=hero_glb clips=%zu; default mannequin CC0 library is retargeted independently",
+     state.imported_character_asset.animations.size());
     state.imported_character_rest_pose = {};
     state.imported_character_rest_pose.joint_count =
      state.imported_character_asset.joint_count;
