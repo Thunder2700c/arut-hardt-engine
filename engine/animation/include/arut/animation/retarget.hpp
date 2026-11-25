@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <span>
+#include <vector>
 
 namespace arut::animation {
 
@@ -44,5 +46,12 @@ struct RetargetMap final {
     const AnimationClip& source_clip,const RetargetRig& source,
     const RetargetRig& target,const RetargetMap& map,
     AnimationClip& output);
+
+// Retarget an imported animation pack transactionally. On failure, output is
+// left unchanged so callers never install a partially converted library.
+[[nodiscard]] bool retarget_animation_library(
+    std::span<const AnimationClip> source_clips,
+    const RetargetRig& source,const RetargetRig& target,
+    const RetargetMap& map,std::vector<AnimationClip>& output);
 
 } // namespace arut::animation
