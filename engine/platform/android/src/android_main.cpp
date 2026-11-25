@@ -1668,6 +1668,13 @@ void run(android_app* app) {
       character.position.x, character.position.y, character.position.z,
       character.velocity.x, character.velocity.y, character.velocity.z,
       speed, character.grounded ? "true" : "false", state.character_fixed_steps);
+      const float touch_x = g_touch_move_x.load(std::memory_order_acquire);
+      const float touch_y = g_touch_move_y.load(std::memory_order_acquire);
+      const char* touch_direction = std::abs(touch_y) > std::abs(touch_x)
+       ? (touch_y < -0.2F ? "backward" : touch_y > 0.2F ? "forward" : "neutral")
+       : (touch_x < -0.2F ? "left" : touch_x > 0.2F ? "right" : "neutral");
+      log_info("VIRTUAL_JOYSTICK axes=%.3f,%.3f direction=%s",
+       touch_x, touch_y, touch_direction);
      const auto support = terrain_ground_query(character.position.x, character.position.z, nullptr);
      log_info("CHARACTER_GROUND valid=%s feet_y=%.4f ground_y=%.4f clearance=%.4f normal=%.3f,%.3f,%.3f walkable=%s",
       support.valid ? "true" : "false", character.position.y,
