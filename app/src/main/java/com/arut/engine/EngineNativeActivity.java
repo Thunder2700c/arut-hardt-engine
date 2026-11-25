@@ -33,7 +33,7 @@ public final class EngineNativeActivity extends NativeActivity {
     private Button actionButton(String label, int action) {
         final Button button = new Button(this);
         button.setText(label);
-        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.0F);
+        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.0F);
         button.setAllCaps(false);
         button.setTextColor(Color.WHITE);
         button.setMinWidth(dp(70));
@@ -69,7 +69,7 @@ public final class EngineNativeActivity extends NativeActivity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         for (Button button : buttons) {
             final LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(dp(76), dp(46));
+                new LinearLayout.LayoutParams(dp(88), dp(48));
             params.setMargins(dp(2), dp(2), dp(2), dp(2));
             row.addView(button, params);
         }
