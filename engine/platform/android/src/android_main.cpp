@@ -480,7 +480,8 @@ bool configure_default_humanoid_clip_animator(RuntimeState& state) {
  const auto jump = find_clip({"jump_in_the_air", "jump"});
  const auto land = find_clip({"jump_landing", "landing"});
  const auto punch = find_clip({"punch_jab", "punch_cross", "punch_hook", "punch"});
- const auto heavy = find_clip({"sword_slash", "punch_hook", "punch_cross", "punch"});
+ const auto heavy = find_clip({"punch_hook", "punch_cross", "punch"});
+ const auto kick = find_clip({"strike_zombie_scratch"});
  const auto block = find_clip({"block_with_the_sword", "block"});
  const auto dodge = find_clip({"dodge", "roll"});
  const auto hit = find_clip({"hit_knockback", "hit_to_the_chest", "hit_to_the_head", "hit"});
@@ -496,7 +497,7 @@ bool configure_default_humanoid_clip_animator(RuntimeState& state) {
  set.set(S::Land, land ? land : (jump ? jump : idle));
  set.set(S::AttackLight, punch ? punch : idle);
  set.set(S::AttackHeavy, heavy ? heavy : (punch ? punch : idle));
- set.set(S::AttackKick, heavy ? heavy : (punch ? punch : idle));
+ set.set(S::AttackKick, kick ? kick : (heavy ? heavy : (punch ? punch : idle)));
  set.set(S::Block, block ? block : idle);
  set.set(S::Dodge, dodge ? dodge : (walk ? walk : idle));
  set.set(S::HitReact, hit ? hit : idle);
@@ -1229,6 +1230,10 @@ void run(android_app* app) {
      if (state.humanoid_clip_animator.update(
           frame_delta, clip_input, clip_pose, clip_events) &&
          clip_pose.joint_count == arut::core::kHumanoidBoneCount) {
+      const auto root_joint = static_cast<std::size_t>(arut::core::HumanoidBone::Root);
+      if (root_joint < clip_pose.joint_count)
+       clip_pose.joints[root_joint].translation =
+        state.humanoid_skeleton.bones[root_joint].rest_translation;
       for (std::size_t joint = 0; joint < clip_pose.joint_count; ++joint) {
        pose.local_translations[joint] = clip_pose.joints[joint].translation;
        pose.local_rotations[joint] = {
