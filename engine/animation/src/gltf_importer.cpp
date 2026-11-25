@@ -212,7 +212,7 @@ bool import_mesh_primitive(const cgltf_primitive& primitive,
 } // namespace
 
 bool SkeletalAsset::valid() const noexcept {
-    if(joint_count==0U||joint_count>kMaxImportedJoints||meshes.empty()||animations.empty())
+    if(joint_count==0U||joint_count>kMaxImportedJoints||meshes.empty())
         return false;
     for(std::size_t i=0;i<joint_count;++i) {
         if(joints[i].name.empty()||joints[i].parent < -1||
@@ -276,8 +276,8 @@ bool import_glb(const void* bytes, std::size_t byte_count,
        cgltf_validate(data.get())!=cgltf_result_success) {
         report.message="GLB buffers or structural validation failed"; return false;
     }
-    if(data->skins_count==0U||data->animations_count==0U) {
-        report.message="GLB must contain at least one skin and one animation"; return false;
+    if(data->skins_count==0U) {
+        report.message="GLB must contain at least one skin"; return false;
     }
     const cgltf_skin& skin=data->skins[0];
     if(skin.joints_count==0U||skin.joints_count>kMaxImportedJoints) {
@@ -430,8 +430,11 @@ bool import_glb(const void* bytes, std::size_t byte_count,
         if(clip.keys.size()>=2U&&clip.valid(output.joint_count))
             output.animations.push_back(std::move(clip));
     }
-    if(output.animations.empty()) {
-        report.message="No supported skeletal animation channels were found"; output={}; return false;
+    // A skinned GLB may intentionally contain only a bind pose. Animation
+    // libraries can be imported separately and retargeted onto this rig.
+    if(output.animations.empty() && data->animations_count>0U) {
+        report.message="GLB contains animations, but none target the selected skin";
+        output={}; return false;
     }
     if(!output.valid()) {
         report.message="Imported skeletal asset failed runtime validation"; output={}; return false;
@@ -443,7 +446,7 @@ bool import_glb(const void* bytes, std::size_t byte_count,
         report.imported_vertices+=mesh.vertices.size();
         report.imported_indices+=mesh.indices.size();
     }
-    report.message="GLB skeletal asset imported successfully";
+    report.message=output.animations.empty()?"GLB skeletal mesh imported (no embedded animations)":"GLB skeletal asset and animations imported successfully";
     return true;
 }
 
