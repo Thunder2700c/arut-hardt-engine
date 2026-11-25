@@ -48,6 +48,7 @@
 #include <exception>
 #include <span>
 #include <vector>
+#include <initializer_list>
 #include <jni.h>
 #include <stdarg.h>
 extern "C" std::uint32_t arut_tasks_abi_version() noexcept;
@@ -413,13 +414,14 @@ bool configure_default_humanoid_clip_animator(RuntimeState& state) {
  arut::animation::CharacterAnimationSet set{};
  const auto find_clip = [&](std::initializer_list<const char*> tokens)
      -> const arut::animation::AnimationClip* {
-  for (const auto& clip : state.humanoid_animation_library) {
-   std::string name = clip.name;
-   std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) {
-    return static_cast<char>(std::tolower(c));
-   });
-   for (const char* token : tokens)
+  for (const char* token : tokens) {
+   for (const auto& clip : state.humanoid_animation_library) {
+    std::string name = clip.name;
+    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) {
+     return static_cast<char>(std::tolower(c));
+    });
     if (name.find(token) != std::string::npos) return &clip;
+   }
   }
   return nullptr;
  };
