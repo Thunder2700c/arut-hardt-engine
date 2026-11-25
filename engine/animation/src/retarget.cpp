@@ -38,12 +38,12 @@ std::string canonical(std::string name) {
     if(result=="hips" || result=="pelvis" || result=="bip001pelvis") return "pelvis";
     if(result=="leftarm" || result=="upperarml" || result=="lupperarm") return "leftupperarm";
     if(result=="rightarm" || result=="upperarmr" || result=="rupperarm") return "rightupperarm";
-    if(result=="leftforearm" || result=="lowerarml" || result=="lforearm") return "leftlowerarm";
-    if(result=="rightforearm" || result=="lowerarmr" || result=="rforearm") return "rightlowerarm";
+    if(result=="leftforearm" || result=="forearml" || result=="lowerarml" || result=="lforearm") return "leftlowerarm";
+    if(result=="rightforearm" || result=="forearmr" || result=="lowerarmr" || result=="rforearm") return "rightlowerarm";
     if(result=="leftupleg" || result=="thighl" || result=="lthigh") return "leftupperleg";
     if(result=="rightupleg" || result=="thighr" || result=="rthigh") return "rightupperleg";
-    if(result=="leftleg" || result=="calfl" || result=="lcalf") return "leftlowerleg";
-    if(result=="rightleg" || result=="calfr" || result=="rcalf") return "rightlowerleg";
+    if(result=="leftleg" || result=="shinl" || result=="calfl" || result=="lcalf") return "leftlowerleg";
+    if(result=="rightleg" || result=="shinr" || result=="calfr" || result=="rcalf") return "rightlowerleg";
     if(result=="leftshoulder" || result=="claviclel" || result=="lclavicle") return "leftclavicle";
     if(result=="rightshoulder" || result=="clavicler" || result=="rclavicle") return "rightclavicle";
     if(result=="handl" || result=="lefthand") return "lefthand";
