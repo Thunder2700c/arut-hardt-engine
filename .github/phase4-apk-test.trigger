@@ -1,1 +1,2 @@
-Phase 4C implementation: procedural humanoid fallback animation library for all locomotion/combat states, buffered combo chaining, and automated host/Android compile validation.
+Android combat panel visibility fix
+Source commit: 47eb7b127f1879be3b3da2c87241df43d1f0f8f1
