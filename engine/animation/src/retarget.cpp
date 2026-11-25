@@ -33,15 +33,26 @@ std::string canonical(std::string name) {
     result.reserve(name.size());
     for(unsigned char c:name)
         if(std::isalnum(c)) result.push_back(static_cast<char>(std::tolower(c)));
-    if(result=="hips") return "pelvis";
-    if(result=="leftarm") return "leftupperarm";
-    if(result=="rightarm") return "rightupperarm";
-    if(result=="leftforearm") return "leftlowerarm";
-    if(result=="rightforearm") return "rightlowerarm";
-    if(result=="leftupleg") return "leftupperleg";
-    if(result=="rightupleg") return "rightupperleg";
-    if(result=="leftleg") return "leftlowerleg";
-    if(result=="rightleg") return "rightlowerleg";
+    // Normalize common Mixamo, Unreal Manny/Quinn, and Blender Rigify names.
+    if(result=="hips" || result=="pelvis" || result=="bip001pelvis") return "pelvis";
+    if(result=="leftarm" || result=="upperarml" || result=="lupperarm") return "leftupperarm";
+    if(result=="rightarm" || result=="upperarmr" || result=="rupperarm") return "rightupperarm";
+    if(result=="leftforearm" || result=="lowerarml" || result=="lforearm") return "leftlowerarm";
+    if(result=="rightforearm" || result=="lowerarmr" || result=="rforearm") return "rightlowerarm";
+    if(result=="leftupleg" || result=="thighl" || result=="lthigh") return "leftupperleg";
+    if(result=="rightupleg" || result=="thighr" || result=="rthigh") return "rightupperleg";
+    if(result=="leftleg" || result=="calfl" || result=="lcalf") return "leftlowerleg";
+    if(result=="rightleg" || result=="calfr" || result=="rcalf") return "rightlowerleg";
+    if(result=="leftshoulder" || result=="claviclel" || result=="lclavicle") return "leftclavicle";
+    if(result=="rightshoulder" || result=="clavicler" || result=="rclavicle") return "rightclavicle";
+    if(result=="handl" || result=="lefthand") return "lefthand";
+    if(result=="handr" || result=="righthand") return "righthand";
+    if(result=="footl" || result=="lfoot") return "leftfoot";
+    if(result=="footr" || result=="rfoot") return "rightfoot";
+    if(result=="spine01" || result=="spine1") return "spine";
+    if(result=="spine02" || result=="spine2" || result=="spine03" || result=="spine3") return "chest";
+    if(result=="neck01") return "neck";
+    if(result=="root" || result=="armature") return "root";
     return result;
 }
 bool valid_pose_for(const Pose& pose,std::size_t count) noexcept {
