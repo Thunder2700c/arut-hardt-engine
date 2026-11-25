@@ -307,7 +307,7 @@ private:
                 set_rotation(target_pose_, B::Pelvis, {0.0F, 1.0F, 0.0F},
                              -0.10F * chamber + 0.12F * extension);
                 set_rotation(target_pose_, B::Chest, {0.0F, 1.0F, 0.0F},
-                             -0.12F * chamber + 0.24F * extension);
+                             -0.12F * chamber + 0.34F * extension);
                 set_rotation(target_pose_, B::Chest, {1.0F, 0.0F, 0.0F},
                              -0.08F * extension);
                 set_rotation(target_pose_, B::RightClavicle, {0.0F, 1.0F, 0.0F},
