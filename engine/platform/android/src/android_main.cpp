@@ -17,6 +17,7 @@
 #include "arut/animation/pose_history.hpp"
 #include "arut/animation/character_animation.hpp"
 #include "arut/animation/gltf_importer.hpp"
+#include "arut/animation/retarget.hpp"
 #include "arut/animation/root_motion.hpp"
 #include <android/input.h>
 #include <android/log.h>
@@ -320,6 +321,62 @@ void log_warn(const char* format, ...) {
  write_log(ANDROID_LOG_WARN, "WARN", format, args);
  va_end(args);
 }
+
+bool load_optional_retargeted_animation_pack(
+ AAssetManager* manager, arut::animation::SkeletalAsset& target_asset) {
+ if (!manager || !target_asset.valid()) return false;
+ AAsset* source_asset = AAssetManager_open(
+  manager, "Characters/animation_pack.glb", AASSET_MODE_BUFFER);
+ if (!source_asset) return false;
+ const off_t asset_length = AAsset_getLength(source_asset);
+ if (asset_length <= 0) {
+  AAsset_close(source_asset);
+  return false;
+ }
+ std::vector<std::uint8_t> bytes(static_cast<std::size_t>(asset_length));
+ const int bytes_read = AAsset_read(
+  source_asset, bytes.data(), bytes.size());
+ AAsset_close(source_asset);
+ if (bytes_read != asset_length) {
+  log_warn("ANIMATION_PACK read failed expected=%lld actual=%d",
+   static_cast<long long>(asset_length), bytes_read);
+  return false;
+ }
+
+ arut::animation::SkeletalAsset source_asset_data{};
+ arut::animation::GltfImportReport import_report{};
+ if (!arut::animation::import_glb(
+      bytes.data(), bytes.size(), source_asset_data, import_report) ||
+     source_asset_data.animations.empty()) {
+  log_warn("ANIMATION_PACK import failed: %s",
+   import_report.message.c_str());
+  return false;
+ }
+ const auto source_rig = arut::animation::make_retarget_rig(source_asset_data);
+ const auto target_rig = arut::animation::make_retarget_rig(target_asset);
+ arut::animation::RetargetMap retarget_map{};
+ if (!arut::animation::build_retarget_map(
+      source_rig, target_rig, retarget_map)) {
+  log_warn("ANIMATION_PACK no compatible humanoid joints source=%zu target=%zu",
+   source_rig.joint_count, target_rig.joint_count);
+  return false;
+ }
+ std::vector<arut::animation::AnimationClip> retargeted_clips;
+ if (!arut::animation::retarget_animation_library(
+      source_asset_data.animations, source_rig, target_rig,
+      retarget_map, retargeted_clips)) {
+  log_warn("ANIMATION_PACK transactional retarget failed clips=%zu",
+   source_asset_data.animations.size());
+  return false;
+ }
+ for (auto& clip : retargeted_clips)
+  target_asset.animations.push_back(std::move(clip));
+ log_info("ANIMATION_PACK installed=%zu mapped_joints=%zu unmatched_source=%zu unmatched_target=%zu",
+  retargeted_clips.size(), retarget_map.pair_count,
+  retarget_map.unmatched_source, retarget_map.unmatched_target);
+ return true;
+}
+
 bool configure_imported_character_animator(RuntimeState& state) {
  using S = arut::animation::CharacterAnimationState;
  arut::animation::CharacterAnimationSet clips{};
@@ -453,6 +510,10 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
    const auto identity = arut::rendering::Mat4::identity();
    if (state.renderer.load_imported_character_glb(
         "Characters/hero.glb", state.imported_character_asset, identity)) {
+    if (!load_optional_retargeted_animation_pack(
+         app->activity->assetManager, state.imported_character_asset)) {
+     log_info("ANIMATION_PACK optional Characters/animation_pack.glb absent or rejected; using hero GLB clips and fallback");
+    }
     state.imported_character_rest_pose = {};
     state.imported_character_rest_pose.joint_count =
      state.imported_character_asset.joint_count;
