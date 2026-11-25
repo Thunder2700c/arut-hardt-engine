@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <limits>
 
 using namespace arut::animation;
 
@@ -51,10 +52,29 @@ int main() {
     assert(graph.current_state() == 2U);
     assert(pose.joints[0].translation.x > 10.0F);
 
+    // Interrupt an in-flight crossfade and retarget before the first one ends.
+    // The presented pose must remain continuous instead of snapping to a clip.
+    assert(graph.transition_to(1U, 0.4F));
+    assert(graph.update(0.2F, pose));
+    assert(graph.transitioning());
+    const float pose_before_interrupt = pose.joints[0].translation.x;
+    assert(graph.transition_to(2U, 0.4F));
+    assert(graph.transitioning());
+    assert(graph.update(0.001F, pose));
+    const float interrupt_delta =
+        std::abs(pose.joints[0].translation.x - pose_before_interrupt);
+    assert(interrupt_delta < 0.1F);
+    for (int frame = 0; frame < 8; ++frame)
+        assert(graph.update(0.05F, pose));
+    assert(!graph.transitioning());
+    assert(graph.current_state() == 2U);
+    assert(std::isfinite(pose.joints[0].translation.x));
+
+    assert(!graph.transition_to(1U, std::numeric_limits<float>::quiet_NaN()));
     assert(graph.transition_to(1U, 0.0F));
     assert(graph.current_state() == 1U);
     assert(!graph.transitioning());
     graph.reset();
     assert(!graph.update(0.1F, pose));
-    std::cout << "ANIMATION_GRAPH_TEST pass states=2 crossfade=0.4s event_routing=1\n";
+    std::cout << "ANIMATION_GRAPH_TEST pass states=2 crossfade=0.4s interrupted_retarget=1 event_routing=1\\n";
 }
