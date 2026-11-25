@@ -110,6 +110,7 @@ int main() {
     assert(heavy_animator.snapshot().state == HumanoidAnimationState::AttackHeavy);
     heavy_input.attack_heavy_pressed = false;
     for (int i = 0; i < 20; ++i) (void)heavy_animator.update(heavy_input, dt);
+    assert(heavy_animator.snapshot().action_phase > 0.40F);
     const auto heavy_arm = heavy_animator.pose().local_rotations[static_cast<std::size_t>(B::RightUpperArm)];
     const auto heavy_elbow = heavy_animator.pose().local_rotations[static_cast<std::size_t>(B::RightLowerArm)];
     assert(std::abs(heavy_arm.x) > 0.10F);
