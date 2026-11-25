@@ -1,2 +1,2 @@
-Android combat panel visibility fix
-Source commit: 47eb7b127f1879be3b3da2c87241df43d1f0f8f1
+Android ARM64 APK validation for transactional animation-library retargeting
+Source commit: 566d60225121775bdafecc6e9795497f6e56b6f7
