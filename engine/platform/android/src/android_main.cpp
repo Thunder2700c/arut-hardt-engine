@@ -338,23 +338,73 @@ bool load_cc0_humanoid_animation_library(
  AAssetManager* manager, const arut::core::HumanoidSkeleton& target_skeleton,
  std::vector<arut::animation::AnimationClip>& output) {
  if (!manager || !target_skeleton.valid()) return false;
+
+ // The animation pack contains animation-only GLBs (no skins or meshes).
+ // Use the bundled mannequin GLB as the source rig and bind channels by its
+ // exact node names before retargeting onto the engine's gameplay skeleton.
+ AAsset* rig_file = AAssetManager_open(
+  manager, "Characters/hero.glb", AASSET_MODE_BUFFER);
+ if (!rig_file) {
+  log_warn("ANIMATION_PACK reference Characters/hero.glb unavailable");
+  return false;
+ }
+ const off_t rig_length = AAsset_getLength(rig_file);
+ if (rig_length <= 0 || rig_length > 32LL * 1024LL * 1024LL) {
+  AAsset_close(rig_file);
+  log_warn("ANIMATION_PACK reference rig size invalid");
+  return false;
+ }
+ std::vector<std::uint8_t> rig_bytes;
+ try { rig_bytes.resize(static_cast<std::size_t>(rig_length)); }
+ catch (...) { AAsset_close(rig_file); return false; }
+ std::size_t rig_read = 0U;
+ while (rig_read < rig_bytes.size()) {
+  const int amount = AAsset_read(
+   rig_file, rig_bytes.data() + rig_read, rig_bytes.size() - rig_read);
+  if (amount <= 0) break;
+  rig_read += static_cast<std::size_t>(amount);
+ }
+ AAsset_close(rig_file);
+ if (rig_read != rig_bytes.size()) {
+  log_warn("ANIMATION_PACK reference rig read incomplete");
+  return false;
+ }
+ arut::animation::SkeletalAsset source_asset{};
+ arut::animation::GltfImportReport rig_report{};
+ if (!arut::animation::import_glb(
+      rig_bytes.data(), rig_bytes.size(), source_asset, rig_report)) {
+  log_warn("ANIMATION_PACK reference rig import failed: %s",
+   rig_report.message.c_str());
+  return false;
+ }
+ const auto source_rig = arut::animation::make_retarget_rig(source_asset);
+ const auto target_rig = arut::animation::make_retarget_rig(target_skeleton);
+ arut::animation::RetargetMap retarget_map{};
+ if (!arut::animation::build_retarget_map(source_rig, target_rig, retarget_map)) {
+  log_warn("ANIMATION_PACK reference rig incompatible source=%zu target=%zu",
+   source_rig.joint_count, target_rig.joint_count);
+  return false;
+ }
+ log_info("ANIMATION_PACK reference_rig_joints=%zu mapped=%zu unmatched_source=%zu unmatched_target=%zu",
+  source_rig.joint_count, retarget_map.pair_count,
+  retarget_map.unmatched_source, retarget_map.unmatched_target);
+
  AAssetDir* directory = AAssetManager_openDir(
   manager, "Characters/AnimationPack/GLB");
  if (!directory) {
   log_warn("ANIMATION_PACK directory unavailable");
   return false;
  }
- const auto target_rig = arut::animation::make_retarget_rig(target_skeleton);
  std::vector<arut::animation::AnimationClip> candidate;
  std::size_t files_seen = 0U, clips_loaded = 0U, clips_rejected = 0U;
  while (const char* entry = AAssetDir_getNextFileName(directory)) {
   const std::string filename(entry);
   if (filename.size() < 4U ||
-      filename.compare(filename.size() - 4U, 4U, ".glb") != 0 &&
-      filename.compare(filename.size() - 4U, 4U, ".GLB") != 0) continue;
+      (filename.compare(filename.size() - 4U, 4U, ".glb") != 0 &&
+       filename.compare(filename.size() - 4U, 4U, ".GLB") != 0)) continue;
   ++files_seen;
-  const std::string path = "Characters/AnimationPack/GLB/" + filename;
-  AAsset* file = AAssetManager_open(manager, path.c_str(), AASSET_MODE_BUFFER);
+  const std::string asset_path = "Characters/AnimationPack/GLB/" + filename;
+  AAsset* file = AAssetManager_open(manager, asset_path.c_str(), AASSET_MODE_BUFFER);
   if (!file) { ++clips_rejected; continue; }
   const off_t length = AAsset_getLength(file);
   if (length <= 0 || length > 16LL * 1024LL * 1024LL) {
@@ -372,33 +422,23 @@ bool load_cc0_humanoid_animation_library(
   AAsset_close(file);
   if (read != bytes.size()) { ++clips_rejected; continue; }
 
-  arut::animation::SkeletalAsset source_asset{};
+  std::vector<arut::animation::AnimationClip> source_clips;
   arut::animation::GltfImportReport report{};
-  if (!arut::animation::import_glb(
-       bytes.data(), bytes.size(), source_asset, report) ||
-      source_asset.animations.empty()) {
+  if (!arut::animation::import_glb_animation_clips(
+       bytes.data(), bytes.size(), source_asset, source_clips, report)) {
    ++clips_rejected;
    log_warn("ANIMATION_PACK rejected=%s reason=%s",
     filename.c_str(), report.message.c_str());
    continue;
   }
-  const auto source_rig = arut::animation::make_retarget_rig(source_asset);
-  arut::animation::RetargetMap map{};
-  if (!arut::animation::build_retarget_map(source_rig, target_rig, map)) {
-   ++clips_rejected;
-   log_warn("ANIMATION_PACK incompatible_rig=%s source_joints=%zu target_joints=%zu",
-    filename.c_str(), source_rig.joint_count, target_rig.joint_count);
-   continue;
-  }
-  std::string clip_name = filename.substr(0U, filename.size() - 4U);
-  for (const auto& source_clip : source_asset.animations) {
+  for (const auto& source_clip : source_clips) {
    arut::animation::AnimationClip converted{};
    if (!arut::animation::retarget_clip(
-        source_clip, source_rig, target_rig, map, converted)) {
+        source_clip, source_rig, target_rig, retarget_map, converted)) {
     ++clips_rejected;
     continue;
    }
-   converted.name = clip_name;
+   converted.name = filename.substr(0U, filename.size() - 4U);
    candidate.push_back(std::move(converted));
    ++clips_loaded;
   }
@@ -410,8 +450,9 @@ bool load_cc0_humanoid_animation_library(
   return false;
  }
  output = std::move(candidate);
- log_info("ANIMATION_PACK loaded=%zu files=%zu rejected=%zu target_joints=%zu",
-  clips_loaded, files_seen, clips_rejected, target_rig.joint_count);
+ log_info("ANIMATION_PACK loaded=%zu files=%zu rejected=%zu mapped_joints=%zu target_joints=%zu",
+  clips_loaded, files_seen, clips_rejected, retarget_map.pair_count,
+  target_rig.joint_count);
  return true;
 }
 
