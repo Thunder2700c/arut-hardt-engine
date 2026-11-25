@@ -40,6 +40,7 @@
 #include <mutex>
 #include <atomic>
 #include <memory>
+#include <limits>
 #include <utility>
 #include <cerrno>
 #include <sys/stat.h>
