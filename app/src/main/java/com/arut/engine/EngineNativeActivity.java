@@ -87,21 +87,21 @@ public final class EngineNativeActivity extends NativeActivity {
         panel.setBackground(background);
 
         final TextView title = new TextView(this);
-        title.setText("COMBAT TEST");
+        title.setText("TEMPORARY A / B / C ATTACK TEST");
         title.setTextColor(Color.WHITE);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.0F);
         title.setGravity(Gravity.CENTER);
         panel.addView(title, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, dp(18)));
 
-        addRow(panel, actionButton("Jab", 0), actionButton("Heavy", 1),
-               actionButton("Kick", 2));
+        addRow(panel, actionButton("A · JAB", 0), actionButton("B · HEAVY", 1),
+               actionButton("C · KICK", 2));
         addRow(panel, guardButton(), actionButton("Dodge", 4),
                actionButton("Jump", 7));
         addRow(panel, actionButton("Hit*", 5), actionButton("Recover*", 6));
 
         final TextView note = new TextView(this);
-        note.setText("* diagnostic reactions");
+        note.setText("A = Jab  ·  B = Heavy Punch  ·  C = Kick  |  * diagnostic");
         note.setTextColor(Color.LTGRAY);
         note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.0F);
         note.setGravity(Gravity.CENTER);
