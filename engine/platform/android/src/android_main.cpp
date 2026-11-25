@@ -462,6 +462,10 @@ bool load_cc0_humanoid_animation_library_for_imported_rig(
  AAssetManager* manager, arut::animation::SkeletalAsset& rig) {
  if (!manager || rig.joint_count == 0U ||
      rig.joint_count > arut::animation::kMaxImportedJoints) return false;
+ // The hero GLB contains a placeholder clip. Prefer the complete authored
+ // CC0 pack instead of letting that first clip win the Idle state binding.
+ auto original_animations = std::move(rig.animations);
+ rig.animations.clear();
  AAssetDir* directory = AAssetManager_openDir(
   manager, "Characters/AnimationPack/GLB");
  if (!directory) {
@@ -509,6 +513,7 @@ bool load_cc0_humanoid_animation_library_for_imported_rig(
   }
  }
  AAssetDir_close(directory);
+ if (clips_loaded == 0U) rig.animations = std::move(original_animations);
  log_info("DEFAULT_HUMAN_ANIMATION_PACK loaded=%zu files=%zu rejected=%zu rig_joints=%zu",
   clips_loaded, files_seen, clips_rejected, rig.joint_count);
  return clips_loaded > 0U;
@@ -661,10 +666,12 @@ bool configure_imported_character_animator(RuntimeState& state) {
    ++generated_count;
   }
  }
+ const std::size_t mapped_states = static_cast<std::size_t>(std::count_if(
+  clips.clips.begin(), clips.clips.end(), [](const auto* clip) { return clip != nullptr; }));
  const bool configured = state.imported_character_animator.configure(clips) &&
                          state.imported_character_animator.start();
- log_info("DEFAULT_HUMAN animation_graph=%s authored_states=%zu generated_fallback_states=%zu rig_joints=%zu",
-  configured ? "ready" : "failed", clips.clips.size(), generated_count,
+ log_info("DEFAULT_HUMAN animation_graph=%s mapped_states=%zu generated_fallback_states=%zu rig_joints=%zu",
+  configured ? "ready" : "failed", mapped_states, generated_count,
   state.imported_character_asset.joint_count);
  for (std::size_t index = 0; index < clips.clips.size(); ++index) {
   if (clips.clips[index])
