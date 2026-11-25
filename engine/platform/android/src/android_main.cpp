@@ -329,7 +329,7 @@ bool load_optional_retargeted_animation_pack(
   manager, "Characters/animation_pack.glb", AASSET_MODE_BUFFER);
  if (!source_asset) return false;
  const off_t asset_length = AAsset_getLength(source_asset);
- if (asset_length <= 0) {
+ if (asset_length <= 0 || asset_length > 64LL * 1024LL * 1024LL) {
   AAsset_close(source_asset);
   return false;
  }
@@ -337,7 +337,7 @@ bool load_optional_retargeted_animation_pack(
  const int bytes_read = AAsset_read(
   source_asset, bytes.data(), bytes.size());
  AAsset_close(source_asset);
- if (bytes_read != asset_length) {
+ if (bytes_read < 0 || static_cast<std::size_t>(bytes_read) != bytes.size()) {
   log_warn("ANIMATION_PACK read failed expected=%lld actual=%d",
    static_cast<long long>(asset_length), bytes_read);
   return false;
