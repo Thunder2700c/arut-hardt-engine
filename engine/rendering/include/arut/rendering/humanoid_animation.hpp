@@ -210,8 +210,20 @@ private:
 
     void set_rotation(HumanoidPose& pose, core::HumanoidBone bone,
                       const std::array<float, 3>& axis, float angle) const noexcept {
-        pose.local_rotations[static_cast<std::size_t>(bone)] =
-            quaternion_from_axis_angle(axis, angle);
+        const auto delta = quaternion_from_axis_angle(axis, angle);
+        auto& current = pose.local_rotations[static_cast<std::size_t>(bone)];
+        // Compose successive local-axis rotations instead of silently
+        // replacing earlier axes (combat poses use yaw + pitch together).
+        current = {
+            current.w * delta.x + current.x * delta.w +
+                current.y * delta.z - current.z * delta.y,
+            current.w * delta.y - current.x * delta.z +
+                current.y * delta.w + current.z * delta.x,
+            current.w * delta.z + current.x * delta.y -
+                current.y * delta.x + current.z * delta.w,
+            current.w * delta.w - current.x * delta.x -
+                current.y * delta.y - current.z * delta.z
+        };
     }
 
     void build_target_pose(float move_x, float move_y, float speed,
