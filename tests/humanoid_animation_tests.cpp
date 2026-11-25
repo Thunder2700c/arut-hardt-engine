@@ -104,7 +104,7 @@ int main() {
     animator.update(input, dt);
     assert(animator.snapshot().state == HumanoidAnimationState::AttackHeavy);
     input.attack_heavy_pressed = false;
-    for (int i = 0; i < 14; ++i) (void)animator.update(input, dt);
+    for (int i = 0; i < 16; ++i) (void)animator.update(input, dt);
     assert(animator.snapshot().state == HumanoidAnimationState::AttackHeavy);
     const auto heavy_arm = animator.pose().local_rotations[static_cast<std::size_t>(B::RightUpperArm)];
     const auto heavy_elbow = animator.pose().local_rotations[static_cast<std::size_t>(B::RightLowerArm)];
