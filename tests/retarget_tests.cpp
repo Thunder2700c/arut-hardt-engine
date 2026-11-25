@@ -69,6 +69,24 @@ int main() {
     assert(retarget_pose(large_pose,large_source,large_target,large_map,large_result));
     assert(large_result.joint_count==large_count);
     assert(std::abs(large_result.joints[95].translation.x-0.2F)<1.0e-5F);
+    // Retarget a complete imported clip once for playback on the engine rig.
+    AnimationClip source_clip{};
+    source_clip.name="Walk";
+    source_clip.duration_seconds=1.0F;
+    source_clip.looping=true;
+    PoseKey source_key_a{};
+    source_key_a.time_seconds=0.0F;
+    source_key_a.pose=source_pose;
+    PoseKey source_key_b{};
+    source_key_b.time_seconds=1.0F;
+    source_key_b.pose=source_pose;
+    source_key_b.pose.joints[2].rotation={0.0F,0.0F,0.70710678F,0.70710678F};
+    source_clip.keys={source_key_a,source_key_b};
+    AnimationClip target_clip{};
+    assert(retarget_clip(source_clip,source,target,map,target_clip));
+    assert(target_clip.valid(target.joint_count));
+    assert(target_clip.keys.size()==2U);
+    assert(std::abs(target_clip.keys[1].pose.joints[2].rotation.z-0.70710678F)<1.0e-4F);
     // Unreal Manny/Quinn names map to the engine's canonical humanoid names.
     RetargetRig unreal{};
     unreal.joint_count=6U;
