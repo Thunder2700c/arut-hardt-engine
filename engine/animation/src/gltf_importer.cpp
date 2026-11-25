@@ -491,7 +491,9 @@ bool import_glb_animation_clips(
             }
         }
     }
-    if (joint_map.size() < 12U) {
+    const std::size_t minimum_joint_matches =
+        source_rig.joint_count < 12U ? source_rig.joint_count : 12U;
+    if (joint_map.size() < minimum_joint_matches) {
         report.message = "Animation GLB node names do not match enough joints in the reference rig";
         return false;
     }
