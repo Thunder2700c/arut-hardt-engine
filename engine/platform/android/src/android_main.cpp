@@ -588,11 +588,11 @@ bool configure_imported_character_animator(RuntimeState& state) {
   std::transform(name.begin(), name.end(), name.begin(), [](unsigned char ch) {
    return static_cast<char>(std::tolower(ch));
   });
-  const auto bind = [&](S state_id) {
-   if (!clips.get(state_id)) clips.set(state_id, &clip);
+  const auto bind = [&](S state_id, bool preferred = false) {
+   if (!clips.get(state_id) || preferred) clips.set(state_id, &clip);
   };
   if (name.find("idle") != std::string::npos || name.find("stand") != std::string::npos)
-   bind(S::Idle);
+   bind(S::Idle, name.find("idlerelaxed") != std::string::npos);
   else if (name.find("strafeleft") != std::string::npos || name.find("leftstrafe") != std::string::npos)
    bind(S::StrafeLeft);
   else if (name.find("straferight") != std::string::npos || name.find("rightstrafe") != std::string::npos)
@@ -607,9 +607,9 @@ bool configure_imported_character_animator(RuntimeState& state) {
   else if (name.find("fall") != std::string::npos || name.find("airborne") != std::string::npos)
    bind(S::Fall);
   else if (name.find("run") != std::string::npos || name.find("sprint") != std::string::npos)
-   bind(S::Run);
+   bind(S::Run, name.find("runsprint") != std::string::npos);
   else if (name.find("walk") != std::string::npos)
-   bind(S::Walk);
+   bind(S::Walk, name.find("walkforwards") != std::string::npos);
   else if (name.find("attackheavy") != std::string::npos ||
            name.find("heavyattack") != std::string::npos ||
            name.find("punchhook") != std::string::npos ||
