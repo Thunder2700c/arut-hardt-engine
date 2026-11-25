@@ -34,7 +34,7 @@ std::string canonical(std::string name) {
     result.reserve(name.size());
     for(unsigned char c:name)
         if(std::isalnum(c)) result.push_back(static_cast<char>(std::tolower(c)));
-    // Normalize common Mixamo, Unreal Manny/Quinn, and Blender Rigify names.
+    // Normalize common Mixamo, Unreal Manny/Quinn, and Blender Rigify names.\n    // Rigify exports deform bones with a leading "DEF-" namespace.\n    if(result.rfind("def",0U)==0U) result.erase(0U,3U);
     if(result=="hips" || result=="pelvis" || result=="bip001pelvis") return "pelvis";
     if(result=="leftarm" || result=="upperarml" || result=="lupperarm") return "leftupperarm";
     if(result=="rightarm" || result=="upperarmr" || result=="rupperarm") return "rightupperarm";
@@ -50,8 +50,8 @@ std::string canonical(std::string name) {
     if(result=="handr" || result=="righthand") return "righthand";
     if(result=="footl" || result=="lfoot") return "leftfoot";
     if(result=="footr" || result=="rfoot") return "rightfoot";
-    if(result=="spine01" || result=="spine1") return "spine";
-    if(result=="spine02" || result=="spine2" || result=="spine03" || result=="spine3") return "chest";
+    if(result=="spine01" || result=="spine1" || result=="spine001") return "spine";
+    if(result=="spine02" || result=="spine2" || result=="spine002" || result=="spine03" || result=="spine3" || result=="spine003") return "chest";
     if(result=="neck01") return "neck";
     if(result=="root" || result=="armature") return "root";
     return result;
