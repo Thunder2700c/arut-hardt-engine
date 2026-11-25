@@ -1,2 +1,1 @@
-Android ARM64 APK validation for GLB animation-pack runtime integration
-Source commit: 5c94a81538e5106d9cd0b2178227ca249e8ad3bf
+Inspect and package pinned CC0 humanoid animation archive; current source 240438cf8ea869acace3756680c153708f2d940e
