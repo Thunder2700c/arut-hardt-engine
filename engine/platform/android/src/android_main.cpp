@@ -20,6 +20,7 @@
 #include "arut/animation/retarget.hpp"
 #include "arut/animation/root_motion.hpp"
 #include <android/input.h>
+#include <android/asset_manager.h>
 #include <android/log.h>
 #include <android/native_window.h>
 #include <android_native_app_glue.h>
@@ -94,6 +95,9 @@ struct RuntimeState final {
  bool combat_recover_pressed{false};
  arut::core::HumanoidSkeleton humanoid_skeleton{arut::core::make_robot_mannequin_skeleton()};
  arut::rendering::HumanoidAnimator humanoid_animator{};
+ std::vector<arut::animation::AnimationClip> humanoid_animation_library{};
+ arut::animation::CharacterAnimationController humanoid_clip_animator{};
+ bool humanoid_clip_animator_ready{false};
  arut::animation::PoseHistory animation_pose_history{};
  arut::animation::SkeletalAsset imported_character_asset{};
  arut::animation::CharacterAnimationController imported_character_animator{};
@@ -323,59 +327,141 @@ void log_warn(const char* format, ...) {
  va_end(args);
 }
 
-bool load_optional_retargeted_animation_pack(
- AAssetManager* manager, arut::animation::SkeletalAsset& target_asset) {
- if (!manager || !target_asset.valid()) return false;
- AAsset* source_asset = AAssetManager_open(
-  manager, "Characters/animation_pack.glb", AASSET_MODE_BUFFER);
- if (!source_asset) return false;
- const off_t asset_length = AAsset_getLength(source_asset);
- if (asset_length <= 0 || asset_length > 64LL * 1024LL * 1024LL) {
-  AAsset_close(source_asset);
+bool load_cc0_humanoid_animation_library(
+ AAssetManager* manager, const arut::core::HumanoidSkeleton& target_skeleton,
+ std::vector<arut::animation::AnimationClip>& output) {
+ if (!manager || !target_skeleton.valid()) return false;
+ AAssetDir* directory = AAssetManager_openDir(
+  manager, "Characters/AnimationPack/GLB");
+ if (!directory) {
+  log_warn("ANIMATION_PACK directory unavailable");
   return false;
  }
- std::vector<std::uint8_t> bytes(static_cast<std::size_t>(asset_length));
- const int bytes_read = AAsset_read(
-  source_asset, bytes.data(), bytes.size());
- AAsset_close(source_asset);
- if (bytes_read < 0 || static_cast<std::size_t>(bytes_read) != bytes.size()) {
-  log_warn("ANIMATION_PACK read failed expected=%lld actual=%d",
-   static_cast<long long>(asset_length), bytes_read);
-  return false;
- }
+ const auto target_rig = arut::animation::make_retarget_rig(target_skeleton);
+ std::vector<arut::animation::AnimationClip> candidate;
+ std::size_t files_seen = 0U, clips_loaded = 0U, clips_rejected = 0U;
+ while (const char* entry = AAssetDir_getNextFileName(directory)) {
+  const std::string filename(entry);
+  if (filename.size() < 4U ||
+      filename.compare(filename.size() - 4U, 4U, ".glb") != 0 &&
+      filename.compare(filename.size() - 4U, 4U, ".GLB") != 0) continue;
+  ++files_seen;
+  const std::string path = "Characters/AnimationPack/GLB/" + filename;
+  AAsset* file = AAssetManager_open(manager, path.c_str(), AASSET_MODE_BUFFER);
+  if (!file) { ++clips_rejected; continue; }
+  const off_t length = AAsset_getLength(file);
+  if (length <= 0 || length > 16LL * 1024LL * 1024LL) {
+   AAsset_close(file); ++clips_rejected; continue;
+  }
+  std::vector<std::uint8_t> bytes;
+  try { bytes.resize(static_cast<std::size_t>(length)); }
+  catch (...) { AAsset_close(file); ++clips_rejected; continue; }
+  std::size_t read = 0U;
+  while (read < bytes.size()) {
+   const int amount = AAsset_read(file, bytes.data() + read, bytes.size() - read);
+   if (amount <= 0) break;
+   read += static_cast<std::size_t>(amount);
+  }
+  AAsset_close(file);
+  if (read != bytes.size()) { ++clips_rejected; continue; }
 
- arut::animation::SkeletalAsset source_asset_data{};
- arut::animation::GltfImportReport import_report{};
- if (!arut::animation::import_glb(
-      bytes.data(), bytes.size(), source_asset_data, import_report) ||
-     source_asset_data.animations.empty()) {
-  log_warn("ANIMATION_PACK import failed: %s",
-   import_report.message.c_str());
+  arut::animation::SkeletalAsset source_asset{};
+  arut::animation::GltfImportReport report{};
+  if (!arut::animation::import_glb(
+       bytes.data(), bytes.size(), source_asset, report) ||
+      source_asset.animations.empty()) {
+   ++clips_rejected;
+   log_warn("ANIMATION_PACK rejected=%s reason=%s",
+    filename.c_str(), report.message.c_str());
+   continue;
+  }
+  const auto source_rig = arut::animation::make_retarget_rig(source_asset);
+  arut::animation::RetargetMap map{};
+  if (!arut::animation::build_retarget_map(source_rig, target_rig, map)) {
+   ++clips_rejected;
+   log_warn("ANIMATION_PACK incompatible_rig=%s source_joints=%zu target_joints=%zu",
+    filename.c_str(), source_rig.joint_count, target_rig.joint_count);
+   continue;
+  }
+  std::string clip_name = filename.substr(0U, filename.size() - 4U);
+  for (const auto& source_clip : source_asset.animations) {
+   arut::animation::AnimationClip converted{};
+   if (!arut::animation::retarget_clip(
+        source_clip, source_rig, target_rig, map, converted)) {
+    ++clips_rejected;
+    continue;
+   }
+   converted.name = clip_name;
+   candidate.push_back(std::move(converted));
+   ++clips_loaded;
+  }
+ }
+ AAssetDir_close(directory);
+ if (clips_loaded == 0U) {
+  log_warn("ANIMATION_PACK no usable clips files=%zu rejected=%zu",
+   files_seen, clips_rejected);
   return false;
  }
- const auto source_rig = arut::animation::make_retarget_rig(source_asset_data);
- const auto target_rig = arut::animation::make_retarget_rig(target_asset);
- arut::animation::RetargetMap retarget_map{};
- if (!arut::animation::build_retarget_map(
-      source_rig, target_rig, retarget_map)) {
-  log_warn("ANIMATION_PACK no compatible humanoid joints source=%zu target=%zu",
-   source_rig.joint_count, target_rig.joint_count);
-  return false;
- }
- std::vector<arut::animation::AnimationClip> retargeted_clips;
- if (!arut::animation::retarget_animation_library(
-      source_asset_data.animations, source_rig, target_rig,
-      retarget_map, retargeted_clips)) {
-  log_warn("ANIMATION_PACK transactional retarget failed clips=%zu",
-   source_asset_data.animations.size());
-  return false;
- }
- for (auto& clip : retargeted_clips)
-  target_asset.animations.push_back(std::move(clip));
- log_info("ANIMATION_PACK installed=%zu mapped_joints=%zu unmatched_source=%zu unmatched_target=%zu",
-  retargeted_clips.size(), retarget_map.pair_count,
-  retarget_map.unmatched_source, retarget_map.unmatched_target);
+ output = std::move(candidate);
+ log_info("ANIMATION_PACK loaded=%zu files=%zu rejected=%zu target_joints=%zu",
+  clips_loaded, files_seen, clips_rejected, target_rig.joint_count);
  return true;
+}
+
+bool configure_default_humanoid_clip_animator(RuntimeState& state) {
+ using S = arut::animation::CharacterAnimationState;
+ arut::animation::CharacterAnimationSet set{};
+ const auto find_clip = [&](std::initializer_list<const char*> tokens)
+     -> const arut::animation::AnimationClip* {
+  for (const auto& clip : state.humanoid_animation_library) {
+   std::string name = clip.name;
+   std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+   });
+   for (const char* token : tokens)
+    if (name.find(token) != std::string::npos) return &clip;
+  }
+  return nullptr;
+ };
+ const auto idle = find_clip({"idle_relaxed", "idle"});
+ const auto walk = find_clip({"walk_forwards", "walk"});
+ const auto run = find_clip({"run_sprint", "run"});
+ const auto backward = find_clip({"walk_backwards", "walk_back"});
+ const auto jump = find_clip({"jump_in_the_air", "jump"});
+ const auto land = find_clip({"jump_landing", "landing"});
+ const auto punch = find_clip({"punch_jab", "punch_cross", "punch_hook", "punch"});
+ const auto heavy = find_clip({"sword_slash", "punch_hook", "punch_cross", "punch"});
+ const auto block = find_clip({"block_with_the_sword", "block"});
+ const auto dodge = find_clip({"dodge", "roll"});
+ const auto hit = find_clip({"hit_knockback", "hit_to_the_chest", "hit_to_the_head", "hit"});
+ const auto recover = find_clip({"move_get_up", "action_stand_up", "get_up"});
+ set.set(S::Idle, idle);
+ set.set(S::Walk, walk ? walk : idle);
+ set.set(S::Run, run ? run : (walk ? walk : idle));
+ set.set(S::StrafeLeft, walk ? walk : idle);
+ set.set(S::StrafeRight, walk ? walk : idle);
+ set.set(S::Backward, backward ? backward : (walk ? walk : idle));
+ set.set(S::Jump, jump ? jump : idle);
+ set.set(S::Fall, jump ? jump : idle);
+ set.set(S::Land, land ? land : (jump ? jump : idle));
+ set.set(S::AttackLight, punch ? punch : idle);
+ set.set(S::AttackHeavy, heavy ? heavy : (punch ? punch : idle));
+ set.set(S::AttackKick, heavy ? heavy : (punch ? punch : idle));
+ set.set(S::Block, block ? block : idle);
+ set.set(S::Dodge, dodge ? dodge : (walk ? walk : idle));
+ set.set(S::HitReact, hit ? hit : idle);
+ set.set(S::Recover, recover ? recover : idle);
+ if (!idle) {
+  log_warn("ANIMATION_PACK has no idle clip; default humanoid keeps its procedural animator");
+  return false;
+ }
+ const bool configured = state.humanoid_clip_animator.configure(set) &&
+                          state.humanoid_clip_animator.start();
+ log_info("DEFAULT_HUMANOID animation_graph=%s library_clips=%zu idle=%s walk=%s run=%s punch=%s",
+  configured ? "ready" : "failed", state.humanoid_animation_library.size(),
+  idle ? idle->name.c_str() : "none", walk ? walk->name.c_str() : "fallback",
+  run ? run->name.c_str() : "fallback", punch ? punch->name.c_str() : "fallback");
+ return configured;
 }
 
 bool configure_imported_character_animator(RuntimeState& state) {
@@ -497,6 +583,11 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
   static_cast<int>(arut::core::test_lab_profile_name(state.selected_profile).size()),
   arut::core::test_lab_profile_name(state.selected_profile).data(),
   stress_instances.size(), include_mannequin ? "true" : "false");
+ if (include_mannequin && app->activity && app->activity->assetManager) {
+  state.humanoid_clip_animator_ready = load_cc0_humanoid_animation_library(
+   app->activity->assetManager, state.humanoid_skeleton,
+   state.humanoid_animation_library) && configure_default_humanoid_clip_animator(state);
+ }
 
  state.imported_character_active = false;
  state.imported_character_animator_ready = false;
@@ -1031,6 +1122,37 @@ void run(android_app* app) {
     state.combat_recover_pressed = false;
     auto pose = state.humanoid_animator.update(animation_input, frame_delta);
     const auto& animation_snapshot = state.humanoid_animator.snapshot();
+    if (state.humanoid_clip_animator_ready) {
+     arut::animation::CharacterAnimationInput clip_input{};
+     clip_input.move_x = animation_input.local_move_x;
+     clip_input.move_y = animation_input.local_move_y;
+     clip_input.horizontal_speed = animation_input.horizontal_speed;
+     clip_input.vertical_speed = animation_input.vertical_speed;
+     clip_input.grounded = animation_input.grounded;
+     clip_input.sprinting = animation_input.horizontal_speed >= 3.2F;
+     clip_input.attack_light_pressed = animation_input.attack_light_pressed;
+     clip_input.attack_heavy_pressed = animation_input.attack_heavy_pressed;
+     clip_input.attack_kick_pressed = animation_input.attack_kick_pressed;
+     clip_input.block_held = animation_input.block_held;
+     clip_input.dodge_pressed = animation_input.dodge_pressed;
+     clip_input.hit_reaction = animation_input.hit_reaction;
+     clip_input.recover_pressed = animation_input.recover_pressed;
+     arut::animation::Pose clip_pose{};
+     std::vector<arut::animation::AnimationEvent> clip_events;
+     if (state.humanoid_clip_animator.update(
+          frame_delta, clip_input, clip_pose, clip_events) &&
+         clip_pose.joint_count == arut::core::kHumanoidBoneCount) {
+      for (std::size_t joint = 0; joint < clip_pose.joint_count; ++joint) {
+       pose.local_translations[joint] = clip_pose.joints[joint].translation;
+       pose.local_rotations[joint] = {
+        clip_pose.joints[joint].rotation.x, clip_pose.joints[joint].rotation.y,
+        clip_pose.joints[joint].rotation.z, clip_pose.joints[joint].rotation.w};
+      }
+     } else {
+      state.humanoid_clip_animator_ready = false;
+      log_warn("DEFAULT_HUMANOID retargeted clip playback failed; using procedural animation");
+     }
+    }
     const bool stable_grounded_pose =
      animation_snapshot.state == arut::rendering::HumanoidAnimationState::Idle ||
      animation_snapshot.state == arut::rendering::HumanoidAnimationState::Land ||
