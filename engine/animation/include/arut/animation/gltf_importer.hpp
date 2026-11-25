@@ -59,4 +59,11 @@ struct GltfImportReport final {
     SkeletalAsset& output,
     GltfImportReport& report);
 
+// Imports animation-only GLBs whose channels target the supplied skinned rig by node name.
+[[nodiscard]] bool import_glb_animation_clips(
+    const void* bytes, std::size_t byte_count,
+    const SkeletalAsset& source_rig,
+    std::vector<AnimationClip>& output,
+    GltfImportReport& report);
+
 } // namespace arut::animation
