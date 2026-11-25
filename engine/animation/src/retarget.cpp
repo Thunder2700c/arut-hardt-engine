@@ -195,4 +195,22 @@ bool retarget_clip(const AnimationClip& source_clip,const RetargetRig& source,
     return true;
 }
 
+
+bool retarget_animation_library(std::span<const AnimationClip> source_clips,
+                                const RetargetRig& source,const RetargetRig& target,
+                                const RetargetMap& map,
+                                std::vector<AnimationClip>& output) {
+    if(source_clips.empty()||source.joint_count==0U||target.joint_count==0U||
+       target.joint_count>kMaxPoseJoints||map.pair_count==0U) return false;
+    std::vector<AnimationClip> candidate;
+    candidate.reserve(source_clips.size());
+    for(const auto& source_clip:source_clips) {
+        AnimationClip target_clip{};
+        if(!retarget_clip(source_clip,source,target,map,target_clip)) return false;
+        candidate.push_back(std::move(target_clip));
+    }
+    output=std::move(candidate);
+    return true;
+}
+
 } // namespace arut::animation
