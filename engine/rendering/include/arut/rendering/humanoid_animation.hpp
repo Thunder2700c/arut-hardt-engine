@@ -281,47 +281,112 @@ private:
                              std::clamp(-vertical_speed * 0.02F, -0.20F, 0.20F));
                 break;
             case HumanoidAnimationState::AttackLight: {
-                const float strike = std::clamp(action_elapsed_ / 0.22F, 0.0F, 1.0F);
-                const float retract = std::clamp((action_elapsed_ - 0.28F) / 0.20F, 0.0F, 1.0F);
-                const float punch = strike * (1.0F - retract);
-                set_rotation(target_pose_, B::Chest, {0.0F, 1.0F, 0.0F}, 0.18F * punch);
-                set_rotation(target_pose_, B::Chest, {1.0F, 0.0F, 0.0F}, -0.10F * punch);
-                set_rotation(target_pose_, B::RightUpperArm, {1.0F, 0.0F, 0.0F}, -1.05F * punch);
-                set_rotation(target_pose_, B::RightLowerArm, {1.0F, 0.0F, 0.0F}, -0.28F * punch);
-                set_rotation(target_pose_, B::LeftUpperArm, {0.0F, 0.0F, 1.0F}, -0.24F);
+                const float phase = std::clamp(action_elapsed_ / 0.52F, 0.0F, 1.0F);
+                const auto ease = [](float value) {
+                    const float t = std::clamp(value, 0.0F, 1.0F);
+                    return t * t * (3.0F - 2.0F * t);
+                };
+                const float chamber = ease(phase / 0.20F);
+                const float extension = ease((phase - 0.16F) / 0.18F) *
+                                        (1.0F - ease((phase - 0.53F) / 0.24F));
+                const float settle = ease((phase - 0.58F) / 0.34F);
+                const float arm = 0.22F * chamber - 1.18F * extension +
+                                 0.18F * settle;
+                set_rotation(target_pose_, B::Pelvis, {0.0F, 1.0F, 0.0F},
+                             -0.10F * chamber + 0.12F * extension);
+                set_rotation(target_pose_, B::Chest, {0.0F, 1.0F, 0.0F},
+                             -0.12F * chamber + 0.24F * extension);
+                set_rotation(target_pose_, B::Chest, {1.0F, 0.0F, 0.0F},
+                             -0.08F * extension);
+                set_rotation(target_pose_, B::RightClavicle, {0.0F, 1.0F, 0.0F},
+                             -0.12F * extension);
+                set_rotation(target_pose_, B::RightUpperArm, {1.0F, 0.0F, 0.0F}, arm);
+                set_rotation(target_pose_, B::RightLowerArm, {1.0F, 0.0F, 0.0F},
+                             0.28F - 0.62F * extension);
+                set_rotation(target_pose_, B::RightHand, {0.0F, 1.0F, 0.0F},
+                             0.10F * extension);
+                set_rotation(target_pose_, B::LeftUpperArm, {1.0F, 0.0F, 0.0F}, -0.34F);
+                set_rotation(target_pose_, B::LeftLowerArm, {1.0F, 0.0F, 0.0F}, -0.58F);
+                set_rotation(target_pose_, B::LeftClavicle, {0.0F, 0.0F, 1.0F}, -0.08F);
+                target_pose_.local_translations[static_cast<std::size_t>(B::Pelvis)].y -=
+                    0.018F * extension;
                 break;
             }
             case HumanoidAnimationState::AttackHeavy: {
                 const float phase = std::clamp(action_elapsed_ / 0.72F, 0.0F, 1.0F);
-                const float windup = std::clamp(phase / 0.34F, 0.0F, 1.0F);
-                const float strike = std::clamp((phase - 0.34F) / 0.30F, 0.0F, 1.0F);
-                const float recover = std::clamp((phase - 0.70F) / 0.30F, 0.0F, 1.0F);
-                const float arm = 0.75F * windup - 1.28F * strike + 0.53F * recover;
-                set_rotation(target_pose_, B::Chest, {0.0F, 1.0F, 0.0F}, -0.28F * windup + 0.34F * strike);
-                set_rotation(target_pose_, B::Chest, {1.0F, 0.0F, 0.0F}, -0.16F * strike);
+                const auto ease = [](float value) {
+                    const float t = std::clamp(value, 0.0F, 1.0F);
+                    return t * t * (3.0F - 2.0F * t);
+                };
+                const float chamber = ease(phase / 0.34F);
+                const float power = ease((phase - 0.28F) / 0.24F) *
+                                    (1.0F - ease((phase - 0.66F) / 0.25F));
+                const float settle = ease((phase - 0.70F) / 0.30F);
+                const float arm = 0.70F * chamber - 1.48F * power +
+                                  0.42F * settle;
+                set_rotation(target_pose_, B::Pelvis, {0.0F, 1.0F, 0.0F},
+                             -0.30F * chamber + 0.34F * power);
+                set_rotation(target_pose_, B::Chest, {0.0F, 1.0F, 0.0F},
+                             -0.34F * chamber + 0.42F * power);
+                set_rotation(target_pose_, B::Chest, {1.0F, 0.0F, 0.0F},
+                             -0.20F * power);
+                set_rotation(target_pose_, B::RightClavicle, {0.0F, 1.0F, 0.0F},
+                             -0.20F * power);
                 set_rotation(target_pose_, B::RightUpperArm, {1.0F, 0.0F, 0.0F}, arm);
-                set_rotation(target_pose_, B::RightLowerArm, {1.0F, 0.0F, 0.0F}, -0.72F * strike);
-                set_rotation(target_pose_, B::LeftUpperArm, {0.0F, 0.0F, 1.0F}, -0.38F);
-                target_pose_.local_translations[static_cast<std::size_t>(B::Pelvis)].y -= 0.055F * strike;
+                set_rotation(target_pose_, B::RightLowerArm, {1.0F, 0.0F, 0.0F},
+                             -0.78F * power);
+                set_rotation(target_pose_, B::RightHand, {0.0F, 1.0F, 0.0F},
+                             0.16F * power);
+                set_rotation(target_pose_, B::LeftUpperArm, {1.0F, 0.0F, 0.0F}, -0.50F);
+                set_rotation(target_pose_, B::LeftLowerArm, {1.0F, 0.0F, 0.0F}, -0.72F);
+                set_rotation(target_pose_, B::LeftUpperLeg, {1.0F, 0.0F, 0.0F},
+                             0.14F * power);
+                set_rotation(target_pose_, B::RightUpperLeg, {1.0F, 0.0F, 0.0F},
+                             -0.10F * power);
+                target_pose_.local_translations[static_cast<std::size_t>(B::Pelvis)].y -=
+                    0.065F * power;
                 break;
             }
             case HumanoidAnimationState::AttackKick: {
                 const float phase = std::clamp(action_elapsed_ / 0.68F, 0.0F, 1.0F);
-                const float windup = std::clamp(phase / 0.26F, 0.0F, 1.0F);
-                const float strike_phase = std::clamp((phase - 0.26F) / 0.32F, 0.0F, 1.0F);
-                const float strike = std::sin(strike_phase * 3.14159265F);
-                const float recover = std::clamp((phase - 0.58F) / 0.42F, 0.0F, 1.0F);
-                const float thigh_lift = 0.18F * windup + 0.95F * strike - 0.18F * recover;
-                set_rotation(target_pose_, B::Pelvis, {0.0F, 1.0F, 0.0F}, -0.24F * strike);
-                set_rotation(target_pose_, B::Chest, {0.0F, 1.0F, 0.0F}, 0.20F * strike);
-                set_rotation(target_pose_, B::RightUpperLeg, {1.0F, 0.0F, 0.0F}, thigh_lift);
-                set_rotation(target_pose_, B::RightLowerLeg, {1.0F, 0.0F, 0.0F},
-                             0.52F * windup - 1.25F * strike);
-                set_rotation(target_pose_, B::LeftUpperLeg, {1.0F, 0.0F, 0.0F}, -0.12F * strike);
-                set_rotation(target_pose_, B::LeftUpperArm, {0.0F, 0.0F, 1.0F}, -0.58F * strike);
-                set_rotation(target_pose_, B::RightUpperArm, {0.0F, 0.0F, 1.0F}, 0.42F * strike);
+                const auto ease = [](float value) {
+                    const float t = std::clamp(value, 0.0F, 1.0F);
+                    return t * t * (3.0F - 2.0F * t);
+                };
+                const float chamber = ease(phase / 0.24F);
+                const float extension = ease((phase - 0.20F) / 0.16F) *
+                                        (1.0F - ease((phase - 0.62F) / 0.22F));
+                const float settle = ease((phase - 0.70F) / 0.28F);
+                const float thigh = 0.22F * chamber + 1.02F * extension -
+                                    0.12F * settle;
+                const float knee = 0.62F * chamber - 1.30F * extension +
+                                   0.18F * settle;
+                set_rotation(target_pose_, B::Pelvis, {0.0F, 1.0F, 0.0F},
+                             -0.22F * extension);
+                set_rotation(target_pose_, B::Pelvis, {0.0F, 0.0F, 1.0F},
+                             -0.10F * extension);
+                set_rotation(target_pose_, B::Chest, {0.0F, 1.0F, 0.0F},
+                             0.22F * extension);
+                set_rotation(target_pose_, B::Chest, {1.0F, 0.0F, 0.0F},
+                             -0.10F * extension);
+                set_rotation(target_pose_, B::RightUpperLeg, {1.0F, 0.0F, 0.0F}, thigh);
+                set_rotation(target_pose_, B::RightLowerLeg, {1.0F, 0.0F, 0.0F}, knee);
+                set_rotation(target_pose_, B::RightFoot, {1.0F, 0.0F, 0.0F},
+                             -0.22F * extension);
+                set_rotation(target_pose_, B::LeftUpperLeg, {1.0F, 0.0F, 0.0F},
+                             -0.12F * extension);
+                set_rotation(target_pose_, B::LeftLowerLeg, {1.0F, 0.0F, 0.0F},
+                             0.18F * extension);
+                set_rotation(target_pose_, B::LeftUpperArm, {0.0F, 0.0F, 1.0F},
+                             -0.54F * extension - 0.16F * chamber);
+                set_rotation(target_pose_, B::LeftLowerArm, {1.0F, 0.0F, 0.0F},
+                             -0.62F * extension);
+                set_rotation(target_pose_, B::RightUpperArm, {0.0F, 0.0F, 1.0F},
+                             0.42F * extension);
+                set_rotation(target_pose_, B::RightLowerArm, {1.0F, 0.0F, 0.0F},
+                             -0.48F * extension);
                 target_pose_.local_translations[static_cast<std::size_t>(B::Pelvis)].y -=
-                    0.025F * strike;
+                    0.028F * extension;
                 break;
             }
             case HumanoidAnimationState::Block:
