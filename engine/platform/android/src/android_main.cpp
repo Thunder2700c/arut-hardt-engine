@@ -105,6 +105,12 @@ struct RuntimeState final {
  arut::animation::Pose imported_character_rest_pose{};
  bool imported_character_active{false};
  bool imported_character_animator_ready{false};
+ float imported_character_model_scale{1.0F};
+ float imported_character_bounds_min_x{0.0F};
+ float imported_character_bounds_min_y{0.0F};
+ float imported_character_bounds_min_z{0.0F};
+ float imported_character_bounds_center_x{0.0F};
+ float imported_character_bounds_center_z{0.0F};
  std::size_t imported_character_root_joint{arut::animation::kMaxPoseJoints};
  double animation_clock_seconds{0.0};
  float previous_facing_yaw{0.0F};
@@ -606,6 +612,45 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
         "Characters/hero.glb", state.imported_character_asset, identity)) {
     log_info("IMPORTED_CHARACTER animation_source=hero_glb clips=%zu; default mannequin CC0 library is retargeted independently",
      state.imported_character_asset.animations.size());
+    // Imported GLBs are not guaranteed to use the engine mannequin's units,
+    // origin, or mesh centering. Fit their rest-pose mesh bounds to the same
+    // 1.8 m gameplay height and put the feet on the character controller's
+    // ground plane; this also makes the third-person camera framing consistent.
+    float bounds_min_x = std::numeric_limits<float>::max();
+    float bounds_min_y = std::numeric_limits<float>::max();
+    float bounds_min_z = std::numeric_limits<float>::max();
+    float bounds_max_x = std::numeric_limits<float>::lowest();
+    float bounds_max_y = std::numeric_limits<float>::lowest();
+    float bounds_max_z = std::numeric_limits<float>::lowest();
+    for (const auto& mesh : state.imported_character_asset.meshes) {
+     for (const auto& vertex : mesh.vertices) {
+      const auto& p = vertex.position;
+      if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) continue;
+      bounds_min_x = std::min(bounds_min_x, p.x);
+      bounds_min_y = std::min(bounds_min_y, p.y);
+      bounds_min_z = std::min(bounds_min_z, p.z);
+      bounds_max_x = std::max(bounds_max_x, p.x);
+      bounds_max_y = std::max(bounds_max_y, p.y);
+      bounds_max_z = std::max(bounds_max_z, p.z);
+     }
+    }
+    const float source_height = bounds_max_y - bounds_min_y;
+    if (std::isfinite(source_height) && source_height > 1.0e-4F &&
+        bounds_min_x <= bounds_max_x && bounds_min_z <= bounds_max_z) {
+     state.imported_character_model_scale = 1.8F / source_height;
+     state.imported_character_bounds_min_x = bounds_min_x;
+     state.imported_character_bounds_min_y = bounds_min_y;
+     state.imported_character_bounds_min_z = bounds_min_z;
+     state.imported_character_bounds_center_x = (bounds_min_x + bounds_max_x) * 0.5F;
+     state.imported_character_bounds_center_z = (bounds_min_z + bounds_max_z) * 0.5F;
+     log_info("IMPORTED_CHARACTER framing source_height=%.4f model_scale=%.5f local_center=%.4f,%.4f,%.4f target_height=1.8",
+      source_height, state.imported_character_model_scale,
+      state.imported_character_bounds_center_x, bounds_min_y,
+      state.imported_character_bounds_center_z);
+    } else {
+     state.imported_character_model_scale = 1.0F;
+     log_warn("IMPORTED_CHARACTER mesh bounds invalid; retaining source scale and origin");
+    }
     state.imported_character_rest_pose = {};
     state.imported_character_rest_pose.joint_count =
      state.imported_character_asset.joint_count;
@@ -1364,8 +1409,25 @@ void run(android_app* app) {
          state.imported_character_asset.joints[root].rest_local.translation;
         (void)arut::animation::strip_root_motion(imported_pose, root, reference);
        }
+       auto imported_model = model;
+       const float imported_scale = state.imported_character_model_scale;
+       for (std::size_t column = 0; column < 3U; ++column) {
+        imported_model.value[column * 4U + 0U] *= imported_scale;
+        imported_model.value[column * 4U + 1U] *= imported_scale;
+        imported_model.value[column * 4U + 2U] *= imported_scale;
+       }
+       const float cosine_yaw = std::cos(character.facing_yaw_radians);
+       const float sine_yaw = std::sin(character.facing_yaw_radians);
+       const float center_x = state.imported_character_bounds_center_x;
+       const float center_z = state.imported_character_bounds_center_z;
+       const float world_center_x = cosine_yaw * center_x - sine_yaw * center_z;
+       const float world_center_z = sine_yaw * center_x + cosine_yaw * center_z;
+       imported_model.value[12] = character.position.x - world_center_x * imported_scale;
+       imported_model.value[13] = character.position.y + 0.10F -
+        state.imported_character_bounds_min_y * imported_scale;
+       imported_model.value[14] = character.position.z - world_center_z * imported_scale;
        if (!state.renderer.set_imported_character_pose(
-            state.imported_character_asset, imported_pose, model))
+            state.imported_character_asset, imported_pose, imported_model))
         log_warn("IMPORTED_CHARACTER pose upload rejected; retaining previous GPU pose");
       }
      }
