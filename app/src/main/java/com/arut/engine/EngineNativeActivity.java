@@ -1,29 +1,66 @@
 package com.arut.engine;
 
 import android.app.NativeActivity;
-import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.PixelFormat;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/** Starts the native engine and overlays native-backed touch controls on humanoid profiles. */
+/**
+ * Starts the native engine and displays combat test controls in an application
+ * panel. NativeActivity renders through its own native window, so an ordinary
+ * addContentView() child can be composited underneath the Vulkan scene.
+ */
 public final class EngineNativeActivity extends NativeActivity {
+    private static final String TAG = "ARUT-HARDT-UI";
     private static native void nativeSetCombatAction(int action, boolean pressed);
+
+    private LinearLayout combatPanel;
+    private boolean combatPanelAttached;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Log.i(TAG, "EngineNativeActivity created; profile="
+            + getIntent().getIntExtra("arut.profile_id", -1));
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && isCombatProfile() && !combatPanelAttached) {
+            // Wait until the Activity window has a valid token before adding
+            // the application-panel window above the native rendering window.
+            getWindow().getDecorView().post(this::attachCombatControls);
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (combatPanelAttached && combatPanel != null) {
+            try {
+                getWindowManager().removeView(combatPanel);
+            } catch (IllegalArgumentException ignored) {
+                // The panel may already have been removed during shutdown.
+            }
+            combatPanelAttached = false;
+        }
+        super.onDestroy();
+    }
+
+    private boolean isCombatProfile() {
         final int profile = getIntent().getIntExtra("arut.profile_id", 0);
-        if (profile == 1 || profile == 2) addCombatControls();
+        return profile == 1 || profile == 2;
     }
 
     private int dp(float value) {
@@ -38,8 +75,12 @@ public final class EngineNativeActivity extends NativeActivity {
         button.setTextColor(Color.WHITE);
         button.setMinWidth(dp(70));
         button.setMinHeight(dp(44));
-        button.setBackgroundTintList(ColorStateList.valueOf(Color.rgb(47, 62, 82)));
-        button.setOnClickListener(view -> nativeSetCombatAction(action, true));
+        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+            Color.rgb(47, 62, 82)));
+        button.setOnClickListener(view -> {
+            Log.i(TAG, "combat button pressed: " + label + " action=" + action);
+            nativeSetCombatAction(action, true);
+        });
         return button;
     }
 
@@ -77,42 +118,70 @@ public final class EngineNativeActivity extends NativeActivity {
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
-    private void addCombatControls() {
-        final LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(6), dp(5), dp(6), dp(6));
+    private void attachCombatControls() {
+        if (combatPanelAttached || isFinishing()) return;
+
+        final View decor = getWindow().getDecorView();
+        final android.os.IBinder token = decor.getWindowToken();
+        if (token == null) {
+            Log.w(TAG, "Combat controls deferred: Activity window token is not ready");
+            decor.post(this::attachCombatControls);
+            return;
+        }
+
+        combatPanel = new LinearLayout(this);
+        combatPanel.setOrientation(LinearLayout.VERTICAL);
+        combatPanel.setPadding(dp(6), dp(5), dp(6), dp(6));
+        combatPanel.setElevation(dp(12));
+
         final GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.argb(205, 15, 23, 42));
+        background.setColor(Color.argb(225, 15, 23, 42));
         background.setCornerRadius(dp(10));
-        panel.setBackground(background);
+        combatPanel.setBackground(background);
 
         final TextView title = new TextView(this);
         title.setText("TEMPORARY A / B / C ATTACK TEST");
         title.setTextColor(Color.WHITE);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.0F);
         title.setGravity(Gravity.CENTER);
-        panel.addView(title, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(18)));
+        combatPanel.addView(title, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(20)));
 
-        addRow(panel, actionButton("A · JAB", 0), actionButton("B · HEAVY", 1),
+        addRow(combatPanel, actionButton("A · JAB", 0), actionButton("B · HEAVY", 1),
                actionButton("C · KICK", 2));
-        addRow(panel, guardButton(), actionButton("Dodge", 4),
+        addRow(combatPanel, guardButton(), actionButton("Dodge", 4),
                actionButton("Jump", 7));
-        addRow(panel, actionButton("Hit*", 5), actionButton("Recover*", 6));
+        addRow(combatPanel, actionButton("Hit*", 5), actionButton("Recover*", 6));
 
         final TextView note = new TextView(this);
         note.setText("A = Jab  ·  B = Heavy Punch  ·  C = Kick  |  * diagnostic");
         note.setTextColor(Color.LTGRAY);
         note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.0F);
         note.setGravity(Gravity.CENTER);
-        panel.addView(note, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(16)));
+        combatPanel.addView(note, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(18)));
 
-        final FrameLayout.LayoutParams overlay = new FrameLayout.LayoutParams(
+        final WindowManager.LayoutParams overlay = new WindowManager.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.BOTTOM | Gravity.END);
-        overlay.setMargins(0, 0, dp(10), dp(12));
-        addContentView(panel, overlay);
+            WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT);
+        overlay.token = token;
+        overlay.gravity = Gravity.BOTTOM | Gravity.END;
+        overlay.x = dp(10);
+        overlay.y = dp(12);
+        overlay.setTitle("ARUT-HARDT combat test controls");
+
+        try {
+            getWindowManager().addView(combatPanel, overlay);
+            combatPanelAttached = true;
+            Log.i(TAG, "Combat test panel attached above native window; profile="
+                + getIntent().getIntExtra("arut.profile_id", -1));
+        } catch (WindowManager.BadTokenException | IllegalStateException error) {
+            Log.e(TAG, "Could not attach combat test panel", error);
+        }
     }
 }
