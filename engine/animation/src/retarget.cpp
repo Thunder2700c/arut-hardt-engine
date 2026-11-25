@@ -171,4 +171,27 @@ bool retarget_pose(const Pose& source_pose,const RetargetRig& source,
     return valid_pose_for(output,target.joint_count);
 }
 
+
+bool retarget_clip(const AnimationClip& source_clip,const RetargetRig& source,
+                   const RetargetRig& target,const RetargetMap& map,
+                   AnimationClip& output) {
+    if(!source_clip.valid(source.joint_count)||target.joint_count==0U||
+       target.joint_count>kMaxPoseJoints||map.pair_count==0U) return false;
+    AnimationClip candidate{};
+    candidate.name=source_clip.name;
+    candidate.duration_seconds=source_clip.duration_seconds;
+    candidate.looping=source_clip.looping;
+    candidate.events=source_clip.events;
+    candidate.keys.reserve(source_clip.keys.size());
+    for(const auto& source_key:source_clip.keys) {
+        PoseKey target_key{};
+        target_key.time_seconds=source_key.time_seconds;
+        if(!retarget_pose(source_key.pose,source,target,map,target_key.pose)) return false;
+        candidate.keys.push_back(std::move(target_key));
+    }
+    if(!candidate.valid(target.joint_count)) return false;
+    output=std::move(candidate);
+    return true;
+}
+
 } // namespace arut::animation
