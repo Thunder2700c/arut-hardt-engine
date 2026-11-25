@@ -457,6 +457,63 @@ bool load_cc0_humanoid_animation_library(
  return true;
 }
 
+
+bool load_cc0_humanoid_animation_library_for_imported_rig(
+ AAssetManager* manager, arut::animation::SkeletalAsset& rig) {
+ if (!manager || rig.joint_count == 0U ||
+     rig.joint_count > arut::animation::kMaxImportedJoints) return false;
+ AAssetDir* directory = AAssetManager_openDir(
+  manager, "Characters/AnimationPack/GLB");
+ if (!directory) {
+  log_warn("ANIMATION_PACK directory unavailable for default human rig");
+  return false;
+ }
+ std::size_t files_seen = 0U, clips_loaded = 0U, clips_rejected = 0U;
+ while (const char* entry = AAssetDir_getNextFileName(directory)) {
+  const std::string filename(entry);
+  if (filename.size() < 4U ||
+      (filename.compare(filename.size() - 4U, 4U, ".glb") != 0 &&
+       filename.compare(filename.size() - 4U, 4U, ".GLB") != 0)) continue;
+  ++files_seen;
+  const std::string asset_path = "Characters/AnimationPack/GLB/" + filename;
+  AAsset* file = AAssetManager_open(manager, asset_path.c_str(), AASSET_MODE_BUFFER);
+  if (!file) { ++clips_rejected; continue; }
+  const off_t length = AAsset_getLength(file);
+  if (length <= 0 || length > 16LL * 1024LL * 1024LL) {
+   AAsset_close(file); ++clips_rejected; continue;
+  }
+  std::vector<std::uint8_t> bytes;
+  try { bytes.resize(static_cast<std::size_t>(length)); }
+  catch (...) { AAsset_close(file); ++clips_rejected; continue; }
+  std::size_t read = 0U;
+  while (read < bytes.size()) {
+   const int amount = AAsset_read(file, bytes.data() + read, bytes.size() - read);
+   if (amount <= 0) break;
+   read += static_cast<std::size_t>(amount);
+  }
+  AAsset_close(file);
+  if (read != bytes.size()) { ++clips_rejected; continue; }
+  std::vector<arut::animation::AnimationClip> imported;
+  arut::animation::GltfImportReport report{};
+  if (!arut::animation::import_glb_animation_clips(
+       bytes.data(), bytes.size(), rig, imported, report) || imported.empty()) {
+   ++clips_rejected;
+   log_warn("ANIMATION_PACK rejected_for_default_human=%s reason=%s",
+    filename.c_str(), report.message.c_str());
+   continue;
+  }
+  for (auto& clip : imported) {
+   clip.name = filename.substr(0U, filename.size() - 4U);
+   try { rig.animations.push_back(std::move(clip)); ++clips_loaded; }
+   catch (...) { ++clips_rejected; }
+  }
+ }
+ AAssetDir_close(directory);
+ log_info("DEFAULT_HUMAN_ANIMATION_PACK loaded=%zu files=%zu rejected=%zu rig_joints=%zu",
+  clips_loaded, files_seen, clips_rejected, rig.joint_count);
+ return clips_loaded > 0U;
+}
+
 bool configure_default_humanoid_clip_animator(RuntimeState& state) {
  using S = arut::animation::CharacterAnimationState;
  arut::animation::CharacterAnimationSet set{};
@@ -634,16 +691,13 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
   static_cast<int>(arut::core::test_lab_profile_name(state.selected_profile).size()),
   arut::core::test_lab_profile_name(state.selected_profile).data(),
   stress_instances.size(), include_mannequin ? "true" : "false");
- if (include_mannequin && app->activity && app->activity->assetManager) {
-  state.humanoid_clip_animator_ready = load_cc0_humanoid_animation_library(
-   app->activity->assetManager, state.humanoid_skeleton,
-   state.humanoid_animation_library) && configure_default_humanoid_clip_animator(state);
- }
-
+ // The default character is the imported, fully skinned human asset.
+ // Do not route its animation pack through the old 20-joint procedural rig.
+ state.humanoid_clip_animator_ready = false;
+ state.humanoid_animation_library.clear();
  state.imported_character_active = false;
  state.imported_character_animator_ready = false;
- const bool request_imported_character =
-  g_imported_character_enabled.load(std::memory_order_acquire);
+ const bool request_imported_character = true;
  if (include_mannequin && request_imported_character &&
      app->activity && app->activity->assetManager) {
   AAsset* probe = AAssetManager_open(app->activity->assetManager,
@@ -708,11 +762,15 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
       break;
      }
     }
+    const bool animation_pack_loaded =
+     load_cc0_humanoid_animation_library_for_imported_rig(
+      app->activity->assetManager, state.imported_character_asset);
     state.imported_character_animator_ready =
      configure_imported_character_animator(state);
-    log_info("IMPORTED_CHARACTER runtime_active=true joints=%zu clips=%zu graph_ready=%s",
+    log_info("DEFAULT_CHARACTER source=skinned_human_glb joints=%zu clips=%zu cc0_pack_loaded=%s graph_ready=%s",
      state.imported_character_asset.joint_count,
      state.imported_character_asset.animations.size(),
+     animation_pack_loaded ? "true" : "false",
      state.imported_character_animator_ready ? "true" : "false");
    } else {
     log_warn("IMPORTED_CHARACTER packaged GLB was found but could not be installed");
@@ -721,7 +779,7 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
    log_info("IMPORTED_CHARACTER optional asset absent; using procedural robot mannequin");
   }
  } else if (include_mannequin) {
-  log_info("CHARACTER_SOURCE selected=procedural_robot_mannequin imported_glb_enabled=false");
+  log_warn("DEFAULT_CHARACTER human GLB unavailable; legacy procedural mannequin fallback remains active");
  }
  return true;
 }
@@ -982,10 +1040,12 @@ Java_com_arut_engine_TestLabActivity_nativeSelectProfile(
 extern "C" JNIEXPORT void JNICALL
 Java_com_arut_engine_TestLabActivity_nativeSetImportedCharacterEnabled(
     JNIEnv*, jclass, jboolean enabled) noexcept {
- g_imported_character_enabled.store(enabled == JNI_TRUE, std::memory_order_release);
+ // Kept for compatibility with older TestLab UI builds. The human GLB
+ // is now the default character and cannot be disabled back to the robot.
+ g_imported_character_enabled.store(true, std::memory_order_release);
  __android_log_print(ANDROID_LOG_INFO, kLogTag,
-  "CHARACTER_SOURCE selection=%s",
-  enabled == JNI_TRUE ? "optional_imported_glb" : "procedural_robot_mannequin");
+  "CHARACTER_SOURCE selection=default_skinned_human_glb legacy_toggle_ignored=%s",
+  enabled == JNI_TRUE ? "false" : "true");
 }
 extern "C" JNIEXPORT void JNICALL
 Java_com_arut_engine_EngineNativeActivity_nativeSetCombatAction(
