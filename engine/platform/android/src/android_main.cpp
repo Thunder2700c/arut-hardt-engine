@@ -46,6 +46,7 @@
 #include <chrono>
 #include <exception>
 #include <span>
+#include <vector>
 #include <jni.h>
 #include <stdarg.h>
 extern "C" std::uint32_t arut_tasks_abi_version() noexcept;
