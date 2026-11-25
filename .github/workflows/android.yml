@@ -5,7 +5,7 @@ on:
     paths:
       - ".github/phase3-apk-test.trigger"
       - ".github/phase4-apk-test.trigger"
-      - "scripts/fetch_default_character.sh"
+      - "scripts/fetch_default_character.sh"\n      - "scripts/fetch_cc0_animation_pack.sh"\n      - "engine/platform/android/src/android_main.cpp"\n      - "engine/animation/**"
       - "engine/rendering/src/android_renderer.cpp"
       - "engine/rendering/include/arut/rendering/**"
       - "engine/rendering/shaders/**"
