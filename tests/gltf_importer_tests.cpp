@@ -153,9 +153,12 @@ int main() {
     assert(report.imported_indices==6U);
     const auto animation_only_bytes=make_animation_only_glb();
     std::vector<arut::animation::AnimationClip> animation_only_clips;
-    assert(arut::animation::import_glb_animation_clips(
-        animation_only_bytes.data(),animation_only_bytes.size(),asset,
-        animation_only_clips,report));
+    if (!arut::animation::import_glb_animation_clips(
+            animation_only_bytes.data(),animation_only_bytes.size(),asset,
+            animation_only_clips,report)) {
+        std::cerr<<"ANIMATION_ONLY_IMPORT_ERROR "<<report.message<<"\\n";
+        return 2;
+    }
     assert(animation_only_clips.size()==1U);
     assert(animation_only_clips[0].name=="AnimationOnlyWalk");
     assert(animation_only_clips[0].sample(1.0F,sampled));
