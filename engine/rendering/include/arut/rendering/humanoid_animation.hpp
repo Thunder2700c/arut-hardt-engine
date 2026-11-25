@@ -202,6 +202,7 @@ public:
     }
 
     [[nodiscard]] const HumanoidPose& pose() const noexcept { return current_pose_; }
+    [[nodiscard]] const HumanoidPose& target_pose() const noexcept { return target_pose_; }
     [[nodiscard]] const HumanoidAnimationSnapshot& snapshot() const noexcept {
         return snapshot_;
     }
