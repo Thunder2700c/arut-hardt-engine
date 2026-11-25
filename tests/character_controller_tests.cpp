@@ -52,6 +52,17 @@ int main() {
     assert(std::abs(controller.state().position.y) < 1.0e-5F);
     assert(controller.state().velocity.z < -4.0F);
 
+    // Pulling the virtual stick downward supplies negative local Y. That is
+    // backward locomotion, not jump/fall input, and must remain grounded.
+    controller.reset();
+    CharacterInput backward{};
+    backward.move_y = -1.0F;
+    for (int i = 0; i < 60; ++i)
+        assert(controller.fixed_step(backward, ground_query, &flat));
+    assert(controller.state().grounded);
+    assert(controller.state().position.z > 2.0F);
+    assert(controller.state().velocity.z > 4.0F);
+
     CharacterInput release{};
     for (int i = 0; i < 60; ++i)
         assert(controller.fixed_step(release, ground_query, &flat));
