@@ -3270,6 +3270,24 @@ void AndroidRenderer::set_humanoid_state(
     pending_humanoid_palette_ = palette;
     humanoid_camera_target_ = camera_target;
     humanoid_camera_position_ = camera_position;
+
+    // The follow solver supplies a world-space camera position and a world-space
+    // look target. Previously only the position reached the frame update; the
+    // renderer kept using its old yaw/pitch and looked along a fixed world axis.
+    // Reconstruct the camera orientation from the solved target every frame so
+    // the view remains locked to the moving character while touch/gamepad look
+    // can still add its normal per-frame yaw/pitch input.
+    const float look_x = camera_target[0] - camera_position[0];
+    const float look_y = camera_target[1] - camera_position[1];
+    const float look_z = camera_target[2] - camera_position[2];
+    const float horizontal = std::sqrt(look_x * look_x + look_z * look_z);
+    const float look_length = std::sqrt(horizontal * horizontal + look_y * look_y);
+    if (std::isfinite(look_length) && look_length > 1.0e-5F) {
+        camera_yaw_ = std::atan2(look_z, look_x);
+        camera_pitch_ = std::clamp(
+            std::atan2(look_y, std::max(horizontal, 1.0e-5F)),
+            -1.45F, 1.45F);
+    }
     has_external_humanoid_state_ = true;
 }
 
