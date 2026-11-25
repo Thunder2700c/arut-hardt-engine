@@ -202,7 +202,6 @@ public:
     }
 
     [[nodiscard]] const HumanoidPose& pose() const noexcept { return current_pose_; }
-    [[nodiscard]] const HumanoidPose& target_pose() const noexcept { return target_pose_; }
     [[nodiscard]] const HumanoidAnimationSnapshot& snapshot() const noexcept {
         return snapshot_;
     }
@@ -473,7 +472,19 @@ private:
     }
 
     void blend_pose(float delta_seconds) noexcept {
-        last_blend_alpha_ = 1.0F - std::exp(-kBlendRate * delta_seconds);
+        const bool attack_pose = state_ == HumanoidAnimationState::AttackLight ||
+                                 state_ == HumanoidAnimationState::AttackHeavy ||
+                                 state_ == HumanoidAnimationState::AttackKick;
+        const bool defensive_pose = state_ == HumanoidAnimationState::Block ||
+                                    state_ == HumanoidAnimationState::Dodge ||
+                                    state_ == HumanoidAnimationState::HitReact ||
+                                    state_ == HumanoidAnimationState::Recover;
+        // Combat strikes reverse direction quickly; the locomotion blend
+        // rate made the arm lag behind the strike even when the target pose
+        // and action timing were correct.
+        const float blend_rate = attack_pose ? 24.0F
+            : (defensive_pose ? 18.0F : kBlendRate);
+        last_blend_alpha_ = 1.0F - std::exp(-blend_rate * delta_seconds);
         for (std::size_t i = 0; i < current_pose_.local_translations.size(); ++i) {
             auto& current = current_pose_.local_translations[i];
             const auto& target = target_pose_.local_translations[i];
