@@ -450,4 +450,142 @@ bool import_glb(const void* bytes, std::size_t byte_count,
     return true;
 }
 
+
+bool import_glb_animation_clips(
+    const void* bytes, std::size_t byte_count,
+    const SkeletalAsset& source_rig,
+    std::vector<AnimationClip>& output,
+    GltfImportReport& report) {
+    output.clear();
+    report = {};
+    if (!bytes || byte_count < 20U || !source_rig.valid()) {
+        report.message = "Animation GLB input or reference rig is invalid";
+        return false;
+    }
+    cgltf_options options{};
+    cgltf_data* raw = nullptr;
+    if (cgltf_parse(&options, bytes, byte_count, &raw) != cgltf_result_success || !raw) {
+        report.message = "cgltf could not parse the animation GLB";
+        return false;
+    }
+    DataPtr data(raw);
+    if (data->file_type != cgltf_file_type_glb ||
+        cgltf_load_buffers(&options, data.get(), nullptr) != cgltf_result_success ||
+        cgltf_validate(data.get()) != cgltf_result_success) {
+        report.message = "Animation GLB buffers or structure are invalid";
+        return false;
+    }
+    if (data->animations_count == 0U) {
+        report.message = "Animation-only GLB contains no animation";
+        return false;
+    }
+    std::unordered_map<const cgltf_node*, std::size_t> joint_map;
+    joint_map.reserve(source_rig.joint_count);
+    for (cgltf_size ni = 0; ni < data->nodes_count; ++ni) {
+        const cgltf_node* node = &data->nodes[ni];
+        if (!node->name || !node->name[0]) continue;
+        for (std::size_t joint = 0; joint < source_rig.joint_count; ++joint) {
+            if (source_rig.joints[joint].name == node->name) {
+                joint_map.emplace(node, joint);
+                break;
+            }
+        }
+    }
+    if (joint_map.size() < 12U) {
+        report.message = "Animation GLB node names do not match enough joints in the reference rig";
+        return false;
+    }
+    std::vector<AnimationClip> candidate;
+    candidate.reserve(data->animations_count);
+    for (cgltf_size ai = 0; ai < data->animations_count; ++ai) {
+        const auto& source = data->animations[ai];
+        std::vector<Track> tracks;
+        std::vector<float> key_times{0.0F};
+        float duration = 0.0F;
+        for (cgltf_size ci = 0; ci < source.channels_count; ++ci) {
+            const auto& channel = source.channels[ci];
+            if (!channel.target_node ||
+                channel.target_path == cgltf_animation_path_type_weights ||
+                joint_map.find(channel.target_node) == joint_map.end()) continue;
+            if (channel.target_path != cgltf_animation_path_type_translation &&
+                channel.target_path != cgltf_animation_path_type_rotation &&
+                channel.target_path != cgltf_animation_path_type_scale) continue;
+            Track track{};
+            track.channel = &channel;
+            track.components = channel.target_path == cgltf_animation_path_type_rotation ? 4U : 3U;
+            track.cubic = channel.sampler->interpolation == cgltf_interpolation_type_cubic_spline;
+            if (!unpack(channel.sampler->input, 1U, track.times) ||
+                !unpack(channel.sampler->output, track.components, track.values) ||
+                track.times.size() < 2U ||
+                track.values.size() != track.times.size() * track.components *
+                    (track.cubic ? 3U : 1U)) {
+                report.message = "Animation-only GLB contains a malformed sampler";
+                return false;
+            }
+            for (std::size_t key = 0; key < track.times.size(); ++key) {
+                if (!finite(track.times[key]) || track.times[key] < 0.0F ||
+                    (key && track.times[key] <= track.times[key - 1U])) {
+                    report.message = "Animation key times must be finite, nonnegative and increasing";
+                    return false;
+                }
+                key_times.push_back(track.times[key]);
+                duration = std::max(duration, track.times[key]);
+            }
+            tracks.push_back(std::move(track));
+        }
+        if (tracks.empty() || duration <= 0.0F) continue;
+        std::sort(key_times.begin(), key_times.end());
+        key_times.erase(std::unique(key_times.begin(), key_times.end(),
+            [](float a, float b) { return std::abs(a - b) < 1.0e-6F; }),
+            key_times.end());
+        AnimationClip clip{};
+        clip.name = source.name && source.name[0]
+            ? source.name : "animation_" + std::to_string(ai);
+        clip.duration_seconds = duration;
+        clip.looping = true;
+        clip.keys.reserve(key_times.size());
+        for (const float time : key_times) {
+            PoseKey key{};
+            key.time_seconds = time;
+            key.pose.joint_count = source_rig.joint_count;
+            for (std::size_t joint = 0; joint < source_rig.joint_count; ++joint)
+                key.pose.joints[joint] = source_rig.joints[joint].rest_local;
+            for (const auto& track : tracks) {
+                const auto mapped = joint_map.find(track.channel->target_node);
+                if (mapped == joint_map.end()) continue;
+                float value[4]{};
+                if (!sample_track(track, time, value)) {
+                    report.message = "Failed to sample animation-only GLB channel";
+                    return false;
+                }
+                auto& transform = key.pose.joints[mapped->second];
+                switch (track.channel->target_path) {
+                    case cgltf_animation_path_type_translation:
+                        transform.translation = {value[0], value[1], value[2]};
+                        break;
+                    case cgltf_animation_path_type_rotation:
+                        transform.rotation = normalized({value[0], value[1], value[2], value[3]});
+                        break;
+                    case cgltf_animation_path_type_scale:
+                        transform.scale = {value[0], value[1], value[2]};
+                        break;
+                    default: break;
+                }
+            }
+            clip.keys.push_back(std::move(key));
+        }
+        if (clip.keys.size() >= 2U && clip.valid(source_rig.joint_count))
+            candidate.push_back(std::move(clip));
+    }
+    if (candidate.empty()) {
+        report.message = "No animation channels matched the reference rig";
+        return false;
+    }
+    report.imported_joints = source_rig.joint_count;
+    report.imported_animations = candidate.size();
+    report.message = "Animation-only GLB clips imported against reference rig";
+    output = std::move(candidate);
+    return true;
+}
+
 } // namespace arut::animation
