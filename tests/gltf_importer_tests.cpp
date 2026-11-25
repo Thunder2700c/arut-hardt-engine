@@ -26,6 +26,40 @@ void f32(std::vector<std::uint8_t>& out,float v) {
 void pad4(std::vector<std::uint8_t>& out) {
     while(out.size()%4U) out.push_back(0U);
 }
+std::vector<std::uint8_t> make_animation_only_glb() {
+    std::vector<std::uint8_t> bin;
+    const std::size_t times=bin.size();
+    f32(bin,0.F); f32(bin,1.F);
+    const std::size_t times_len=bin.size()-times;
+    const std::size_t translations=bin.size();
+    for(float value:{0.F,0.F,0.F, 0.F,0.5F,0.F}) f32(bin,value);
+    const std::size_t translations_len=bin.size()-translations;
+    pad4(bin);
+    const auto view=[&](std::size_t offset,std::size_t length) {
+        return std::string("{\"buffer\":0,\"byteOffset\":")+std::to_string(offset)+
+            ",\"byteLength\":"+std::to_string(length)+"}";
+    };
+    std::string json="{";
+    json+="\"asset\":{\"version\":\"2.0\",\"generator\":\"ARUT animation-only test\"},";
+    json+="\"buffers\":[{\"byteLength\":"+std::to_string(bin.size())+"}],";
+    json+="\"bufferViews\":["+view(times,times_len)+","+view(translations,translations_len)+"],";
+    json+="\"accessors\":[";
+    json+="{\"bufferView\":0,\"componentType\":5126,\"count\":2,\"type\":\"SCALAR\"},";
+    json+="{\"bufferView\":1,\"componentType\":5126,\"count\":2,\"type\":\"VEC3\"}],";
+    json+="\"nodes\":[{\"name\":\"Root\"}],";
+    json+="\"animations\":[{\"name\":\"AnimationOnlyWalk\",\"samplers\":[{\"input\":0,\"output\":1,\"interpolation\":\"LINEAR\"}],\"channels\":[{\"sampler\":0,\"target\":{\"node\":0,\"path\":\"translation\"}}]}],";
+    json+="\"scenes\":[{\"nodes\":[0]}],\"scene\":0}";
+    while(json.size()%4U) json.push_back(' ');
+    std::vector<std::uint8_t> glb;
+    const std::uint32_t total=12U+8U+static_cast<std::uint32_t>(json.size())+
+        8U+static_cast<std::uint32_t>(bin.size());
+    u32(glb,0x46546C67U); u32(glb,2U); u32(glb,total);
+    u32(glb,static_cast<std::uint32_t>(json.size())); u32(glb,0x4E4F534AU);
+    glb.insert(glb.end(),json.begin(),json.end());
+    u32(glb,static_cast<std::uint32_t>(bin.size())); u32(glb,0x004E4942U);
+    glb.insert(glb.end(),bin.begin(),bin.end());
+    return glb;
+}
 std::vector<std::uint8_t> make_glb() {
     std::vector<std::uint8_t> bin;
     const auto view=[&](std::size_t offset,std::size_t length) {
@@ -117,6 +151,17 @@ int main() {
     assert(report.imported_meshes==2U);
     assert(report.imported_vertices==6U);
     assert(report.imported_indices==6U);
+    const auto animation_only_bytes=make_animation_only_glb();
+    std::vector<arut::animation::AnimationClip> animation_only_clips;
+    assert(arut::animation::import_glb_animation_clips(
+        animation_only_bytes.data(),animation_only_bytes.size(),asset,
+        animation_only_clips,report));
+    assert(animation_only_clips.size()==1U);
+    assert(animation_only_clips[0].name=="AnimationOnlyWalk");
+    assert(animation_only_clips[0].sample(1.0F,sampled));
+    assert(sampled.joint_count==1U);
+    assert(sampled.joints[0].translation.y>0.49F);
+    std::cout<<"GLTF_ANIMATION_ONLY_TEST pass clips=1 reference_joints=1\n";
     const std::uint8_t invalid[4]{};
     assert(!arut::animation::import_glb(invalid,sizeof(invalid),asset,report));
     std::cout<<"GLTF_IMPORTER_TEST pass joints=1 compatible_multi_skin_meshes=2 vertices=6 clips=2 linear+cubic\n";
