@@ -120,5 +120,22 @@ int main() {
     assert(build_retarget_map(unreal,engine_rig,unreal_map));
     assert(unreal_map.pair_count==6U);
     assert(unreal_map.unmatched_source==0U&&unreal_map.unmatched_target==0U);
+
+    // Retarget a complete animation pack atomically, preserving clip metadata.
+    AnimationClip second_clip=source_clip;
+    second_clip.name="Run";
+    std::array<AnimationClip,2> source_library{source_clip,second_clip};
+    std::vector<AnimationClip> target_library;
+    assert(retarget_animation_library(source_library,source,target,map,target_library));
+    assert(target_library.size()==2U);
+    assert(target_library[0].name=="Walk"&&target_library[1].name=="Run");
+    assert(target_library[0].events.size()==source_clip.events.size());
+    const auto preserved_library_size=target_library.size();
+    AnimationClip invalid_clip=source_clip;
+    invalid_clip.keys.clear();
+    std::array<AnimationClip,2> invalid_library{source_clip,invalid_clip};
+    assert(!retarget_animation_library(invalid_library,source,target,map,target_library));
+    assert(target_library.size()==preserved_library_size);
+
     std::cout<<"RETARGET_TEST pass mapped=3 unreal_aliases=6 large_rig=96 scale_ratio=1.5\n";
 }
