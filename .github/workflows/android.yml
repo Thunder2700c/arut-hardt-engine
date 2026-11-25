@@ -5,7 +5,10 @@ on:
     paths:
       - ".github/phase3-apk-test.trigger"
       - ".github/phase4-apk-test.trigger"
-      - "scripts/fetch_default_character.sh"\n      - "scripts/fetch_cc0_animation_pack.sh"\n      - "engine/platform/android/src/android_main.cpp"\n      - "engine/animation/**"
+      - "scripts/fetch_default_character.sh"
+      - "scripts/fetch_cc0_animation_pack.sh"
+      - "engine/platform/android/src/android_main.cpp"
+      - "engine/animation/**"
       - "engine/rendering/src/android_renderer.cpp"
       - "engine/rendering/include/arut/rendering/**"
       - "engine/rendering/shaders/**"
@@ -31,6 +34,8 @@ jobs:
         run: mkdir -p build-logs
       - name: Fetch and validate bundled CC0 default humanoid
         run: bash scripts/fetch_default_character.sh 2>&1 | tee build-logs/default-character.log
+      - name: Fetch pinned CC0 humanoid animation pack
+        run: bash scripts/fetch_cc0_animation_pack.sh 2>&1 | tee build-logs/animation-pack.log
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
