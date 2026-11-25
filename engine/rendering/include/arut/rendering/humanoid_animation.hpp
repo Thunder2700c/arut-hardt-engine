@@ -36,6 +36,7 @@ struct HumanoidAnimationSnapshot final {
     float phase_seconds{0.0F};
     float blend_alpha{0.0F};
     float horizontal_speed{0.0F};
+    float action_phase{0.0F};
 };
 
 [[nodiscard]] constexpr std::string_view humanoid_animation_state_name(
@@ -195,6 +196,8 @@ public:
         snapshot_.phase_seconds = phase_seconds_;
         snapshot_.blend_alpha = last_blend_alpha_;
         snapshot_.horizontal_speed = speed;
+        snapshot_.action_phase = action_duration_ > 0.0F
+            ? std::clamp(action_elapsed_ / action_duration_, 0.0F, 1.0F) : 0.0F;
         return current_pose_;
     }
 
