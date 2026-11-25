@@ -99,6 +99,7 @@ int main() {
     const auto jab_chest = animator.pose().local_rotations[static_cast<std::size_t>(B::Chest)];
     assert(std::abs(jab_forearm.x) > 0.01F);
     assert(std::abs(jab_chest.y) > 0.01F);
+    assert(std::abs(jab_chest.x) > 0.01F);
     input.attack_heavy_pressed = true;
     animator.update(input, dt);
     assert(animator.snapshot().state == HumanoidAnimationState::AttackHeavy);
