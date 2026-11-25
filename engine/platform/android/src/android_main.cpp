@@ -59,6 +59,8 @@ std::atomic<std::int32_t> g_requested_test_profile{-1};
 std::atomic<bool> g_imported_character_enabled{false};
 std::atomic<std::uint32_t> g_touch_combat_pending{0U};
 std::atomic<bool> g_touch_combat_block_held{false};
+std::atomic<float> g_touch_move_x{0.0F};
+std::atomic<float> g_touch_move_y{0.0F};
 struct FootPlantState final {
  arut::core::Vec3 world_anchor{};
  float blend{0.0F};
@@ -113,6 +115,7 @@ struct RuntimeState final {
  float imported_character_bounds_center_x{0.0F};
  float imported_character_bounds_center_z{0.0F};
  std::size_t imported_character_root_joint{arut::animation::kMaxPoseJoints};
+ std::vector<std::size_t> imported_character_root_motion_joints{};
  double animation_clock_seconds{0.0};
  float previous_facing_yaw{0.0F};
  bool has_previous_facing_yaw{false};
@@ -772,12 +775,33 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
       state.imported_character_asset.joints[joint].rest_local;
     state.imported_character_active = true;
     state.imported_character_root_joint = arut::animation::kMaxPoseJoints;
+    state.imported_character_root_motion_joints.clear();
     for (std::size_t joint = 0; joint < state.imported_character_asset.joint_count; ++joint) {
-     if (state.imported_character_asset.joints[joint].parent < 0) {
+     const auto& imported_joint = state.imported_character_asset.joints[joint];
+     if (imported_joint.parent < 0 &&
+         state.imported_character_root_joint == arut::animation::kMaxPoseJoints) {
       state.imported_character_root_joint = joint;
-      break;
+     }
+     std::string normalized_name = imported_joint.name;
+     normalized_name.erase(std::remove_if(normalized_name.begin(), normalized_name.end(),
+      [](unsigned char ch) { return !std::isalnum(ch); }), normalized_name.end());
+     std::transform(normalized_name.begin(), normalized_name.end(), normalized_name.begin(),
+      [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+     const bool hips_or_pelvis = normalized_name.find("hips") != std::string::npos ||
+                                 normalized_name.find("pelvis") != std::string::npos;
+     if ((joint == state.imported_character_root_joint || hips_or_pelvis) &&
+         std::find(state.imported_character_root_motion_joints.begin(),
+                   state.imported_character_root_motion_joints.end(), joint) ==
+                   state.imported_character_root_motion_joints.end()) {
+      state.imported_character_root_motion_joints.push_back(joint);
      }
     }
+    if (state.imported_character_root_motion_joints.empty() &&
+        state.imported_character_root_joint < state.imported_character_asset.joint_count) {
+     state.imported_character_root_motion_joints.push_back(state.imported_character_root_joint);
+    }
+    log_info("IMPORTED_CHARACTER root_motion_policy=in_place joints=%zu",
+     state.imported_character_root_motion_joints.size());
     const bool animation_pack_loaded =
      load_cc0_humanoid_animation_library_for_imported_rig(
       app->activity->assetManager, state.imported_character_asset);
@@ -869,6 +893,8 @@ void handle_app_command(android_app* app, std::int32_t command) {
    state->combat_recover_pressed = false;
    g_touch_combat_pending.store(0U, std::memory_order_release);
    g_touch_combat_block_held.store(false, std::memory_order_release);
+    g_touch_move_x.store(0.0F, std::memory_order_release);
+    g_touch_move_y.store(0.0F, std::memory_order_release);
    state->renderer.clear_input();
    log_info("Lifecycle PAUSE");
    if (export_runtime_log(app)) __android_log_print(ANDROID_LOG_INFO, kLogTag, "Runtime log exported to Downloads/ARUT-HARDT/ARUT-HARDT-runtime.log");
@@ -906,6 +932,8 @@ void handle_app_command(android_app* app, std::int32_t command) {
    state->combat_recover_pressed = false;
    g_touch_combat_pending.store(0U, std::memory_order_release);
    g_touch_combat_block_held.store(false, std::memory_order_release);
+    g_touch_move_x.store(0.0F, std::memory_order_release);
+    g_touch_move_y.store(0.0F, std::memory_order_release);
    state->renderer.set_gamepad_look_input(0.0F, 0.0F);
    log_info("Focus lost"); break;
   case APP_CMD_CONFIG_CHANGED:
@@ -1074,6 +1102,14 @@ Java_com_arut_engine_EngineNativeActivity_nativeSetCombatAction(
                                   std::memory_order_release);
  }
 }
+extern "C" JNIEXPORT void JNICALL
+Java_com_arut_engine_EngineNativeActivity_nativeSetMovementInput(
+     JNIEnv*, jclass, jfloat x, jfloat y) noexcept {
+  g_touch_move_x.store(std::isfinite(x) ? std::clamp(x, -1.0F, 1.0F) : 0.0F,
+                       std::memory_order_release);
+  g_touch_move_y.store(std::isfinite(y) ? std::clamp(y, -1.0F, 1.0F) : 0.0F,
+                       std::memory_order_release);
+}
 extern "C" void arut_android_log(int priority, const char* message) noexcept {
  const char* level = priority >= ANDROID_LOG_ERROR ? "ERROR" : (priority >= ANDROID_LOG_WARN ? "WARN" : "INFO");
  log_message(priority, level, message);
@@ -1239,9 +1275,11 @@ void run(android_app* app) {
     const float frame_delta = std::chrono::duration<float>(
      std::chrono::steady_clock::now() - frame_start).count();
     const auto movement = state.renderer.movement_input();
+    const float touch_move_x = g_touch_move_x.load(std::memory_order_acquire);
+    const float touch_move_y = g_touch_move_y.load(std::memory_order_acquire);
     state.character_input_router.set_analog(
-     std::clamp(movement[0] + state.gamepad_move_x, -1.0F, 1.0F),
-     std::clamp(movement[1] + state.gamepad_move_y, -1.0F, 1.0F));
+     std::clamp(movement[0] + state.gamepad_move_x + touch_move_x, -1.0F, 1.0F),
+     std::clamp(movement[1] + state.gamepad_move_y + touch_move_y, -1.0F, 1.0F));
     arut::core::CharacterInput character_input =
      state.character_input_router.sample();
     const std::uint32_t touch_combat_actions =
@@ -1526,10 +1564,14 @@ void run(android_app* app) {
        }
        // This runtime uses capsule-driven movement. Remove planar root travel
        // from imported clips so animation cannot double-translate the actor.
-       if (state.imported_character_root_joint < imported_pose.joint_count) {
-        const auto root = state.imported_character_root_joint;
+       for (const std::size_t root : state.imported_character_root_motion_joints) {
+        if (root >= imported_pose.joint_count ||
+            root >= state.imported_character_asset.joints.size()) continue;
         const auto reference =
          state.imported_character_asset.joints[root].rest_local.translation;
+        // The capsule controller owns world translation. Strip planar travel
+        // from the skeleton root and animated Hips/Pelvis motion roots, while
+        // retaining vertical root motion for jump/fall posing.
         (void)arut::animation::strip_root_motion(imported_pose, root, reference);
        }
        auto imported_model = model;
