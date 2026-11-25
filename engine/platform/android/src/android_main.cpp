@@ -583,7 +583,7 @@ bool configure_imported_character_animator(RuntimeState& state) {
   std::transform(name.begin(), name.end(), name.begin(), [](unsigned char ch) {
    return static_cast<char>(std::tolower(ch));
   });
-  auto bind = [&](S state_id) {
+  const auto bind = [&](S state_id) {
    if (!clips.get(state_id)) clips.set(state_id, &clip);
   };
   if (name.find("idle") != std::string::npos || name.find("stand") != std::string::npos)
@@ -594,11 +594,29 @@ bool configure_imported_character_animator(RuntimeState& state) {
    bind(S::StrafeRight);
   else if (name.find("backward") != std::string::npos || name.find("backpedal") != std::string::npos)
    bind(S::Backward);
-  else if (name.find("attackheavy") != std::string::npos || name.find("heavyattack") != std::string::npos ||
-           name.find("heavy") != std::string::npos)
+  // Test landing before jump: names such as Jump_Landing contain both tokens.
+  else if (name.find("land") != std::string::npos)
+   bind(S::Land);
+  else if (name.find("jump") != std::string::npos)
+   bind(S::Jump);
+  else if (name.find("fall") != std::string::npos || name.find("airborne") != std::string::npos)
+   bind(S::Fall);
+  else if (name.find("run") != std::string::npos || name.find("sprint") != std::string::npos)
+   bind(S::Run);
+  else if (name.find("walk") != std::string::npos)
+   bind(S::Walk);
+  else if (name.find("attackheavy") != std::string::npos ||
+           name.find("heavyattack") != std::string::npos ||
+           name.find("punchhook") != std::string::npos ||
+           name.find("punchcross") != std::string::npos)
    bind(S::AttackHeavy);
-  else if (name.find("attacklight") != std::string::npos || name.find("lightattack") != std::string::npos ||
-           name.find("punch") != std::string::npos || name.find("jab") != std::string::npos)
+  else if (name.find("attackkick") != std::string::npos ||
+           name.find("kick") != std::string::npos ||
+           name.find("strikezombie") != std::string::npos)
+   bind(S::AttackKick);
+  else if (name.find("attacklight") != std::string::npos ||
+           name.find("punchjab") != std::string::npos ||
+           name.find("punch") != std::string::npos)
    bind(S::AttackLight);
   else if (name.find("block") != std::string::npos || name.find("guard") != std::string::npos)
    bind(S::Block);
@@ -606,36 +624,21 @@ bool configure_imported_character_animator(RuntimeState& state) {
            name.find("roll") != std::string::npos)
    bind(S::Dodge);
   else if (name.find("hitreact") != std::string::npos || name.find("damage") != std::string::npos ||
-           name == "hit")
+           name.find("hurt") != std::string::npos || name == "hit")
    bind(S::HitReact);
   else if (name.find("recover") != std::string::npos || name.find("getup") != std::string::npos)
    bind(S::Recover);
-  else if (name.find("jump") != std::string::npos)
-   bind(S::Jump);
-  else if (name.find("fall") != std::string::npos || name.find("airborne") != std::string::npos)
-   bind(S::Fall);
-  else if (name.find("land") != std::string::npos || name.find("landing") != std::string::npos)
-   bind(S::Land);
-  else if (name.find("run") != std::string::npos || name.find("sprint") != std::string::npos)
-   bind(S::Run);
-  else if (name.find("walk") != std::string::npos)
-   bind(S::Walk);
  }
- // Preserve every authored GLB clip that has a recognized semantic name.
- // The bundled default pack currently exposes only one generic clip, so
- // author a complete original fallback set against this exact 66-joint rest rig.
- if (!clips.get(S::Idle) && !state.imported_character_asset.animations.empty())
-  clips.set(S::Idle, &state.imported_character_asset.animations.front());
-
+ // Generate missing states against the exact imported 66-joint rest pose.
  std::vector<std::string> joint_names;
  joint_names.reserve(state.imported_character_asset.joints.size());
  for (const auto& joint : state.imported_character_asset.joints)
   joint_names.push_back(joint.name);
- auto procedural_clips = arut::animation::make_procedural_humanoid_clips(
+ const auto procedural_clips = arut::animation::make_procedural_humanoid_clips(
   state.imported_character_rest_pose, joint_names);
  std::size_t generated_count = 0U;
  for (const auto& clip : procedural_clips) {
-  const auto name = clip.name;
+  const auto& name = clip.name;
   S target = S::Count;
   if (name == "ARUT_Idle") target = S::Idle;
   else if (name == "ARUT_Walk") target = S::Walk;
@@ -648,6 +651,7 @@ bool configure_imported_character_animator(RuntimeState& state) {
   else if (name == "ARUT_Land") target = S::Land;
   else if (name == "ARUT_AttackLight") target = S::AttackLight;
   else if (name == "ARUT_AttackHeavy") target = S::AttackHeavy;
+  else if (name == "ARUT_AttackKick") target = S::AttackKick;
   else if (name == "ARUT_Block") target = S::Block;
   else if (name == "ARUT_Dodge") target = S::Dodge;
   else if (name == "ARUT_HitReact") target = S::HitReact;
@@ -659,9 +663,14 @@ bool configure_imported_character_animator(RuntimeState& state) {
  }
  const bool configured = state.imported_character_animator.configure(clips) &&
                          state.imported_character_animator.start();
- log_info("IMPORTED_CHARACTER animation_library authored=%zu imported=%zu generated_fallback=%zu ready=%s",
-  clips.clips.size(), state.imported_character_asset.animations.size(),
-  generated_count, configured ? "true" : "false");
+ log_info("DEFAULT_HUMAN animation_graph=%s authored_states=%zu generated_fallback_states=%zu rig_joints=%zu",
+  configured ? "ready" : "failed", clips.clips.size(), generated_count,
+  state.imported_character_asset.joint_count);
+ for (std::size_t index = 0; index < clips.clips.size(); ++index) {
+  if (clips.clips[index])
+   log_info("DEFAULT_HUMAN animation_state=%zu clip=%s", index,
+    clips.clips[index]->name.c_str());
+ }
  return configured;
 }
 
