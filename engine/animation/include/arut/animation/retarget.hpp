@@ -40,5 +40,9 @@ struct RetargetMap final {
 [[nodiscard]] bool retarget_pose(
     const Pose& source_pose,const RetargetRig& source,const RetargetRig& target,
     const RetargetMap& map,Pose& output) noexcept;
+[[nodiscard]] bool retarget_clip(
+    const AnimationClip& source_clip,const RetargetRig& source,
+    const RetargetRig& target,const RetargetMap& map,
+    AnimationClip& output);
 
 } // namespace arut::animation
