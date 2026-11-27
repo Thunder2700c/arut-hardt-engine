@@ -1,6 +1,8 @@
 #include "arut/animation/root_motion.hpp"
 
 #include <cmath>
+#include <cctype>
+#include <string>
 
 namespace arut::animation {
 namespace {
@@ -10,6 +12,19 @@ float yaw_of(const Quaternion& q) noexcept {
     const float cosy = 1.0F - 2.0F * (q.y*q.y + q.z*q.z);
     return std::atan2(siny, cosy);
 }
+}
+
+bool is_root_motion_joint_name(std::string_view name) noexcept {
+    std::string normalized;
+    normalized.reserve(name.size());
+    for (const unsigned char ch : name) {
+        if (std::isalnum(ch))
+            normalized.push_back(static_cast<char>(std::tolower(ch)));
+    }
+    return normalized.find("root") != std::string::npos ||
+           normalized.find("hips") != std::string::npos ||
+           normalized.find("pelvis") != std::string::npos ||
+           normalized.find("motion") != std::string::npos;
 }
 
 bool extract_root_motion(const Pose& previous, const Pose& current,
