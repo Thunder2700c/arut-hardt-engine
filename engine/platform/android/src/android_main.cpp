@@ -782,18 +782,16 @@ bool initialize_profile_renderer(RuntimeState& state, android_app* app) {
          state.imported_character_root_joint == arut::animation::kMaxPoseJoints) {
       state.imported_character_root_joint = joint;
      }
-     std::string normalized_name = imported_joint.name;
-     normalized_name.erase(std::remove_if(normalized_name.begin(), normalized_name.end(),
-      [](unsigned char ch) { return !std::isalnum(ch); }), normalized_name.end());
-     std::transform(normalized_name.begin(), normalized_name.end(), normalized_name.begin(),
-      [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-     const bool hips_or_pelvis = normalized_name.find("hips") != std::string::npos ||
-                                 normalized_name.find("pelvis") != std::string::npos;
-     if ((joint == state.imported_character_root_joint || hips_or_pelvis) &&
+     const bool root_candidate =
+      joint == state.imported_character_root_joint ||
+      arut::animation::is_root_motion_joint_name(imported_joint.name);
+     if (root_candidate &&
          std::find(state.imported_character_root_motion_joints.begin(),
                    state.imported_character_root_motion_joints.end(), joint) ==
                    state.imported_character_root_motion_joints.end()) {
       state.imported_character_root_motion_joints.push_back(joint);
+      log_info("IMPORTED_CHARACTER root_motion_joint index=%zu name=%s parent=%d",
+       joint, imported_joint.name.c_str(), static_cast<int>(imported_joint.parent));
      }
     }
     if (state.imported_character_root_motion_joints.empty() &&
