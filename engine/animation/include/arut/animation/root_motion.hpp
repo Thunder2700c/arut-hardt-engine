@@ -2,7 +2,12 @@
 
 #include "arut/animation/runtime.hpp"
 
+#include <string_view>
+
 namespace arut::animation {
+
+// True for common locomotion-root names used by GLB humanoid rigs.
+[[nodiscard]] bool is_root_motion_joint_name(std::string_view name) noexcept;
 
 struct RootMotionDelta final {
     core::Vec3 local_translation{};
