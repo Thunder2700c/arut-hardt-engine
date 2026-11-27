@@ -6,6 +6,13 @@
 
 int main() {
     using namespace arut::animation;
+    assert(is_root_motion_joint_name("Root"));
+    assert(is_root_motion_joint_name("mixamorig:Root"));
+    assert(is_root_motion_joint_name("Armature_Hips"));
+    assert(is_root_motion_joint_name("Pelvis"));
+    assert(is_root_motion_joint_name("root_motion"));
+    assert(!is_root_motion_joint_name("LeftUpperLeg"));
+    assert(!is_root_motion_joint_name("Spine2"));
     Pose a{}, b{};
     a.joint_count = b.joint_count = 2U;
     b.joints[0].translation = {2.0F, 1.5F, 1.0F};
